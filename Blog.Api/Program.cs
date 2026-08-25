@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Blog.Api.Analytics;
 using Blog.Api.Data;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -50,6 +51,20 @@ else
 {
     builder.Services.AddDistributedMemoryCache();
 }
+
+var rabbitConnection = builder.Configuration.GetConnectionString("RabbitMq");
+
+if (!string.IsNullOrWhiteSpace(rabbitConnection))
+{
+    builder.Services.AddSingleton<IAnalyticsPublisher, RabbitMqAnalyticsPublisher>();
+    builder.Services.AddHostedService<AnalyticsConsumer>();
+}
+else
+{
+    builder.Services.AddSingleton<IAnalyticsPublisher, NullAnalyticsPublisher>();
+}
+
+builder.Services.AddScoped<IViewStore, MongoViewStore>();
 
 var databaseProvider = DatabaseSetup.ResolveProvider(builder.Configuration);
 var databaseConnectionString = DatabaseSetup.ResolveConnectionString(builder.Configuration, databaseProvider);

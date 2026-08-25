@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using System.Security.Claims;
 using System.Text.Json;
+using Blog.Api.Analytics;
 using Blog.Api.Data;
 using Blog.Api.Dtos;
 using Blog.Api.Models;
@@ -17,12 +18,14 @@ public class BlogPostsController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly IDistributedCache _cache;
     private readonly ILogger<BlogPostsController> _logger;
+    private readonly IAnalyticsPublisher _analytics;
 
-    public BlogPostsController(ApplicationDbContext context, IDistributedCache cache, ILogger<BlogPostsController> logger)
+    public BlogPostsController(ApplicationDbContext context, IDistributedCache cache, ILogger<BlogPostsController> logger, IAnalyticsPublisher analytics)
     {
         _context = context;
         _cache = cache;
         _logger = logger;
+        _analytics = analytics;
     }
 
     [HttpGet]
@@ -62,7 +65,32 @@ public class BlogPostsController : ControllerBase
             return NotFound();
         }
 
+        _analytics.PublishPostViewed(new PostViewedEvent
+        {
+            PostId = blogPost.Id,
+            ViewedAt = DateTime.UtcNow,
+            Referrer = Request.Headers.Referer.ToString() is { Length: > 0 } referrer ? referrer : null,
+            UserId = User.FindFirstValue(ClaimTypes.NameIdentifier),
+            VisitorHash = VisitorHash()
+        });
+
         return Ok(ToDetail(blogPost));
+    }
+
+    private string? VisitorHash()
+    {
+        var address = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        if (string.IsNullOrEmpty(address))
+        {
+            return null;
+        }
+
+        var material = $"{address}|{Request.Headers.UserAgent}|{DateTime.UtcNow:yyyy-MM-dd}";
+
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(material));
+
+        return Convert.ToHexString(bytes)[..16];
     }
 
     [HttpPost]

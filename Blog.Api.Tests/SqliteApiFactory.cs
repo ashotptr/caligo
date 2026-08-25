@@ -35,6 +35,8 @@ public class SqliteApiFactory : WebApplicationFactory<Program>
                 ["Database:Provider"] = "Sqlite",
                 ["ConnectionStrings:DefaultConnection"] = "",
                 ["ConnectionStrings:Redis"] = "",
+                ["ConnectionStrings:RabbitMq"] = "",
+                ["ConnectionStrings:Mongo"] = "",
 
                 ["AdminUser:Email"] = "",
                 ["AdminUser:Password"] = ""

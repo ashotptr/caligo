@@ -25,6 +25,34 @@ services:
       timeout: 3s
       retries: 10
 
+  rabbitmq:
+    image: rabbitmq:3.13-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: blog
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?}
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: blog
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?}
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   blog-api:
     build: ../Blog.Api
     restart: unless-stopped
@@ -32,6 +60,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=blogdb;Username=bloguser;Password=${POSTGRES_PASSWORD}"
       ConnectionStrings__Redis: "redis:6379"
+      ConnectionStrings__RabbitMq: "amqp://blog:${RABBITMQ_PASSWORD}@rabbitmq:5672/"
+      ConnectionStrings__Mongo: "mongodb://blog:${MONGO_PASSWORD}@mongo:27017/"
       Jwt__Key: ${JWT_KEY:?}
       Jwt__Issuer: blog-api
       Jwt__Audience: blog-client
@@ -43,6 +73,10 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mongo:
         condition: service_healthy
 
   blog-client:
@@ -66,3 +100,5 @@ services:
 
 volumes:
   pgdata:
+  rabbitdata:
+  mongodata:
