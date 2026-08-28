@@ -199,16 +199,23 @@ jobs:
 
       - name: Scan image
         if: steps.should.outputs.run == 'true'
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
-          format: sarif
-          output: trivy-${{ matrix.service }}.sarif
+          # table prints into the job log; sarif is a file only the Security tab reads.
+          format: table
           severity: CRITICAL,HIGH
-          exit-code: '0'
+          # Only flag vulnerabilities that have a patch available - the rest we
+          # cannot act on, and red builds nobody can fix get ignored.
+          ignore-unfixed: true
+          # Fail the build so a vulnerable image does not pass unnoticed.
+          exit-code: '1'
 
+      # The Security tab only accepts uploads from public repos, or private ones
+      # with GitHub Advanced Security enabled. Skip it otherwise so CI stays green.
+      # Switching this back on also means setting format: sarif on the scan above.
       - name: Upload scan results
-        if: steps.should.outputs.run == 'true'
+        if: steps.should.outputs.run == 'true' && github.event.repository.private == false
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-${{ matrix.service }}.sarif
