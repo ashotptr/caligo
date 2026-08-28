@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<IsPackable>false</IsPackable>
+	</PropertyGroup>
+
+	<!--
+		These tests run against real PostgreSQL, Kafka and MongoDB in throwaway containers.
+		An in-memory substitute cannot answer the questions being asked here: whether two
+		writes really share a transaction, whether a unique index really rejects a replayed
+		event, whether a message really reaches a partition.
+	-->
+	<!--
+		References both services on purpose. These tests exercise flows that cross the
+		boundary - a post published in one service becoming a count in the other - which is
+		exactly the kind of thing that stops working when services are only tested apart.
+	-->
+	<ItemGroup>
+		<ProjectReference Include="../../src/posts/Blog.Api/Blog.Api.csproj" />
+		<ProjectReference Include="../../src/analytics/Blog.Analytics.Host/Blog.Analytics.Host.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Grpc.Net.ClientFactory" />
+		<PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+		<PackageReference Include="Microsoft.NET.Test.Sdk" />
+		<PackageReference Include="Moq" />
+		<PackageReference Include="Testcontainers.Kafka" />
+		<PackageReference Include="Testcontainers.MongoDb" />
+		<PackageReference Include="Testcontainers.Redis" />
+		<PackageReference Include="Testcontainers.PostgreSql" />
+		<PackageReference Include="xunit" />
+		<PackageReference Include="xunit.runner.visualstudio">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+	</ItemGroup>
+
+</Project>

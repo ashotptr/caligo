@@ -1,0 +1,103 @@
+using System.Diagnostics;
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Blog.Contracts;
+using Blog.Contracts.Events;
+using Blog.Posts.Application.Abstractions;
+using Blog.Posts.Domain.Events;
+
+namespace Blog.Posts.Infrastructure.Persistence
+{
+    /// <summary>
+    /// Translates domain events into integration events and records them in the outbox.
+    ///
+    /// The translation is the point of the two event vocabularies. <see cref="PostPublished"/>
+    /// is internal and may be reshaped by any refactor; <see cref="PostPublishedEvent"/> is a
+    /// published contract other services read. Mapping here keeps a rename in the domain from
+    /// becoming a breaking change for every consumer.
+    /// </summary>
+    public class OutboxDomainEventDispatcher : IDomainEventDispatcher
+    {
+        private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+        private readonly ApplicationDbContext _context;
+        private readonly ILogger<OutboxDomainEventDispatcher> _logger;
+
+        public OutboxDomainEventDispatcher(ApplicationDbContext context, ILogger<OutboxDomainEventDispatcher> logger)
+        {
+            _context = context;
+            _logger = logger;
+        }
+
+        public async Task DispatchAsync(IReadOnlyList<IDomainEvent> events, CancellationToken cancellationToken = default)
+        {
+            if (events.Count == 0)
+            {
+                return;
+            }
+
+            var traceParent = Activity.Current?.Id;
+
+            foreach (var domainEvent in events)
+            {
+                var integrationEvent = Translate(domainEvent);
+
+                if (integrationEvent is null)
+                {
+                    // Not every domain event is meant to leave the service. Saying so explicitly
+                    // beats a silent default that publishes internals the moment one is added.
+                    _logger.LogDebug("Domain event {EventType} is internal; not published.", domainEvent.GetType().Name);
+
+                    continue;
+                }
+
+                _context.OutboxMessages.Add(new OutboxMessage
+                {
+                    Id = integrationEvent.EventId,
+                    EventType = integrationEvent.EventType,
+                    Topic = Topics.PostLifecycle,
+                    PartitionKey = integrationEvent.PartitionKey,
+                    Payload = JsonSerializer.Serialize(integrationEvent, integrationEvent.GetType(), Json),
+                    SchemaVersion = integrationEvent.SchemaVersion,
+                    OccurredAt = integrationEvent.OccurredAt,
+                    TraceParent = traceParent
+                });
+            }
+
+            // A second save, but inside the same ambient transaction as the change that raised
+            // these events - see EfPostRepository.SaveChangesAsync, which opens one when the
+            // provider supports it. Both commit together or neither does.
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        private static IntegrationEvent? Translate(IDomainEvent domainEvent) => domainEvent switch
+        {
+            PostPublished published => new PostPublishedEvent
+            {
+                EventId = published.EventId,
+                OccurredAt = published.OccurredAt,
+                PostId = published.PostId,
+                Title = published.Title,
+                AuthorId = published.AuthorId,
+                Tags = published.Tags
+            },
+
+            PostUpdated updated => new PostUpdatedEvent
+            {
+                EventId = updated.EventId,
+                OccurredAt = updated.OccurredAt,
+                PostId = updated.PostId,
+                Title = updated.Title
+            },
+
+            PostDeleted deleted => new PostDeletedEvent
+            {
+                EventId = deleted.EventId,
+                OccurredAt = deleted.OccurredAt,
+                PostId = deleted.PostId
+            },
+
+            _ => null
+        };
+    }
+}

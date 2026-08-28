@@ -1,0 +1,81 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: blog
+
+resources:
+  - ../../base
+  - secrets.yaml
+  - dependencies/stateful.yaml
+  - dependencies/kafka.yaml
+
+# A laptop cluster does not need three of everything, and the PodDisruptionBudget in the base
+# would block a single-node drain if minAvailable could never be met.
+patches:
+  - target:
+      kind: Deployment
+      name: blog-api
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: blog-analytics
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: blog-notifications
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: blog-client
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: PodDisruptionBudget
+      name: blog-api
+    patch: |
+      - op: replace
+        path: /spec/minAvailable
+        value: 0
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: blog-api
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
+  - target:
+      kind: Ingress
+      name: blog
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: blog.localtest.me
+
+# Locally built images rather than whatever is in the registry.
+images:
+  - name: ghcr.io/ashotptr/blog/blog-api
+    newName: blog-blog-api
+    newTag: latest
+  - name: ghcr.io/ashotptr/blog/blog-analytics
+    newName: blog-blog-analytics
+    newTag: latest
+  - name: ghcr.io/ashotptr/blog/blog-notifications
+    newName: blog-blog-notifications
+    newTag: latest
+  - name: ghcr.io/ashotptr/blog/blog-client
+    newName: blog-blog-client
+    newTag: latest

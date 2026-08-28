@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package blog.analytics.v1;
+
+option csharp_namespace = "Blog.Contracts.Analytics";
+
+import "google/protobuf/timestamp.proto";
+
+// Read side of the analytics service.
+//
+// gRPC rather than REST because this is an internal, synchronous, high-frequency read: every
+// post render asks for a view count. Protobuf over HTTP/2 gives a smaller payload on a reused
+// connection, a contract the compiler checks on both sides, and - for the trending feed -
+// server streaming, which polling cannot match.
+service AnalyticsReader {
+  rpc GetPostStats (GetPostStatsRequest) returns (PostStats);
+
+  // Batched because a list page needs counts for every post on it. Twenty unary calls would
+  // be twenty round trips to render one page.
+  rpc GetPostStatsBatch (GetPostStatsBatchRequest) returns (PostStatsBatch);
+
+  rpc GetTopPosts (GetTopPostsRequest) returns (TopPosts);
+
+  // Pushes a new snapshot whenever the rollup changes, for as long as the caller listens.
+  rpc StreamTrending (StreamTrendingRequest) returns (stream TrendingSnapshot);
+}
+
+message GetPostStatsRequest {
+  int32 post_id = 1;
+}
+
+message GetPostStatsBatchRequest {
+  repeated int32 post_ids = 1;
+}
+
+message PostStats {
+  int32 post_id = 1;
+  int64 views = 2;
+
+  // Distinct daily visitor hashes, not distinct users: the hash rotates every day and is
+  // never linked to an account.
+  int64 unique_visitors = 3;
+}
+
+message PostStatsBatch {
+  repeated PostStats stats = 1;
+}
+
+message GetTopPostsRequest {
+  int32 days = 1;
+  int32 limit = 2;
+}
+
+message TopPosts {
+  // Counts only. This service does not know what a post title is - the caller joins that from
+  // its own database, which is what keeps the boundary honest.
+  repeated PostStats posts = 1;
+}
+
+message StreamTrendingRequest {
+  int32 limit = 1;
+  int32 window_hours = 2;
+}
+
+message TrendingEntry {
+  int32 post_id = 1;
+  int64 score = 2;
+}
+
+message TrendingSnapshot {
+  repeated TrendingEntry entries = 1;
+  google.protobuf.Timestamp generated_at = 2;
+  int32 window_hours = 3;
+}

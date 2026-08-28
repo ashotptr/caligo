@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/.vs/
+**/.git/
+**/*.user
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/appsettings.Production.json
+**/.env
+deploy/
+docs/
+tests/

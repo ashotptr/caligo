@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blog-analytics
+  labels:
+    app.kubernetes.io/name: blog-analytics
+    app.kubernetes.io/part-of: blog
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: blog-analytics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: blog-analytics
+        app.kubernetes.io/part-of: blog
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 64198
+        fsGroup: 64198
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: blog-analytics
+          image: ghcr.io/ashotptr/blog/blog-analytics:latest
+          imagePullPolicy: IfNotPresent
+
+          # Two ports because they cannot share a protocol: gRPC over cleartext needs HTTP/2
+          # with prior knowledge, and there is no TLS here to negotiate it through ALPN, so
+          # HTTP/1.1 probes get a port of their own.
+          ports:
+            - name: grpc
+              containerPort: 8080
+            - name: http
+              containerPort: 8081
+
+          env:
+            - name: ASPNETCORE_URLS
+              value: "http://+:8080"
+
+          envFrom:
+            - configMapRef:
+                name: blog-config
+            - secretRef:
+                name: blog-secrets
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              memory: 512Mi
+
+          # Both probe the HTTP/1.1 port. Pointing them at 8080 would have the kubelet speak
+          # HTTP/1.1 to an HTTP/2-only listener and fail every probe for the wrong reason.
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: blog-analytics
+  labels:
+    app.kubernetes.io/name: blog-analytics
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: blog-analytics
+  ports:
+    - name: grpc
+      port: 8080
+      targetPort: grpc
+      # Tells a mesh or a gateway that this is cleartext HTTP/2, so it does not downgrade the
+      # connection to HTTP/1.1 and break every gRPC call through it.
+      appProtocol: kubernetes.io/h2c
+    - name: http
+      port: 8081
+      targetPort: http

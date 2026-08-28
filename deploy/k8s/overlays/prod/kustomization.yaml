@@ -1,0 +1,58 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: blog
+
+resources:
+  - ../../base
+  - keda.yaml
+
+# No dependency manifests here, deliberately. PostgreSQL, Kafka, Redis, MongoDB and RabbitMQ
+# are managed services in production - the dev overlay runs them in-cluster only so that
+# `kubectl apply -k` works on an empty laptop cluster.
+#
+# There is also no Secret in this overlay. Committing production credentials to git is the
+# thing this whole file exists to avoid; `blog-secrets` is expected to be created out of band,
+# by External Secrets Operator, Sealed Secrets, or the cloud provider's CSI driver. The
+# manifests reference it by name and do not care which.
+
+patches:
+  # KEDA owns the replica count for the two workers once a ScaledObject targets them, and it
+  # manages its own HPA underneath. Leaving a static replica count here would have the two
+  # fight over the Deployment.
+  - target:
+      kind: Deployment
+      name: blog-analytics
+    patch: |
+      - op: remove
+        path: /spec/replicas
+  - target:
+      kind: Deployment
+      name: blog-notifications
+    patch: |
+      - op: remove
+        path: /spec/replicas
+
+  - target:
+      kind: Ingress
+      name: blog
+    patch: |
+      - op: add
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt-prod
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts:
+              - blog.example.com
+            secretName: blog-tls
+
+images:
+  - name: ghcr.io/ashotptr/blog/blog-api
+    newTag: latest
+  - name: ghcr.io/ashotptr/blog/blog-analytics
+    newTag: latest
+  - name: ghcr.io/ashotptr/blog/blog-notifications
+    newTag: latest
+  - name: ghcr.io/ashotptr/blog/blog-client
+    newTag: latest

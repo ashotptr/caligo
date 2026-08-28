@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    The generated gRPC contract, built once and shared.
+
+    Compiling the .proto separately in each service also works, right up to the moment
+    something references both - a test, a gateway - and finds two distinct CLR types with the
+    same full name. Generating here instead means client and server are literally the same
+    type, which is the guarantee the contract is supposed to provide.
+
+    It is a separate project from Blog.Contracts so that the Protobuf and gRPC dependencies
+    reach only the services that speak gRPC; the notifications worker consumes JSON events and
+    has no use for them.
+  -->
+  <ItemGroup>
+    <Protobuf Include="../Blog.Contracts/Protos/analytics.proto"
+              GrpcServices="Both"
+              Link="Protos/analytics.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.AspNetCore" />
+    <PackageReference Include="Grpc.Tools">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

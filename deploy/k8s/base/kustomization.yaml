@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: blog
+
+# Kustomize rather than Helm. There is no templating language to learn or debug, `kubectl` has
+# it built in, and overlays express "dev differs from prod in these four ways" more directly
+# than a values file that has to anticipate every difference in advance.
+
+resources:
+  - namespace.yaml
+  - config.yaml
+  - blog-api.yaml
+  - blog-analytics.yaml
+  - blog-notifications.yaml
+  - blog-client.yaml
+  - ingress.yaml
+
+# 'labels' rather than the deprecated 'commonLabels'. includeSelectors is false on purpose:
+# adding a label to an existing Deployment's selector is an immutable-field change, and would
+# make every future edit to this list a breaking one.
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: blog
+    includeSelectors: false

@@ -1,0 +1,207 @@
+# Development-only dependencies, run in-cluster so `kubectl apply -k` gives a working system
+# on an empty cluster. Every one of these is a single replica with ephemeral storage: they are
+# here to make the application runnable, not to be operated. The prod overlay leaves them out
+# entirely and points at managed services instead.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: postgres }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_DB
+              value: blogdb
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              value: postgres
+          ports: [{ name: postgres, containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "postgres"] }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector: { app.kubernetes.io/name: postgres }
+  ports: [{ name: postgres, port: 5432, targetPort: postgres }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: redis }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: redis }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports: [{ name: redis, containerPort: 6379 }]
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector: { app.kubernetes.io/name: redis }
+  ports: [{ name: redis, port: 6379, targetPort: redis }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: mongo }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: mongo }
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:7
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: blog
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              value: blogpass
+          ports: [{ name: mongo, containerPort: 27017 }]
+          resources:
+            requests: { cpu: 50m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+spec:
+  selector: { app.kubernetes.io/name: mongo }
+  ports: [{ name: mongo, port: 27017, targetPort: mongo }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: rabbitmq }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: rabbitmq }
+    spec:
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3.13-management-alpine
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              value: blog
+            - name: RABBITMQ_DEFAULT_PASS
+              value: blogpass
+          ports:
+            - { name: amqp, containerPort: 5672 }
+            - { name: management, containerPort: 15672 }
+          readinessProbe:
+            exec: { command: ["rabbitmq-diagnostics", "-q", "ping"] }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+spec:
+  selector: { app.kubernetes.io/name: rabbitmq }
+  ports:
+    - { name: amqp, port: 5672, targetPort: amqp }
+    - { name: management, port: 15672, targetPort: management }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailhog
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: mailhog }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: mailhog }
+    spec:
+      containers:
+        - name: mailhog
+          image: mailhog/mailhog:latest
+          ports:
+            - { name: smtp, containerPort: 1025 }
+            - { name: ui, containerPort: 8025 }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailhog
+spec:
+  selector: { app.kubernetes.io/name: mailhog }
+  ports:
+    - { name: smtp, port: 1025, targetPort: smtp }
+    - { name: ui, port: 8025, targetPort: ui }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aspire-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: aspire-dashboard }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: aspire-dashboard }
+    spec:
+      containers:
+        - name: aspire-dashboard
+          image: mcr.microsoft.com/dotnet/aspire-dashboard:8.2
+          env:
+            - name: DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS
+              value: "true"
+          ports:
+            - { name: ui, containerPort: 18888 }
+            - { name: otlp, containerPort: 18889 }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aspire-dashboard
+spec:
+  selector: { app.kubernetes.io/name: aspire-dashboard }
+  ports:
+    - { name: ui, port: 18888, targetPort: ui }
+    - { name: otlp, port: 18889, targetPort: otlp }

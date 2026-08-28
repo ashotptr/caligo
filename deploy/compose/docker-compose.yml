@@ -1,0 +1,220 @@
+name: blog
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: blogdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_MULTIPLE_DATABASES: blognotifications
+    volumes:
+      - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d blogdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: blog
+      RABBITMQ_DEFAULT_PASS: blogpass
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # KRaft mode: Kafka manages its own metadata quorum, so there is no ZooKeeper to run.
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # Bind on all interfaces; advertise the names each client can actually route to.
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      # Single broker, so nothing can be replicated further than one copy.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # Topics are created explicitly at startup with the right partition counts; letting the
+      # broker invent them would silently give every topic a single partition.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafkadata:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
+
+  # Browse topics, partitions, messages and consumer-group lag at http://localhost:8081.
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    environment:
+      KAFKA_CLUSTERS_0_NAME: blog
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    ports:
+      - "8081:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: blog
+      MONGO_INITDB_ROOT_PASSWORD: blogpass
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  blog-api:
+    build:
+      context: ../..
+      dockerfile: src/posts/Blog.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Otlp__Endpoint: "http://aspire-dashboard:18889"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=blogdb;Username=postgres;Password=postgres"
+      ConnectionStrings__Redis: "redis:6379"
+      Kafka__BootstrapServers: "kafka:29092"
+      # h2c: gRPC over cleartext HTTP/2, since there is no TLS inside the compose network.
+      Analytics__Address: "http://blog-analytics:8080"
+      Jwt__Key: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      Jwt__Issuer: blog-api
+      Jwt__Audience: blog-client
+      Jwt__AccessTokenMinutes: "5"
+      Cors__AllowedOrigins: "http://localhost:8080,http://localhost:5173"
+      AdminUser__Email: "admin@localhost.dev"
+      AdminUser__Password: "AdminDev04!"
+    ports:
+      - "5028:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      blog-analytics:
+        condition: service_started
+
+  # Internal only: no published port, because nothing outside the network should reach it.
+  blog-analytics:
+    build:
+      context: ../..
+      dockerfile: src/analytics/Blog.Analytics.Host/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Otlp__Endpoint: "http://aspire-dashboard:18889"
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__Mongo: "mongodb://blog:blogpass@mongo:27017/"
+      ConnectionStrings__Redis: "redis:6379"
+      Kafka__BootstrapServers: "kafka:29092"
+    ports:
+      # HTTP/1.1 health endpoint only; gRPC on 8080 stays internal.
+      - "5029:8081"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Traces, metrics and logs from all three services, correlated, at http://localhost:18888.
+  # One container instead of Jaeger plus Prometheus plus a log store.
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:8.2
+    environment:
+      DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "18888:18888"
+
+  # Catches every outbound email and shows it at http://localhost:8025 - no real mail leaves.
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  blog-notifications:
+    build:
+      context: ../..
+      dockerfile: src/notifications/Blog.Notifications.Host/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Otlp__Endpoint: "http://aspire-dashboard:18889"
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__Notifications: "Host=postgres;Port=5432;Database=blognotifications;Username=postgres;Password=postgres"
+      Notifications__RabbitMq: "amqp://blog:blogpass@rabbitmq:5672/"
+      Notifications__KafkaBootstrapServers: "kafka:29092"
+      Notifications__SiteUrl: "http://localhost:8080"
+      Smtp__Host: "mailhog"
+      Smtp__Port: "1025"
+    ports:
+      - "5030:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  blog-client:
+    build:
+      context: ../../src/blog-client
+      args:
+        VITE_API_URL: ""
+    ports:
+      - "8080:80"
+    depends_on:
+      - blog-api
+
+volumes:
+  pgdata:
+  mongodata:
+  kafkadata:
