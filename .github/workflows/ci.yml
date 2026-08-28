@@ -67,15 +67,16 @@ jobs:
       - run: dotnet restore
       - run: dotnet build --no-restore -c Release
 
+      # One invocation per project: "dotnet test" takes a single project, not a list.
       - name: Unit tests
-        run: >
-          dotnet test --no-build -c Release
-          tests/Blog.Posts.UnitTests/Blog.Posts.UnitTests.csproj
-          tests/Blog.Notifications.UnitTests/Blog.Notifications.UnitTests.csproj
-          tests/Blog.Api.Tests/Blog.Api.Tests.csproj
-          --logger "trx;LogFileName=unit-tests.trx"
-          --collect:"XPlat Code Coverage"
-          --results-directory ./TestResults
+        run: |
+          set -e
+          for project in             tests/Blog.Posts.UnitTests             tests/Blog.Notifications.UnitTests             tests/Blog.Api.Tests
+          do
+            echo "::group::$project"
+            dotnet test --no-build -c Release "$project"               --logger "trx;LogFileName=$(basename "$project").trx"               --collect:"XPlat Code Coverage"               --results-directory ./TestResults
+            echo "::endgroup::"
+          done
 
       - name: Integration tests
         run: >
