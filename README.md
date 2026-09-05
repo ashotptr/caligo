@@ -1,167 +1,259 @@
 # Blog
 
-A distributed blog platform. React 19 + TypeScript frontend, three ASP.NET Core 8 services,
-Kafka and RabbitMQ, gRPC, and PostgreSQL / MongoDB / Redis.
+This project is a distributed blog platform. Instead of one application it is
+split into three ASP.NET Core services that own separate databases and talk to
+each other over Kafka, RabbitMQ and gRPC. The frontend is React 19 + TypeScript,
+served by nginx.
+
+The main idea of the project is that no service reaches into another service's
+database. Anything crossing a service boundary is either an event on a broker or
+a gRPC call, and each path is chosen for what it has to guarantee.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-dark.svg">
   <img alt="Architecture: blog-client to Blog.Api, gRPC to Blog.Analytics, Kafka to both consumers, RabbitMQ to SMTP" src="docs/architecture-light.svg" width="660">
 </picture>
 
-| Service | Owns | Talks to |
-|---|---|---|
-| `Blog.Api` | posts, identity | PostgreSQL, Redis; Kafka producer; gRPC client |
-| `Blog.Analytics` | view counts, trending | MongoDB, Redis; two Kafka consumer groups; gRPC server |
-| `Blog.Notifications` | subscribers, delivery ledger | its own PostgreSQL database; Kafka in, RabbitMQ out, SMTP |
+The three services
+------------------
+
+**Blog.Api:** posts and identity. Owns PostgreSQL and Redis. Produces to Kafka
+and calls analytics over gRPC.
+
+**Blog.Analytics:** view counts and trending. Owns MongoDB and Redis. Runs two
+Kafka consumer groups and a gRPC server.
+
+**Blog.Notifications:** subscribers and the delivery ledger. Owns its own
+PostgreSQL database. Kafka in, RabbitMQ out, SMTP at the end.
+
+## src/posts/
+
+Four projects with dependencies pointing inwards.
+
+`Blog.Posts.Domain/`: entities, value objects and domain events. References
+nothing but the BCL. `BlogPost.cs` raises events and hands them over with
+`DrainDomainEvents()`, so reading the list also clears it.
+
+`Blog.Posts.Application/`: use cases and ports. No EF Core, no ASP.NET.
+`PostService.cs` holds the rules, `Abstractions/` holds the interfaces that
+infrastructure implements.
+
+`Blog.Posts.Infrastructure/`: everything with a driver in it.
+
+- `Persistence/EfPostRepository.cs`: saves the post and dispatches its events in
+  one transaction.
+- `Persistence/OutboxDomainEventDispatcher.cs`: turns domain events into outbox
+  rows on the same `DbContext`. Stores the current `traceparent` on the row.
+- `Persistence/LoggingDomainEventDispatcher.cs`: the same port with no broker
+  configured. Logs and returns.
+- `Messaging/OutboxRelay.cs`: a background loop that claims unsent rows with
+  `FOR UPDATE SKIP LOCKED` and publishes them.
+- `Messaging/KafkaProducer.cs`: the producer, idempotent with `acks=all`.
+- `Messaging/GrpcViewStatsClient.cs`: the analytics client, with a deadline, one
+  retry and a circuit breaker.
+- `Search/PostgresPostSearch.cs` and `Search/SqlitePostSearch.cs`: two backends
+  behind one interface, because SQLite has no `tsvector`.
+- `Caching/DistributedPostCache.cs`: Redis, versioned so a write invalidates a
+  whole generation of keys instead of hunting for them.
+
+`Blog.Api/`: controllers and DI wiring only. `TokenService.cs` issues the JWTs,
+`RefreshSessionService.cs` handles rotation.
+
+## src/analytics/
+
+`Messaging/ViewConsumer.cs`: the Kafka consumers. Two groups read the same
+`post.viewed` topic at their own offsets, so both get every message.
+
+`Stores/MongoViewStore.cs`: writes every view. A unique index on `EventId` is
+what makes replayed events harmless, the duplicate-key error is caught and
+ignored.
+
+`Stores/RedisTrendingStore.cs`: the leaderboard. One sorted set per hour, keyed
+`trending:2026090514`, incremented with `ZINCRBY` and expired after 49 hours.
+Reads union the last N buckets with `ZUNIONSTORE`.
+
+`Services/AnalyticsReaderService.cs`: the gRPC server. Implements the four RPCs
+in `analytics.proto`, including `StreamTrending`, which pushes snapshots instead
+of being polled.
+
+## src/notifications/
+
+`Messaging/PostLifecycleRelay.cs`: consumes one `post.published` fact and
+produces N per-subscriber commands.
+
+`Persistence/EfStores.cs`: the delivery ledger. `ClaimAsync` inserts a Pending
+row per subscriber, and a unique index on `(event_id, subscriber_id)` decides the
+race when two instances claim the same event at once. The loser sends nothing.
+
+`Messaging/RabbitTopology.cs`: the exchanges and queues.
+`blog.notifications` → `blog.notifications.email`, with retry queues at 5s, 30s
+and 5m and a fanout to `blog.notifications.dlq` at the end.
+
+`Messaging/EmailWorker.cs`: consumes commands and sends through SMTP.
+
+`Messaging/StrandedDeliverySweeper.cs`: finds deliveries left Queued by a process
+that died mid-flight and puts them back.
+
+## src/shared/
+
+`Blog.Contracts/`: the integration events and `Topics.cs`. References nothing, so
+every service can depend on it.
+
+`Blog.Contracts.Grpc/`: the generated gRPC contract. One `.proto` builds both the
+server base class and the client, so the compiler checks both sides.
+
+`Blog.Observability/`:
+
+- `Telemetry.cs`: traces, metrics and logs over OTLP. If `Otlp:Endpoint` is
+  empty the service runs exactly as before, just unobserved.
+- `KafkaTracing.cs`: writes the W3C `traceparent` into Kafka headers and reads it
+  back on the other side.
+- `HealthEndpoints.cs`: `/health/live` and `/health/ready`.
 
 ## Messaging
 
-**Kafka carries facts.** `post.viewed` is high volume and append-only, and two consumer groups
-read it at their own offsets: one writes every view to MongoDB, the other maintains a rolling
-leaderboard in Redis sorted sets. A queue would not work here, since whichever consumer got a
-message would take it from the other. Kafka also retains the log, so a metric added later can be
-backfilled.
+**Kafka carries facts.** `post.viewed` is high volume and append-only, and two
+consumer groups read it at their own offsets. A queue cannot do that, whichever
+consumer took the message would have taken it from the other. Kafka also keeps
+the log, so a metric added next month can be backfilled from it.
 
-**RabbitMQ carries tasks.** Each email is addressed to one person, fails on its own, and needs
-retry with backoff plus a dead-letter queue. It must not be replayed in bulk.
-`Blog.Notifications` consumes one Kafka fact and produces N RabbitMQ commands.
+**RabbitMQ carries tasks.** An email goes to one person, fails on its own, and
+needs retry with backoff and a dead letter queue. It must never be replayed in
+bulk.
 
-**A transactional outbox protects what cannot be lost.** No transaction spans PostgreSQL and
-Kafka, so publishing a post writes the event as a row in the same transaction and a relay ships
-it afterwards using `FOR UPDATE SKIP LOCKED`. Views skip the outbox and go straight to Kafka,
-since a view is a measurement and writing a row on every page render costs more than it protects.
+**The outbox protects what cannot be lost.** No transaction spans PostgreSQL and
+Kafka, so publishing a post writes the event as a row in the same transaction and
+the relay ships it afterwards. Views skip the outbox and go straight to Kafka. A
+view is a measurement, and writing a row on every page render costs more than it
+protects.
 
-**gRPC handles the internal read.** Every post render needs a view count, which is internal,
-synchronous and frequent. Protobuf over HTTP/2 on a reused connection, a contract the compiler
-checks on both sides, a batch method so a listing costs one call instead of twenty, and server
-streaming for the live trending panel.
+**gRPC handles the internal read.** Every post render needs a view count, which
+is internal, synchronous and frequent. Protobuf over HTTP/2 on a reused
+connection, a batch method so a listing costs one call instead of twenty, and
+server streaming for the trending panel.
 
-### Delivery guarantees
+Delivery is at-least-once, not exactly-once. Consumers deduplicate on `EventId`
+rather than pretending otherwise. Replaying the whole lifecycle topic produced 8
+emails before and 8 after.
 
-| Event | Path | Why |
-|---|---|---|
-| `post.viewed` | straight to Kafka, fire-and-forget | A measurement. Nothing downstream is authoritative on it. |
-| `post.published` | transactional outbox | Losing it means a post nobody was told about. |
-| per-subscriber email | RabbitMQ, 5s to 30s to 5m ladder, then DLQ | Each is a task that fails on its own, is retried, then parked. |
+Implemented features: posts with tags and full-text search, keyset paging, JWT
+auth with refresh session rotation, Google sign-in, Admin and Writer roles, view
+counts, a live trending panel over SSE, email subscriptions with unsubscribe
+tokens, per-subscriber retry and dead lettering, and distributed tracing across
+every hop.
 
-Delivery is at-least-once end to end, not exactly-once. Consumers deduplicate on `EventId`: the
-raw-view writer has a unique index on it, and the notification relay one on
-`(event_id, subscriber_id)`. Replaying the whole lifecycle topic produced 8 emails before and 8
-after.
+Not done yet: there is no alerting on the telemetry, and the refresh token is
+kept in `localStorage` rather than an HttpOnly cookie.
 
 ## Failure behaviour
 
-A slow dependency degrades rather than cascading. The gRPC client carries a 150 ms deadline, one
-retry, and a circuit breaker, and every failure path returns "no counts" instead of an error.
-Measured with the analytics service stopped: calls cost about 350 ms while the breaker samples,
-then 24 ms once it opens. Posts keep rendering throughout.
+A slow dependency degrades, it does not cascade. The gRPC client carries a 150 ms
+deadline, one retry and a circuit breaker, and every failure path returns no
+counts instead of an error.
+
+Measured with the analytics service stopped, calls cost about 350 ms while the
+breaker samples, then 24 ms once it opens. Posts keep rendering throughout.
+
+`/health/live` checks nothing external. A liveness probe that touched the
+database would turn a database blip into a cluster-wide restart storm.
+`/health/ready` checks dependencies, so failing it drains an instance without
+killing it.
 
 ## Performance
 
-Measured on 200k seeded posts, PostgreSQL 16:
+Measured on 200k seeded posts against PostgreSQL 16:
 
-| | before | after |
-|---|---|---|
-| Search, term with no matches | 3,960 ms (sequential scan) | 0.1 ms (GIN index) |
-| Search, term matching 25k rows | 2 ms, unranked | 3 ms, relevance-ranked |
-| Paging to row 150,000 | 14.6 ms (`OFFSET`) | 0.12 ms (keyset) |
+- Search for a term with no matches: 3,960 ms sequential scan → 0.1 ms on the
+  GIN index.
+- Search for a term matching 25k rows: 2 ms unranked → 3 ms relevance ranked.
+- Paging to row 150,000: 14.6 ms with `OFFSET` → 0.12 ms with a keyset cursor.
 
-A naive `tsvector` + `ORDER BY ts_rank` was slower than the original scan for broad terms
-(89 ms). The GIN lookup itself was only 3 ms; ranking was reading 22k heap blocks to score every
-match. Bounding it to a 500-row candidate window made it flat regardless of match count.
+The first attempt at ranking was slower than the scan it replaced, at 89 ms on
+broad terms. The GIN lookup was only 3 ms of that. Ranking was reading 22k heap
+blocks to score every match. Bounding it to a 500-row candidate window made it
+flat regardless of how many rows matched.
 
-## Observability
+## Configuration
 
-All three services export traces, metrics and logs over OTLP to a single
-[Aspire dashboard](http://localhost:18888) container.
-
-Trace propagation across async hops needs handling. HTTP gets it free, a broker does not, so the
-producer writes the W3C `traceparent` into Kafka headers and the consumer reads it back. The
-outbox adds a second gap, since the originating request is long finished by the time the relay
-runs, so the traceparent is stored on the row and restored at publish time.
-
-Verified: the outbox row recorded `00-7dc87e3294aa1f2029554aa090415b4e-...`, and the
-notifications service, a different process reached via PostgreSQL and then Kafka, logged trace id
-`7dc87e3294aa1f2029554aa090415b4e`.
-
-`/health/live` checks nothing external. A liveness probe that touched the database would turn a
-database blip into a cluster-wide restart storm. `/health/ready` checks dependencies, so failing
-it drains an instance without killing it.
-
-## Layout
+`appsettings.json` per service. Empty values disable the thing they configure
+rather than failing the boot:
 
 ```
-src/posts/Blog.Posts.Domain/          Entities, value objects, domain events. No dependencies.
-src/posts/Blog.Posts.Application/     Use cases and ports. No EF Core, no ASP.NET.
-src/posts/Blog.Posts.Infrastructure/  EF Core, Redis, Kafka, search, the gRPC client
-src/posts/Blog.Api/                   Controllers and DI wiring only
-src/analytics/                        gRPC server + two Kafka consumer groups
-src/notifications/                    Kafka relay, RabbitMQ worker, SMTP, subscriptions API
-src/shared/Blog.Contracts/            Integration events. No dependencies, shared by everything.
-src/shared/Blog.Contracts.Grpc/       The generated gRPC contract, built once from the .proto
-src/shared/Blog.Observability/        OpenTelemetry, Kafka trace propagation, health probes
-src/blog-client/                      React + Vite SPA
-tests/                                Unit (xUnit + Moq), API, and Testcontainers integration
-deploy/compose/                       Local and production Docker Compose stacks
-deploy/k8s/                           Kustomize base + dev/prod overlays
+ConnectionStrings:Postgres   the posts database
+ConnectionStrings:Redis      host:6379. Empty disables caching and trending.
+Kafka:BootstrapServers       host:9092. Empty stops the relay and both consumers.
+Analytics:Address            http://host:port of the analytics gRPC service.
+Analytics:Mongo              mongodb://... Empty disables durable view storage.
+Otlp:Endpoint                Empty disables all telemetry export.
+Database:Provider            Postgres or Sqlite.
+Jwt:Key                      Must be at least 32 bytes, checked at startup.
 ```
 
-The posts service gets full four-layer separation; the two workers get two or three projects
-each. Layering a small worker as heavily as the core service is not worth the ceremony. The
-dependency rule is enforced by
-[architecture tests](tests/Blog.Posts.UnitTests/ArchitectureTests.cs) rather than convention: the
-domain must reference nothing but the BCL, and the application layer must not reference EF Core,
+## files inside tests
+
+`Blog.Posts.UnitTests/`: domain and application tests, plus
+`ArchitectureTests.cs`, which reads the assembly references and fails if the
+domain pulls in anything but the BCL or the application layer pulls in EF Core,
 Npgsql, MongoDB, RabbitMQ, Redis or ASP.NET.
 
-## Run it
+`Blog.Notifications.UnitTests/`: the retry ladder, with a fake `TimeProvider` so
+the backoff does not actually wait.
+
+`Blog.Api.Tests/`: the API over HTTP against in-memory SQLite.
+
+`Blog.IntegrationTests/`: Testcontainers. Starts real PostgreSQL, Kafka, MongoDB
+and Redis, so the outbox and the consumers are tested against the actual brokers.
+
+74 tests run without Docker. The integration suite needs it.
+
+## Usage
+
+### Dependencies
+
+.NET 8 SDK, Node 22, Docker and Docker Compose. Nothing else is needed, the
+brokers and databases all come from the compose stack.
+
+### Build the project
+
+```bash
+dotnet build
+```
+
+### Run
 
 ```bash
 docker compose -f deploy/compose/docker-compose.yml up -d --build
 ```
 
-| | |
-|---|---|
-| Site | <http://localhost:8080>, sign in `admin@localhost.dev` / `AdminDev04!` |
-| Traces, metrics, logs | <http://localhost:18888> |
-| Kafka topics and consumer lag | <http://localhost:8081> |
-| RabbitMQ, the retry ladder and DLQ | <http://localhost:15672> (`blog` / `blogpass`) |
-| Every email the stack sends | <http://localhost:8025> |
-| Health | `:5028` api, `:5029` analytics, `:5030` notifications, `/health/ready` |
+This will:
 
-Watch the live trending stream directly:
+1. Build all four images.
+2. Start PostgreSQL, Redis, MongoDB, Kafka and RabbitMQ.
+3. Create the Kafka topics on first boot.
+4. Apply the migrations and seed an admin user.
+
+After boot:
+
+- Site: <http://localhost:8080>, sign in with `admin@localhost.dev` /
+  `AdminDev04!`
+- Traces, metrics and logs: <http://localhost:18888>
+- Kafka topics and consumer lag: <http://localhost:8081>
+- RabbitMQ, the retry ladder and the DLQ: <http://localhost:15672>, `blog` /
+  `blogpass`
+- Every email the stack sends: <http://localhost:8025>
+- Health: `:5028` api, `:5029` analytics, `:5030` notifications, on
+  `/health/ready`
+
+The trending stream, directly:
 
 ```bash
 curl -N http://localhost:8080/api/analytics/trending/stream
 ```
 
-## Kubernetes
+### Develop
 
 ```bash
-kubectl apply -k deploy/k8s/overlays/dev
-```
-
-Kustomize rather than Helm: no templating language to debug, built into `kubectl`, and overlays
-express "dev differs from prod in these four ways" more directly than a values file that has to
-anticipate every difference.
-
-The `dev` overlay runs dependencies in-cluster so an empty cluster comes up working. The `prod`
-overlay omits them, expects managed services, and contains no Secret. `blog-secrets` is created
-out of band by External Secrets, Sealed Secrets or a cloud CSI driver.
-
-Autoscaling differs by workload. The API scales on CPU. The consumers scale on Kafka consumer lag
-and RabbitMQ queue depth via KEDA, because CPU is the wrong signal for a consumer: a
-million-event backlog looks the same as an idle pod when the bottleneck is MongoDB.
-
-`deploy/k8s/validate.py` checks what `kustomize build` cannot: probes pointing at undeclared
-ports, Services selecting nothing, autoscalers targeting a renamed Deployment, a `ScaledObject`
-fighting a static replica count. It runs in CI.
-
-## Develop
-
-```bash
-dotnet build
-dotnet test          # integration tests need Docker; the rest do not
-
+dotnet test
 cd src/blog-client && npm ci && npm run dev
 ```
 
@@ -170,7 +262,8 @@ The API falls back to SQLite when PostgreSQL is configured but unreachable, so
 
 ### Migrations
 
-Always scaffolded against PostgreSQL; SQLite creates its schema from the model.
+Always scaffolded against PostgreSQL. SQLite builds its schema from the model
+instead.
 
 ```bash
 dotnet ef migrations add <Name> \
@@ -178,8 +271,35 @@ dotnet ef migrations add <Name> \
   --startup-project src/posts/Blog.Api
 ```
 
+### Kubernetes
+
+```bash
+kubectl apply -k deploy/k8s/overlays/dev
+```
+
+Kustomize rather than Helm. No templating language to debug, and it is built into
+`kubectl`.
+
+The `dev` overlay runs the dependencies in-cluster, so an empty cluster comes up
+working. The `prod` overlay leaves them out, expects managed services, and
+contains no Secret at all. `blog-secrets` is created out of band by External
+Secrets, Sealed Secrets or a cloud CSI driver.
+
+Autoscaling differs by workload. The API scales on CPU. The consumers scale on
+Kafka consumer lag and RabbitMQ queue depth through KEDA, because CPU is the
+wrong signal for a consumer. A million-event backlog looks like an idle pod when
+the bottleneck is MongoDB.
+
+`deploy/k8s/validate.py` checks what `kustomize build` cannot: probes pointing at
+undeclared ports, Services selecting nothing, autoscalers targeting a renamed
+Deployment, a `ScaledObject` fighting a static replica count. It runs in CI.
+
+Note: the `dev` overlay drops every deployment to one replica. The base keeps 3.
+It is for seeing the thing run, not for load.
+
 ## CI
 
-Builds and tests everything, then rebuilds only the images whose service changed. A change to
-shared contracts rebuilds all of them, a change to one service's own code does not. Images are
-scanned with Trivy and the results uploaded to the security tab.
+Builds and tests everything, then rebuilds only the images whose service changed.
+A change to shared contracts rebuilds all of them, a change to one service's own
+code does not. Images are scanned with Trivy and the results are uploaded to the
+security tab.
