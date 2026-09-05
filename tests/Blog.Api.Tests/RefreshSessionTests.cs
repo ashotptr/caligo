@@ -8,11 +8,6 @@ using Xunit;
 
 namespace Blog.Api.Tests;
 
-/// <summary>
-/// Covers the refresh-token rewrite: tokens are stored hashed, rotate on every use, support
-/// several concurrent devices, and revoke the whole chain when an already-rotated token
-/// reappears.
-/// </summary>
 public class RefreshSessionTests : IClassFixture<SqliteApiFactory>
 {
     private readonly SqliteApiFactory _factory;
@@ -43,7 +38,6 @@ public class RefreshSessionTests : IClassFixture<SqliteApiFactory>
         Assert.NotEqual(token, session.TokenHash);
         Assert.Equal(RefreshSessionService.Hash(token), session.TokenHash);
 
-        // The raw token must not appear anywhere in the row.
         Assert.DoesNotContain(token, session.TokenHash);
     }
 
@@ -78,13 +72,10 @@ public class RefreshSessionTests : IClassFixture<SqliteApiFactory>
         var legitimate = await sessions.RotateAsync(stolen, null, null);
         Assert.Equal(RefreshOutcome.Success, legitimate.Outcome);
 
-        // The attacker presents the token the real client already used.
         var replay = await sessions.RotateAsync(stolen, null, null);
 
         Assert.Equal(RefreshOutcome.Reused, replay.Outcome);
 
-        // Detection is only useful if it also locks out the token the thief may already hold,
-        // so the replacement issued a moment ago must stop working too.
         var afterBreach = await sessions.RotateAsync(legitimate.RefreshToken!, null, null);
 
         Assert.Equal(RefreshOutcome.Expired, afterBreach.Outcome);
@@ -101,7 +92,6 @@ public class RefreshSessionTests : IClassFixture<SqliteApiFactory>
         var laptop = await sessions.IssueAsync(user, "10.0.0.1", "laptop");
         var phone = await sessions.IssueAsync(user, "10.0.0.2", "phone");
 
-        // The old single-token-per-user design made these mutually exclusive.
         Assert.Equal(RefreshOutcome.Success, (await sessions.RotateAsync(laptop, null, null)).Outcome);
         Assert.Equal(RefreshOutcome.Success, (await sessions.RotateAsync(phone, null, null)).Outcome);
     }

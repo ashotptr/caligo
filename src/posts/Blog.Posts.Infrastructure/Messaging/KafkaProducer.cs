@@ -20,14 +20,9 @@ namespace Blog.Posts.Infrastructure.Messaging
     {
         Task ProduceAsync(KafkaMessage message, CancellationToken cancellationToken = default);
 
-        /// <summary>Fire-and-forget. Used for streams where a lost message is acceptable.</summary>
         void Produce(KafkaMessage message);
     }
 
-    /// <summary>
-    /// One producer for the process. Confluent's producer is thread-safe and maintains its own
-    /// connection pool and batching; creating one per call would defeat both and leak sockets.
-    /// </summary>
     public class KafkaProducer : IKafkaProducer, IDisposable
     {
         private readonly Lazy<IProducer<string, byte[]>> _producer;
@@ -39,9 +34,6 @@ namespace Blog.Posts.Infrastructure.Messaging
         {
             _logger = logger;
 
-            // Built on first use. The producer is a singleton and is therefore constructed even
-            // in configurations where Kafka is switched off, and creating a client against an
-            // empty broker list would throw during startup.
             _producer = new Lazy<IProducer<string, byte[]>>(() => Build(options.Value));
         }
 
@@ -50,20 +42,12 @@ namespace Blog.Posts.Infrastructure.Messaging
             var config = new ProducerConfig
             {
                 BootstrapServers = options.BootstrapServers,
-
-                // Wait for all in-sync replicas. Anything less means an acknowledged write can
-                // still be lost to a broker failover, which would defeat the outbox upstream.
                 Acks = Acks.All,
-
-                // Makes the broker discard duplicates caused by the producer's own retries, so a
-                // retry cannot turn one logical event into two records on the partition.
                 EnableIdempotence = true,
 
                 MessageSendMaxRetries = 10,
                 RetryBackoffMs = 200,
 
-                // A few milliseconds of batching: worth far more in throughput than it costs in
-                // latency, since nothing here is waiting on the ack synchronously.
                 LingerMs = 5,
                 CompressionType = CompressionType.Snappy
             };
@@ -71,8 +55,6 @@ namespace Blog.Posts.Infrastructure.Messaging
             return new ProducerBuilder<string, byte[]>(config)
                 .SetErrorHandler((_, error) =>
                 {
-                    // Transient broker errors are recovered by the client itself; only genuinely
-                    // fatal ones need attention.
                     if (error.IsFatal)
                     {
                         _logger.LogError("Fatal Kafka producer error: {Reason}", error.Reason);
@@ -87,9 +69,6 @@ namespace Blog.Posts.Infrastructure.Messaging
 
         public async Task ProduceAsync(KafkaMessage message, CancellationToken cancellationToken = default)
         {
-            // The message may carry a traceparent captured when it was written to the outbox,
-            // minutes ago. Restoring it makes this publish a child of the request that caused
-            // it rather than an orphan.
             using var activity = StartSpan(message);
 
             var result = await _producer.Value.ProduceAsync(
@@ -111,8 +90,7 @@ namespace Blog.Posts.Infrastructure.Messaging
 
             var parent = KafkaTracing.FromTraceParent(message.TraceParent);
 
-            var activity = BlogActivitySources.Kafka.StartActivity(
-                $"{message.Topic} publish", ActivityKind.Producer, parent.ActivityContext);
+            var activity = BlogActivitySources.Kafka.StartActivity($"{message.Topic} publish", ActivityKind.Producer, parent.ActivityContext);
 
             activity?.SetTag("messaging.system", "kafka");
             activity?.SetTag("messaging.operation", "publish");
@@ -126,8 +104,6 @@ namespace Blog.Posts.Infrastructure.Messaging
         {
             try
             {
-                // Hands the record to the client's background send thread and returns. The
-                // callback only reports failures; nothing upstream is waiting on the outcome.
                 using var activity = KafkaTracing.StartProduce(message.Topic, message.Key);
 
                 _producer.Value.Produce(message.Topic, BuildMessage(message, activity), report =>
@@ -141,8 +117,6 @@ namespace Blog.Posts.Infrastructure.Messaging
             }
             catch (ProduceException<string, byte[]> ex)
             {
-                // Thrown when the local queue is full, i.e. the broker is unreachable and the
-                // buffer has filled. Dropping is the correct answer for a lossy stream.
                 _logger.LogWarning(ex, "Kafka send queue is full; dropping {EventType}.", message.EventType);
             }
         }
@@ -155,16 +129,12 @@ namespace Blog.Posts.Infrastructure.Messaging
                 { EventHeaders.SchemaVersion, Encoding.UTF8.GetBytes(message.SchemaVersion.ToString()) }
             };
 
-            // Writes traceparent (and tracestate, if any) so the consumer can rejoin this trace.
-            // HTTP gets this for free from its client libraries; across a broker nothing does it
-            // unless the producer does.
             KafkaTracing.Inject(
                 (key, value) => headers.Add(key, Encoding.UTF8.GetBytes(value)),
                 activity);
 
             return new Message<string, byte[]>
             {
-                // The key decides the partition, which is what keeps one post's events ordered.
                 Key = message.Key,
                 Value = Encoding.UTF8.GetBytes(message.Payload),
                 Headers = headers
@@ -173,7 +143,6 @@ namespace Blog.Posts.Infrastructure.Messaging
 
         public void Dispose()
         {
-            // Dispose is required to be safe to call more than once.
             if (_disposed)
             {
                 return;
@@ -185,13 +154,10 @@ namespace Blog.Posts.Infrastructure.Messaging
             {
                 try
                 {
-                    // Blocks until buffered records are delivered, so a graceful shutdown does
-                    // not throw away messages already accepted from the outbox.
                     _producer.Value.Flush(TimeSpan.FromSeconds(10));
                 }
                 catch (ObjectDisposedException)
                 {
-                    // The native handle has already gone; nothing left to flush.
                 }
 
                 _producer.Value.Dispose();

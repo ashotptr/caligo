@@ -6,11 +6,6 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 	</PropertyGroup>
 
-	<!--
-		The web host references Infrastructure only to call AddPostsInfrastructure at startup;
-		everything it uses day to day comes from Application. Domain is reached transitively and
-		is never referenced directly by a controller.
-	-->
 	<ItemGroup>
 		<ProjectReference Include="../Blog.Posts.Infrastructure/Blog.Posts.Infrastructure.csproj" />
 		<ProjectReference Include="../../shared/Blog.Observability/Blog.Observability.csproj" />

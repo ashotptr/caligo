@@ -1,6 +1,5 @@
 export interface PagedResult<T> {
   items: T[];
-  /** Opaque cursor for the next page; null once the last page has been reached. */
   nextCursor: string | null;
   hasMore: boolean;
 }
@@ -31,7 +30,6 @@ export interface PostStats {
 }
 
 export interface PostStatsResponse {
-  /** False when the analytics service could not be reached; the page renders without counts. */
   enabled: boolean;
   posts: PostStats[];
 }

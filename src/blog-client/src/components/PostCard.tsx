@@ -1,8 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { PostSummary } from '../types';
 
-/** `views` is optional: the analytics service may be unreachable, and a post card without a
- *  count is better than a post card that fails to render. */
 const PostCard = ({ post, views }: { post: PostSummary; views?: number }) => (
   <article className="post-card">
     <h2>

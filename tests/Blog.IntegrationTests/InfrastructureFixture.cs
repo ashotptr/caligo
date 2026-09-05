@@ -11,10 +11,6 @@ using Xunit;
 
 namespace Blog.IntegrationTests;
 
-/// <summary>
-/// Real PostgreSQL, Kafka and MongoDB in throwaway containers, started once for the whole
-/// collection because starting a Kafka broker per test would dominate the run time.
-/// </summary>
 public class InfrastructureFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
@@ -46,7 +42,6 @@ public class InfrastructureFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        // In parallel: three sequential container starts is most of the wall clock here.
         await Task.WhenAll(
             _postgres.StartAsync(), _kafka.StartAsync(), _mongo.StartAsync(), _redis.StartAsync());
     }
@@ -67,10 +62,6 @@ public class InfrastructureCollection : ICollectionFixture<InfrastructureFixture
     public const string Name = "infrastructure";
 }
 
-/// <summary>
-/// The real application, wired to the containers. Migrations run on start, exactly as they do
-/// in production, so the schema under test is the one the migrations actually produce.
-/// </summary>
 public class ContainerApiFactory : WebApplicationFactory<Program>
 {
     private readonly InfrastructureFixture _infrastructure;
@@ -99,8 +90,6 @@ public class ContainerApiFactory : WebApplicationFactory<Program>
                 ["ConnectionStrings:DefaultConnection"] = _infrastructure.PostgresConnectionString,
                 ["ConnectionStrings:Mongo"] = _infrastructure.MongoConnectionString,
 
-                // No Redis: the distributed-memory cache stands in, which is enough for tests
-                // that are about the outbox rather than about caching.
                 ["ConnectionStrings:Redis"] = "",
 
                 ["Kafka:BootstrapServers"] = _infrastructure.KafkaBootstrapServers,

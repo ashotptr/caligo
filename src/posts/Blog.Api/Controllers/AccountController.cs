@@ -70,8 +70,6 @@ public class AccountController : ControllerBase
 
         if (user is null || !await _userManager.CheckPasswordAsync(user, loginDto.Password))
         {
-            // Deliberately identical for "no such user" and "wrong password" so the endpoint
-            // cannot be used to enumerate accounts.
             return Unauthorized("Invalid credentials");
         }
 
@@ -87,8 +85,6 @@ public class AccountController : ControllerBase
             return BadRequest("Invalid client request");
         }
 
-        // The access token establishes *who* is asking; the refresh token establishes that they
-        // are still allowed to. Both must agree, or a stolen refresh token alone is enough.
         var claimedUserId = _tokenService.GetUserIdFromExpiredToken(tokenDto.AccessToken);
 
         if (claimedUserId is null)

@@ -55,11 +55,6 @@ namespace Blog.Posts.Infrastructure.Persistence
                 "ConnectionStrings:DefaultConnection is required when using Postgres.");
         }
 
-        /// <summary>
-        /// Whether an unreachable PostgreSQL should silently become SQLite. Defaults to on in
-        /// development so the API runs with nothing else started, and off everywhere else,
-        /// where quietly writing to a throwaway file would be far worse than failing to start.
-        /// </summary>
         public static bool ShouldFallBackToSqlite(IConfiguration configuration, bool isDevelopment)
         {
             var configured = configuration.GetValue<bool?>("Database:FallbackToSqlite");

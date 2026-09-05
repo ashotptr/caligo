@@ -7,11 +7,6 @@
 		<IsPackable>false</IsPackable>
 	</PropertyGroup>
 
-	<!--
-		References Domain and Application only. There is no database, no Redis and no web host
-		here: if a test in this project needs one, the code under test has a dependency it
-		should not have.
-	-->
 	<ItemGroup>
 		<ProjectReference Include="../../src/posts/Blog.Posts.Application/Blog.Posts.Application.csproj" />
 	</ItemGroup>

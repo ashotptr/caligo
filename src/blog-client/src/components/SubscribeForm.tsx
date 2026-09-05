@@ -4,10 +4,6 @@ import api from '../api/axios';
 
 type Status = 'idle' | 'sending' | 'done' | 'error';
 
-/**
- * Sign-up for post announcements. Handled by the notifications service, which owns the
- * subscriber list; nginx routes /api/subscriptions/ straight to it.
- */
 const SubscribeForm = () => {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<Status>('idle');

@@ -6,10 +6,4 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <!--
-    Shared by every service, so it stays dependency free on purpose: a package added here is a
-    package forced on all of them. It contains wire contracts and nothing else - no behaviour,
-    no validation, no persistence.
-  -->
-
 </Project>

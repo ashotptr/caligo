@@ -4,11 +4,6 @@ using Blog.Posts.Domain.Events;
 
 namespace Blog.Posts.Infrastructure.Persistence
 {
-    /// <summary>
-    /// Records domain events to the log. This is what runs until the transactional outbox
-    /// replaces it; keeping the seam exercised means that change is a registration swap rather
-    /// than a refactor.
-    /// </summary>
     public class LoggingDomainEventDispatcher : IDomainEventDispatcher
     {
         private readonly ILogger<LoggingDomainEventDispatcher> _logger;

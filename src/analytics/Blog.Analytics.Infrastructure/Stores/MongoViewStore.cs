@@ -58,12 +58,9 @@ namespace Blog.Analytics.Infrastructure.Stores
             {
                 _views.Indexes.CreateMany(new[]
                 {
-                    // Supports the aggregations behind both analytics endpoints.
                     new CreateIndexModel<PostView>(
                         Builders<PostView>.IndexKeys.Ascending(v => v.ViewedAt).Ascending(v => v.PostId)),
 
-                    // The idempotency guarantee itself. Deduplicating in application code would
-                    // race between two consumer instances; a unique index cannot.
                     new CreateIndexModel<PostView>(
                         Builders<PostView>.IndexKeys.Ascending(v => v.EventId),
                         new CreateIndexOptions { Unique = true, Name = "ux_event_id" })
@@ -88,7 +85,6 @@ namespace Blog.Analytics.Infrastructure.Stores
             }
             catch (MongoWriteException ex) when (ex.WriteError?.Code == DuplicateKeyError)
             {
-                // Already recorded. A replayed event is the expected case, not a failure.
             }
         }
 
@@ -102,8 +98,6 @@ namespace Blog.Analytics.Infrastructure.Stores
 
             try
             {
-                // Unordered so one duplicate does not abandon the rest of the batch; without it
-                // Mongo stops at the first error and the remaining views are silently skipped.
                 await _views.InsertManyAsync(
                     views,
                     new InsertManyOptions { IsOrdered = false },
@@ -117,7 +111,6 @@ namespace Blog.Analytics.Infrastructure.Stores
 
                 if (duplicates != ex.WriteErrors.Count)
                 {
-                    // Something other than a replay went wrong; let the caller retry the batch.
                     throw;
                 }
 
@@ -165,8 +158,6 @@ namespace Blog.Analytics.Infrastructure.Stores
                 return Array.Empty<PostStats>();
             }
 
-            // One aggregation for the whole page. Calling ForPostAsync per post would turn a
-            // twenty-item listing into twenty round trips to MongoDB.
             var results = await _views.Aggregate()
                 .Match(v => postIds.Contains(v.PostId))
                 .Group(v => v.PostId, g => new
@@ -179,8 +170,6 @@ namespace Blog.Analytics.Infrastructure.Stores
 
             var found = results.ToDictionary(r => r.PostId, r => new PostStats(r.PostId, r.Views, r.Visitors));
 
-            // Posts with no views still get an entry, so the caller can zip the result against
-            // its request without checking for gaps.
             return postIds.Select(id => found.TryGetValue(id, out var stats) ? stats : PostStats.Empty(id)).ToList();
         }
 

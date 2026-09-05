@@ -4,15 +4,6 @@ using MongoDB.Driver;
 
 namespace Blog.Analytics.Host;
 
-/// <summary>
-/// Readiness check for MongoDB: does the server answer a ping.
-///
-/// Hand-written, like the Kafka and RabbitMQ checks, and for a concrete reason here:
-/// AspNetCore.HealthChecks.MongoDb 8.x is built against driver 2.x, which had a separate
-/// MongoDB.Driver.Core assembly. Driver 3.x merged it in, so the packaged check fails at
-/// runtime with a missing-assembly error - a health check that reports the database down
-/// because of its own dependency, which is worse than no check at all.
-/// </summary>
 public class MongoHealthCheck : IHealthCheck
 {
     private readonly IMongoClient? _client;
@@ -39,8 +30,6 @@ public class MongoHealthCheck : IHealthCheck
     {
         if (_client is null)
         {
-            // Not configured is not unhealthy: this service runs without Mongo, it just cannot
-            // answer historical questions.
             return HealthCheckResult.Healthy("MongoDB is not configured.");
         }
 

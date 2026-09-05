@@ -3,13 +3,10 @@ kind: ConfigMap
 metadata:
   name: blog-config
 data:
-  # Endpoints only. Anything secret lives in a Secret, which the overlays supply - see the
-  # note in overlays/prod/kustomization.yaml about how that is fed in for real.
   ASPNETCORE_ENVIRONMENT: "Production"
   Otlp__Endpoint: "http://aspire-dashboard:18889"
   Kafka__BootstrapServers: "kafka:9092"
   Notifications__KafkaBootstrapServers: "kafka:9092"
-  # h2c: gRPC over cleartext HTTP/2 between pods. TLS terminates at the ingress.
   Analytics__Address: "http://blog-analytics:8080"
   Jwt__Issuer: "blog-api"
   Jwt__Audience: "blog-client"

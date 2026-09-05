@@ -62,9 +62,6 @@ namespace Blog.Api.Services
                 return RefreshResult.Failed(RefreshOutcome.Unknown);
             }
 
-            // A rotated-out token being presented again means the old value leaked. The holder of
-            // the current token cannot be distinguished from the thief, so every session in the
-            // chain is revoked and both parties have to sign in again.
             if (session.ReplacedBySessionId is not null)
             {
                 await RevokeAllAsync(session.UserId, cancellationToken);
@@ -113,22 +110,16 @@ namespace Blog.Api.Services
         {
             var now = DateTime.UtcNow;
 
-            // One UPDATE rather than loading every session: a user under attack may have many.
             await _context.UserSessions
                 .Where(s => s.UserId == userId && s.RevokedAt == null)
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, now), cancellationToken);
 
-            // ExecuteUpdate goes straight to the database without passing through the change
-            // tracker, so sessions already loaded into this context would keep reporting
-            // RevokedAt == null and read back as still live. Bring them into line rather than
-            // leaving the tracker and the database disagreeing for the rest of the request.
             foreach (var entry in _context.ChangeTracker.Entries<UserSession>())
             {
                 if (entry.Entity.UserId == userId && entry.Entity.RevokedAt is null)
                 {
                     entry.Entity.RevokedAt = now;
 
-                    // Already persisted by the statement above; do not re-issue it on save.
                     entry.State = EntityState.Unchanged;
                 }
             }
@@ -136,13 +127,11 @@ namespace Blog.Api.Services
 
         private static string CreateToken()
         {
-            // 256 bits of CSPRNG output. Base64url so the value survives headers and JSON intact.
             var bytes = RandomNumberGenerator.GetBytes(32);
 
             return Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         }
 
-        private static string? Truncate(string? value, int max) =>
-            string.IsNullOrWhiteSpace(value) ? null : value.Length <= max ? value : value[..max];
+        private static string? Truncate(string? value, int max) => string.IsNullOrWhiteSpace(value) ? null : value.Length <= max ? value : value[..max];
     }
 }

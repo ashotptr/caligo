@@ -96,7 +96,6 @@ public class BlogPostTests
     {
         var post = BlogPost.Publish("Title", "Content", null, null, Now);
 
-        // Both sides being null must not read as "same author".
         Assert.False(post.CanBeModifiedBy(null, isAdministrator: false));
     }
 }

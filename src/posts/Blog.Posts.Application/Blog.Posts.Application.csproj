@@ -11,10 +11,6 @@
     <ProjectReference Include="../../shared/Blog.Contracts/Blog.Contracts.csproj" />
   </ItemGroup>
 
-  <!--
-    Depends on the domain and on abstractions only. No EF Core, no Redis, no ASP.NET: the
-    use cases below must be runnable against plain fakes.
-  -->
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>

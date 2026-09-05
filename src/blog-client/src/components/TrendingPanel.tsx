@@ -1,12 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useTrending } from '../hooks/useTrending';
 
-/**
- * Live "trending now", pushed from the analytics service.
- *
- * Renders nothing when analytics is unavailable rather than showing an error: view counts are
- * a nice-to-have, and the dashboard is perfectly usable without them.
- */
 const TrendingPanel = () => {
   const { snapshot, connected } = useTrending(24, 5);
 

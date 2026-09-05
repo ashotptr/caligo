@@ -1,7 +1,3 @@
-# Development-only dependencies, run in-cluster so `kubectl apply -k` gives a working system
-# on an empty cluster. Every one of these is a single replica with ephemeral storage: they are
-# here to make the application runnable, not to be operated. The prod overlay leaves them out
-# entirely and points at managed services instead.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

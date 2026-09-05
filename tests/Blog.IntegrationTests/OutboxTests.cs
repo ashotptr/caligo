@@ -13,13 +13,6 @@ using Xunit;
 
 namespace Blog.IntegrationTests;
 
-/// <summary>
-/// The transactional outbox, tested against a real PostgreSQL and a real Kafka broker.
-///
-/// The claim under test is a claim about transactions and about delivery, and neither can be
-/// verified with an in-memory double: an in-memory provider has no transaction semantics to
-/// violate, and a fake broker cannot show that a record actually reached a partition.
-/// </summary>
 [Collection(InfrastructureCollection.Name)]
 public class OutboxTests : IAsyncLifetime
 {
@@ -35,7 +28,6 @@ public class OutboxTests : IAsyncLifetime
     {
         _factory = new ContainerApiFactory(_infrastructure);
 
-        // Forces the host to build, which runs migrations.
         _factory.CreateClient();
 
         return Task.CompletedTask;
@@ -71,8 +63,6 @@ public class OutboxTests : IAsyncLifetime
         Assert.Equal("post.published", message!.EventType);
         Assert.Equal(Topics.PostLifecycle, message.Topic);
 
-        // The payload carries the identifier the database assigned, not the zero the entity
-        // had when the event was raised.
         Assert.Contains($"\"postId\": {post.Id}", message.Payload.Replace(" ", " "));
     }
 
@@ -85,9 +75,6 @@ public class OutboxTests : IAsyncLifetime
 
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        // A dispatcher that throws stands in for "the outbox insert failed". If the two writes
-        // were in separate transactions, the post would survive this and be published without
-        // anyone ever being told - the exact failure the outbox exists to prevent.
         var exploding = new Mock<IDomainEventDispatcher>();
         exploding
             .Setup(d => d.DispatchAsync(It.IsAny<IReadOnlyList<IDomainEvent>>(), It.IsAny<CancellationToken>()))
@@ -99,7 +86,6 @@ public class OutboxTests : IAsyncLifetime
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => repository.SaveChangesAsync());
 
-        // Read through a completely separate context so nothing is served from the change tracker.
         using var verifyScope = _factory.CreateScope();
         var verify = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
@@ -130,7 +116,6 @@ public class OutboxTests : IAsyncLifetime
         Assert.NotNull(payload);
         Assert.Contains(title, payload);
 
-        // And the row is marked so the relay does not send it again on the next pass.
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         var sent = await WaitForAsync(
@@ -153,8 +138,6 @@ public class OutboxTests : IAsyncLifetime
         repository.Add(post);
         await repository.SaveChangesAsync();
 
-        // Revising it raises a second event, which must land on the same partition as the first
-        // or the two could be observed out of order.
         var tracked = await repository.FindAsync(post.Id);
         tracked!.Revise("Revised", "Body", null);
         await repository.SaveChangesAsync();

@@ -48,7 +48,6 @@ public class TokenService : ITokenService
             ValidateIssuer = true,
             ValidateAudience = true,
 
-            // The whole point of a refresh call is that this token has expired.
             ValidateLifetime = false,
 
             ValidateIssuerSigningKey = true,
@@ -56,8 +55,6 @@ public class TokenService : ITokenService
             ValidAudience = _configuration["Jwt:Audience"],
             IssuerSigningKey = SigningKey(),
 
-            // Pinning the algorithm stops a token that claims "alg": "none" or a swapped
-            // asymmetric algorithm from being accepted.
             ValidAlgorithms = new[] { SecurityAlgorithms.HmacSha256 }
         };
 

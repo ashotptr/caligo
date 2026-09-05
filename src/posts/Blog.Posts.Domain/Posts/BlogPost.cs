@@ -2,28 +2,12 @@ using Blog.Posts.Domain.Events;
 
 namespace Blog.Posts.Domain.Posts;
 
-/// <summary>
-/// A published post.
-///
-/// Two things are deliberately absent. There are no EF Core data annotations - column types,
-/// lengths and indexes are declared in the infrastructure layer, so the same entity could be
-/// persisted a different way without editing it. And there is no <c>Author</c> navigation
-/// property, because the author is an ASP.NET Identity user: pointing at it from here would
-/// make the domain depend on the authentication framework. Listings that need an author name
-/// join to it in a read projection instead.
-/// </summary>
 public class BlogPost
 {
-    /// <summary>
-    /// Events are stored as factories rather than as finished objects because a brand new post
-    /// has <see cref="Id"/> 0 until the database assigns one. Building the event at drain time -
-    /// which happens after the change has committed - means it carries the real identifier.
-    /// </summary>
     private readonly List<Func<BlogPost, IDomainEvent>> _eventFactories = new();
 
     private List<string> _tags = new();
 
-    // EF materialises entities through this; application code goes through Publish.
     private BlogPost()
     {
     }
@@ -69,10 +53,6 @@ public class BlogPost
 
     public void MarkDeleted() => _eventFactories.Add(static p => new PostDeleted(p.Id));
 
-    /// <summary>
-    /// Builds and clears the pending events. Called by the persistence layer once the change
-    /// has committed, so nothing is ever published for a transaction that rolled back.
-    /// </summary>
     public IReadOnlyList<IDomainEvent> DrainDomainEvents()
     {
         if (_eventFactories.Count == 0)
@@ -87,11 +67,6 @@ public class BlogPost
         return events;
     }
 
-    /// <summary>
-    /// True when this post was written by <paramref name="userId"/>, or when the caller is an
-    /// administrator. Ownership is a domain rule, so it is stated once here rather than being
-    /// repeated in each controller action that needs it.
-    /// </summary>
     public bool CanBeModifiedBy(string? userId, bool isAdministrator) =>
         isAdministrator || (userId is not null && AuthorId == userId);
 

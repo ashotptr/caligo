@@ -4,10 +4,6 @@ using Blog.Posts.Domain.Posts;
 
 namespace Blog.Posts.Application.Posts;
 
-/// <summary>
-/// Describes who is making a request, without the application layer having to know what a
-/// ClaimsPrincipal is. The API layer builds this from the incoming token.
-/// </summary>
 public readonly record struct Caller(string? UserId, bool IsAdministrator)
 {
     public static readonly Caller Anonymous = new(null, false);
@@ -17,11 +13,6 @@ public readonly record struct Caller(string? UserId, bool IsAdministrator)
 
 public record WritePostCommand(string Title, string Content, IReadOnlyList<string>? Tags);
 
-/// <summary>
-/// The post use cases. This is where the behaviour that used to sit in the controller lives:
-/// caching decisions, ownership checks, cache invalidation and paging. The controller is left
-/// translating HTTP to these calls and back, which is all a controller should do.
-/// </summary>
 public class PostService
 {
     public const int DefaultPageSize = 20;
@@ -62,8 +53,6 @@ public class PostService
 
         var authorId = mineOnly ? caller.UserId : null;
 
-        // A per-user view must not be served from the shared cache, so it is simply not cached.
-        // The dashboard is authenticated and low traffic, unlike the public list.
         var cacheable = authorId is null;
 
         var version = await _cache.GetVersionAsync(cancellationToken);
@@ -79,8 +68,6 @@ public class PostService
             }
         }
 
-        // A cursor is opaque to clients, so a mangled one is treated as "start from the
-        // beginning" rather than as an error.
         var page = await _posts.GetPageAsync(PostCursor.TryDecode(cursor), limit, authorId, cancellationToken);
 
         if (cacheable)
@@ -111,8 +98,6 @@ public class PostService
             await _cache.SetAsync(cacheKey, post, CacheTtl, cancellationToken);
         }
 
-        // Deliberately after the post is known to exist, so a scan for non-existent ids cannot
-        // inflate the numbers.
         _analytics.PublishPostViewed(new PostViewedEvent
         {
             PostId = post.Id,
@@ -210,7 +195,6 @@ public class PostService
     }
 }
 
-/// <summary>Request-scoped details of a page view, supplied by the API layer.</summary>
 public readonly record struct ViewContext(string? Referrer, string? VisitorHash)
 {
     public static readonly ViewContext Empty = new(null, null);

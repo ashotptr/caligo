@@ -7,13 +7,6 @@ using Blog.Notifications.Core;
 
 namespace Blog.Notifications.Host.Messaging;
 
-/// <summary>
-/// Executes email commands from RabbitMQ.
-///
-/// Competing consumers: run three of these and RabbitMQ hands each message to exactly one of
-/// them. That is the opposite of the Kafka side, where every consumer group sees every event -
-/// and it is the right shape here, because an email should be sent once, not once per worker.
-/// </summary>
 public class EmailWorker : BackgroundService
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -88,8 +81,6 @@ public class EmailWorker : BackgroundService
             NetworkRecoveryInterval = TimeSpan.FromSeconds(10),
             RequestedConnectionTimeout = TimeSpan.FromSeconds(5),
 
-            // Required for AsyncEventingBasicConsumer; without it async handlers are never
-            // awaited and the client silently uses the synchronous contract instead.
             DispatchConsumersAsync = true
         };
 
@@ -98,8 +89,6 @@ public class EmailWorker : BackgroundService
 
         RabbitTopology.Declare(_channel);
 
-        // Caps how many messages this worker holds unacknowledged. Without it RabbitMQ pushes
-        // the entire queue at whichever consumer connects first, and the others idle.
         _channel.BasicQos(prefetchSize: 0, prefetchCount: _options.Prefetch, global: false);
 
         var consumer = new AsyncEventingBasicConsumer(_channel);
@@ -124,8 +113,6 @@ public class EmailWorker : BackgroundService
         {
             _logger.LogError(ex, "Unreadable email command discarded.");
 
-            // Malformed on the wire; requeueing would spin on it forever. The queue's
-            // dead-letter exchange catches it instead of it being dropped.
             _channel?.BasicNack(args.DeliveryTag, multiple: false, requeue: false);
 
             return;
@@ -138,8 +125,6 @@ public class EmailWorker : BackgroundService
             return;
         }
 
-        // The attempt count travels in a header because a message dead-lettered by TTL comes
-        // back with its original body: RabbitMQ moves the bytes, it does not rewrite them.
         var attempt = ReadAttempt(args) ?? command.Attempt;
         command = command with { Attempt = attempt };
 
@@ -154,7 +139,6 @@ public class EmailWorker : BackgroundService
 
             await ledger.MarkSentAsync(command.DeliveryId);
 
-            // Acknowledged only once the mail server has taken it.
             _channel?.BasicAck(args.DeliveryTag, multiple: false);
 
             _logger.LogInformation(
@@ -173,13 +157,8 @@ public class EmailWorker : BackgroundService
                 await ledger.RecordAttemptAsync(command.DeliveryId, nextAttempt, ex.Message);
             }
 
-            // Republished onto the ladder rather than nacked. A nack would use the queue's own
-            // dead-letter exchange, which is fixed - it could not choose a different delay for
-            // the second attempt than for the first.
             await _queue.RetryOrParkAsync(command, ex.Message);
 
-            // Acked because this copy has been dealt with: its successor is already on the
-            // retry queue. Nacking as well would put two copies in flight.
             _channel?.BasicAck(args.DeliveryTag, multiple: false);
         }
     }
@@ -210,7 +189,6 @@ public class EmailWorker : BackgroundService
         }
         catch
         {
-            // Shutting down.
         }
         finally
         {

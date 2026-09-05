@@ -1,4 +1,3 @@
-# Kafka in KRaft mode: it manages its own metadata quorum, so there is no ZooKeeper to run.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,17 +19,13 @@ spec:
             - { name: KAFKA_PROCESS_ROLES, value: "broker,controller" }
             - { name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@localhost:29093" }
             - { name: KAFKA_CONTROLLER_LISTENER_NAMES, value: "CONTROLLER" }
-            # Bind on all interfaces; advertise the Service name, which is what pods resolve.
             - { name: KAFKA_LISTENERS, value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093" }
             - { name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://kafka:9092" }
             - { name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT" }
             - { name: KAFKA_INTER_BROKER_LISTENER_NAME, value: "PLAINTEXT" }
-            # One broker, so nothing can be replicated further than a single copy.
             - { name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1" }
             - { name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1" }
             - { name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1" }
-            # Topics are created explicitly at startup with the right partition counts; letting
-            # the broker invent them would silently give every topic a single partition.
             - { name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: "false" }
             - { name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS, value: "0" }
           ports: [{ name: kafka, containerPort: 9092 }]

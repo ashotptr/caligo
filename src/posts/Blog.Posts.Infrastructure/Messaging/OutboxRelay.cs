@@ -7,18 +7,6 @@ using Blog.Posts.Infrastructure.Persistence;
 
 namespace Blog.Posts.Infrastructure.Messaging
 {
-    /// <summary>
-    /// Relays outbox rows to Kafka.
-    ///
-    /// This is the half of the transactional outbox that runs outside the request. It claims a
-    /// batch of unsent rows, publishes them, and marks them sent - retrying indefinitely until
-    /// the broker accepts them, which is what turns "the database committed" into "the event
-    /// will eventually be delivered".
-    ///
-    /// Delivery is at-least-once and cannot be made exactly-once here: if the process dies
-    /// after Kafka acknowledges but before the row is marked, the row is claimed again and
-    /// republished. Consumers deduplicate on EventId rather than pretending otherwise.
-    /// </summary>
     public class OutboxRelay : BackgroundService
     {
         private readonly IServiceScopeFactory _scopes;
@@ -47,8 +35,7 @@ namespace Blog.Posts.Infrastructure.Messaging
                 return;
             }
 
-            _logger.LogInformation(
-                "Outbox relay started, polling every {Interval}.", _options.OutboxPollInterval);
+            _logger.LogInformation("Outbox relay started, polling every {Interval}.", _options.OutboxPollInterval);
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -64,12 +51,9 @@ namespace Blog.Posts.Infrastructure.Messaging
                 }
                 catch (Exception ex)
                 {
-                    // The relay must outlive any single failure; the rows are still in the
-                    // table and will be picked up on the next pass.
                     _logger.LogError(ex, "Outbox dispatch pass failed; retrying.");
                 }
 
-                // A full batch probably means more is waiting, so go straight round again.
                 if (dispatched < _options.OutboxBatchSize)
                 {
                     try
@@ -125,9 +109,6 @@ namespace Blog.Posts.Infrastructure.Messaging
 
                     if (message.Attempts >= _options.MaxDeliveryAttempts)
                     {
-                        // Give up on this one so it stops blocking the batch behind it. The row
-                        // stays unprocessed and visible, which is the point: it is a queue of
-                        // things a human needs to look at, not a silent drop.
                         _logger.LogError(
                             ex,
                             "Outbox message {MessageId} ({EventType}) failed {Attempts} times and will no longer be retried.",
@@ -156,15 +137,6 @@ namespace Blog.Posts.Infrastructure.Messaging
             return batch.Count;
         }
 
-        /// <summary>
-        /// Claims a batch for this instance.
-        ///
-        /// On PostgreSQL the rows are locked with FOR UPDATE SKIP LOCKED, so several API
-        /// instances can run a relay each: every instance takes a different set of rows instead
-        /// of blocking on one another or publishing the same event twice. SKIP LOCKED rather
-        /// than plain FOR UPDATE is the important part - the latter would serialise the
-        /// instances behind whichever one got there first.
-        /// </summary>
         private async Task<List<OutboxMessage>> ClaimBatchAsync(
             ApplicationDbContext context, CancellationToken cancellationToken)
         {
@@ -184,8 +156,6 @@ namespace Blog.Posts.Infrastructure.Messaging
                     .ToListAsync(cancellationToken);
             }
 
-            // SQLite has no row-level locking and only ever runs single-process here, so the
-            // ordinary query is both correct and sufficient.
             return await context.OutboxMessages
                 .Where(m => m.ProcessedAt == null && m.Attempts < _options.MaxDeliveryAttempts)
                 .OrderBy(m => m.OccurredAt)

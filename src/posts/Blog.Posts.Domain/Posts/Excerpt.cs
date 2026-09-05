@@ -1,8 +1,5 @@
 namespace Blog.Posts.Domain.Posts;
 
-/// <summary>
-/// Derives the plain-text preview shown in post listings from Markdown content.
-/// </summary>
 public static class Excerpt
 {
     public const int MaxLength = 240;
@@ -19,8 +16,6 @@ public static class Excerpt
 
         foreach (var line in content.Split('\n'))
         {
-            // Code blocks are noise in a preview, and a half-open fence would otherwise leak
-            // syntax into the listing.
             if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
             {
                 inCodeFence = !inCodeFence;

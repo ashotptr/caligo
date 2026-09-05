@@ -14,14 +14,10 @@ using Blog.Posts.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Traces, metrics and logs. EF Core and Redis are instrumented here rather than in the shared
-// helper because only this service has them.
 builder.AddBlogTelemetry(
     "blog-api",
     tracing => tracing
         .AddEntityFrameworkCoreInstrumentation(ef => ef.SetDbStatementForText = builder.Environment.IsDevelopment())
-        // gRPC calls ride on HttpClient, which is already instrumented above; the separate
-        // gRPC client instrumentation would only duplicate those spans.
         .AddRedisInstrumentation());
 
 builder.Services.AddHealthChecks()
@@ -52,8 +48,6 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddRateLimiter(options =>
 {
-    // Credential endpoints: tight, because this is what stands between the site and
-    // password spraying.
     options.AddFixedWindowLimiter("auth", opt =>
     {
         opt.PermitLimit = 10;
@@ -62,8 +56,6 @@ builder.Services.AddRateLimiter(options =>
         opt.QueueLimit = 2;
     });
 
-    // Read endpoints used to be unlimited. They are cheap individually but trivially
-    // scriptable, so they get a much looser per-IP ceiling of their own.
     options.AddPolicy("reads", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions
@@ -77,8 +69,6 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 
-// Database, cache, search, messaging and the post use cases. Which database and which broker
-// is a decision that belongs next to the code implementing it, not in the web host.
 builder.Services.AddPostsInfrastructure(builder.Environment.IsDevelopment());
 
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
@@ -104,10 +94,8 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
             builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key is not configured."))),
 
-        // Pin the algorithm so a token cannot talk the validator into a weaker one.
         ValidAlgorithms = new[] { SecurityAlgorithms.HmacSha256 },
 
-        // Default is five minutes of leeway, which makes short-lived access tokens meaningless.
         ClockSkew = TimeSpan.FromSeconds(30)
     };
 });
@@ -123,10 +111,6 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Validated after Build() rather than during registration, so that configuration layered in
-// by a host (WebApplicationFactory in tests, environment variables in containers) is visible.
-// HMAC-SHA256 keys shorter than the 256-bit hash output weaken the signature and the library
-// will not warn about it, so this fails fast rather than serving forgeable tokens.
 var signingKeyBytes = Encoding.UTF8.GetByteCount(
     app.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is not configured."));
 
@@ -151,12 +135,8 @@ app.Use(async (context, next) =>
     headers.Append("X-Content-Type-Options", "nosniff");
     headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
 
-    // The API only ever returns JSON, so it can afford the strictest possible policy:
-    // nothing is allowed to load or execute from a response.
     headers.Append("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
 
-    // TLS is terminated at the proxy, so the request reaching this process is plain HTTP
-    // even in production. The environment, not Request.IsHttps, is what decides here.
     if (!app.Environment.IsDevelopment())
     {
         headers.Append("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
@@ -182,8 +162,6 @@ using (var scope = app.Services.CreateScope())
     var services = scope.ServiceProvider;
     var db = services.GetRequiredService<ApplicationDbContext>();
 
-    // Resolved rather than captured at registration, so this reflects the database the
-    // application actually connected to.
     var database = services.GetRequiredService<DependencyInjection.DatabaseChoice>();
 
     if (database.Provider == DatabaseProvider.Sqlite)

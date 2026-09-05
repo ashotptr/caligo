@@ -96,9 +96,6 @@ public class BlogPostsApiTests : IClassFixture<SqliteApiFactory>
         context.BlogPosts.Add(post);
         await context.SaveChangesAsync();
 
-        // Tags used to be a public List that callers mutated in place, which meant EF needed a
-        // value comparer to notice. The entity now owns them, so a revision is the only way in -
-        // and this asserts the change tracker still sees a replaced collection.
         var tracked = await context.BlogPosts.FirstAsync(p => p.Id == post.Id);
         tracked.Revise("Mutating tags", "body", new[] { "first", "second" });
         await context.SaveChangesAsync();
@@ -131,8 +128,6 @@ public class BlogPostsApiTests : IClassFixture<SqliteApiFactory>
     {
         var titles = Enumerable.Range(0, 7).Select(i => $"paged-{Guid.NewGuid():N}-{i}").ToList();
 
-        // All seven share a publication timestamp, so only the (date, id) tie-break keeps the
-        // cursor from skipping or repeating rows at the page boundary.
         var sharedTimestamp = DateTime.UtcNow;
 
         foreach (var title in titles)
@@ -192,7 +187,6 @@ public class BlogPostsApiTests : IClassFixture<SqliteApiFactory>
 
         var client = _factory.CreateClient();
 
-        // A cursor is opaque to clients, so a mangled one is an expected input, not a 500.
         var response = await client.GetAsync("/api/BlogPosts?cursor=not-a-real-cursor");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

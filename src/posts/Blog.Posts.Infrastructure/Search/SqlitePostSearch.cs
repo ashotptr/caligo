@@ -5,13 +5,6 @@ using Blog.Posts.Infrastructure.Persistence;
 
 namespace Blog.Posts.Infrastructure.Search
 {
-    /// <summary>
-    /// SQLite has no inverted index here, so this stays a scan. That is acceptable because
-    /// SQLite is only ever the local-development and test provider; production runs Postgres.
-    ///
-    /// Tags are not searched: under SQLite they are stored as a JSON string by the value
-    /// converter, so there is nothing to match against without parsing every row.
-    /// </summary>
     public class SqlitePostSearch : IPostSearch
     {
         private readonly ApplicationDbContext _context;

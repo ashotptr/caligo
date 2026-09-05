@@ -8,14 +8,6 @@ using Blog.Posts.Domain.Events;
 
 namespace Blog.Posts.Infrastructure.Persistence
 {
-    /// <summary>
-    /// Translates domain events into integration events and records them in the outbox.
-    ///
-    /// The translation is the point of the two event vocabularies. <see cref="PostPublished"/>
-    /// is internal and may be reshaped by any refactor; <see cref="PostPublishedEvent"/> is a
-    /// published contract other services read. Mapping here keeps a rename in the domain from
-    /// becoming a breaking change for every consumer.
-    /// </summary>
     public class OutboxDomainEventDispatcher : IDomainEventDispatcher
     {
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -44,8 +36,6 @@ namespace Blog.Posts.Infrastructure.Persistence
 
                 if (integrationEvent is null)
                 {
-                    // Not every domain event is meant to leave the service. Saying so explicitly
-                    // beats a silent default that publishes internals the moment one is added.
                     _logger.LogDebug("Domain event {EventType} is internal; not published.", domainEvent.GetType().Name);
 
                     continue;
@@ -64,9 +54,6 @@ namespace Blog.Posts.Infrastructure.Persistence
                 });
             }
 
-            // A second save, but inside the same ambient transaction as the change that raised
-            // these events - see EfPostRepository.SaveChangesAsync, which opens one when the
-            // provider supports it. Both commit together or neither does.
             await _context.SaveChangesAsync(cancellationToken);
         }
 

@@ -1,12 +1,7 @@
 namespace Blog.Analytics.Core.Views;
 
-/// <summary>One recorded read of a post.</summary>
 public class PostView
 {
-    /// <summary>
-    /// Identity of the event that produced this row. Kafka delivery is at-least-once, so this
-    /// is what makes a redelivered batch a no-op rather than a double count.
-    /// </summary>
     public string EventId { get; set; } = string.Empty;
 
     public int PostId { get; set; }
@@ -17,10 +12,6 @@ public class PostView
 
     public string? UserId { get; set; }
 
-    /// <summary>
-    /// Daily-rotating hash of address and user agent. Enough to count a visitor once per day,
-    /// not enough to identify them or follow them across days.
-    /// </summary>
     public string? VisitorHash { get; set; }
 }
 

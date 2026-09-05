@@ -45,8 +45,6 @@ builder.Services.AddScoped<ISubscriberStore, EfSubscriberStore>();
 builder.Services.AddScoped<IDeliveryLedger, EfDeliveryLedger>();
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
-// One publisher for the process: it owns a connection and a channel, and opening those per
-// message would be far more expensive than the publish itself.
 builder.Services.AddSingleton<RabbitCommandQueue>();
 builder.Services.AddSingleton<ICommandQueue>(p => p.GetRequiredService<RabbitCommandQueue>());
 
@@ -77,8 +75,6 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// Subscriptions are this service's own data, so the API for them belongs here rather than on
-// the posts service. nginx routes /api/subscriptions/ straight through.
 app.MapBlogHealthChecks();
 
 app.MapPost("/api/subscriptions", async (
@@ -93,8 +89,6 @@ app.MapPost("/api/subscriptions", async (
 
     var subscriber = await store.SubscribeAsync(request.Email, request.DisplayName, cancellationToken);
 
-    // The token is deliberately not returned: it belongs in the email, not in a response any
-    // caller can read for an address they do not own.
     return Results.Ok(new { subscriber.Email, subscriber.IsActive });
 });
 
@@ -117,17 +111,11 @@ app.MapGet("/api/subscriptions/health", (
 
 app.Run();
 
-/// <param name="Email">Validated here because a malformed address would fail at SMTP time,
-/// three retries and five minutes later, instead of immediately.</param>
 public record SubscribeRequest(
     [property: Required, EmailAddress, StringLength(320)] string Email,
     [property: StringLength(200)] string? DisplayName);
 
 namespace Blog.Notifications.Host
 {
-    /// <summary>
-    /// Lets a test locate this assembly's entry point. Top-level statements always put Program
-    /// in the global namespace, so two referenced hosts cannot both declare one.
-    /// </summary>
     public sealed class NotificationsHostMarker;
 }

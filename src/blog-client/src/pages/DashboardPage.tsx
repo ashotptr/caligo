@@ -15,8 +15,6 @@ const DashboardPage = () => {
 
   const isAdmin = hasRole('Admin');
 
-  // Admins manage every post; everyone else manages their own. The filter is applied by the
-  // API rather than in the browser, because a page of results is no longer the whole list.
   const scope = useCallback(() => (isAdmin ? {} : { mine: true }), [isAdmin]);
 
   const fetchPosts = useCallback(async () => {

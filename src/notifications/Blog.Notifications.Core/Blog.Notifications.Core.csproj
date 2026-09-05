@@ -6,10 +6,4 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <!--
-    Two projects, like the analytics service: this is a worker, not a domain model. What lives
-    here is the vocabulary and the ports; everything that touches Kafka, RabbitMQ, PostgreSQL
-    or SMTP lives in the host behind them.
-  -->
-
 </Project>

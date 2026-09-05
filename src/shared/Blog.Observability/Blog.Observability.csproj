@@ -6,11 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <!--
-    One OpenTelemetry setup shared by all three services. Without it each host would grow its
-    own slightly different wiring, and traces would stop joining up the moment two of them
-    disagreed about a resource attribute or a propagator.
-  -->
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>

@@ -5,17 +5,6 @@ using Xunit;
 
 namespace Blog.IntegrationTests;
 
-/// <summary>
-/// Idempotent ingestion of post views, against a real MongoDB.
-///
-/// Hosted by the analytics service, which is where the view store moved to: the posts service
-/// no longer knows what a view is, and that is the point of the split.
-///
-/// Kafka delivery is at-least-once: the producer may resend after a timeout, the relay may
-/// republish a row it had already sent but not yet marked, and a consumer that dies before
-/// committing its offset will see the same records again. All three are normal, so the
-/// question is not whether a duplicate arrives but whether it changes the count.
-/// </summary>
 [Collection(InfrastructureCollection.Name)]
 public class ViewIngestionTests : IAsyncLifetime
 {
@@ -61,7 +50,6 @@ public class ViewIngestionTests : IAsyncLifetime
 
         await store.RecordAsync(view);
 
-        // Same event id, fresh object: this is what a redelivered Kafka record looks like.
         await store.RecordAsync(new PostView
         {
             EventId = eventId,
@@ -85,8 +73,6 @@ public class ViewIngestionTests : IAsyncLifetime
 
         await store.RecordAsync(alreadySeen);
 
-        // A redelivered batch overlapping with what was already stored. Ordered inserts would
-        // abort at the duplicate and silently drop the two genuinely new views behind it.
         var inserted = await store.RecordManyAsync(new[]
         {
             alreadySeen,
@@ -108,7 +94,6 @@ public class ViewIngestionTests : IAsyncLifetime
         var store = Store();
         var postId = Random.Shared.Next(100_000, 999_999);
 
-        // One visitor reading the same post four times is four views but one visitor.
         await store.RecordManyAsync(Enumerable.Range(0, 4).Select(_ => NewView(postId, "same-visitor")).ToList());
 
         var count = await store.ForPostAsync(postId);

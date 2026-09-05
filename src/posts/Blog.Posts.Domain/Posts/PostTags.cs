@@ -1,10 +1,5 @@
 namespace Blog.Posts.Domain.Posts;
 
-/// <summary>
-/// Normalisation rules for post tags. These are domain rules, not input validation: two posts
-/// tagged "C#" and " c# " carry the same tag, and that has to be true wherever a tag enters
-/// the system, not just at the one controller that happened to call the old private helper.
-/// </summary>
 public static class PostTags
 {
     public const int MaxTagsPerPost = 10;

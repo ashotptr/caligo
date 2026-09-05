@@ -14,32 +14,13 @@ namespace Blog.Posts.Infrastructure.Messaging
     {
         public const string SectionName = "Analytics";
 
-        /// <summary>Address of the analytics gRPC endpoint. Empty disables view counts.</summary>
         public string Address { get; set; } = string.Empty;
 
         public bool Enabled => !string.IsNullOrWhiteSpace(Address);
 
-        /// <summary>
-        /// Per-attempt deadline. A post page is worth rendering without a view count, so this
-        /// is set to what a reader would not notice rather than to what the network allows.
-        /// </summary>
         public TimeSpan Deadline { get; set; } = TimeSpan.FromMilliseconds(150);
     }
 
-    /// <summary>
-    /// Calls the analytics service, and degrades rather than failing.
-    ///
-    /// Three layers, each doing something the others cannot:
-    ///
-    ///   deadline        caps one attempt, so a slow dependency cannot hold a request open
-    ///   retry           covers a single transient blip - a pod restarting mid-call
-    ///   circuit breaker stops calling a service that is genuinely down, so requests fail in
-    ///                   microseconds instead of waiting for the deadline every time
-    ///
-    /// Everything ultimately falls back to null, which callers render as "no counts". The
-    /// alternative - propagating the failure - would mean an analytics outage takes the blog
-    /// down with it, which is the opposite of what splitting the services was for.
-    /// </summary>
     public class GrpcViewStatsClient : IViewStatsClient
     {
         private readonly AnalyticsReader.AnalyticsReaderClient _client;
@@ -91,10 +72,6 @@ namespace Blog.Posts.Infrastructure.Messaging
 
         public bool IsConfigured => _options.Enabled;
 
-        /// <summary>
-        /// A deadline is not a timeout on the client: gRPC sends it to the server, which stops
-        /// work once it passes. Recomputed per attempt so a retry gets a full budget.
-        /// </summary>
         private CallOptions Call(CancellationToken cancellationToken) =>
             new(deadline: DateTime.UtcNow.Add(_options.Deadline), cancellationToken: cancellationToken);
 
@@ -158,8 +135,6 @@ namespace Blog.Posts.Infrastructure.Messaging
                 yield break;
             }
 
-            // No deadline here, and no retry: a stream is meant to stay open, so the per-call
-            // budget that protects a unary read would simply cut it off.
             using var call = _client.StreamTrending(
                 new StreamTrendingRequest { WindowHours = windowHours, Limit = limit },
                 cancellationToken: cancellationToken);
@@ -210,7 +185,6 @@ namespace Blog.Posts.Infrastructure.Messaging
             }
             catch (BrokenCircuitException)
             {
-                // Expected while the breaker is open; already logged when it opened.
                 return null;
             }
             catch (RpcException ex)
@@ -223,7 +197,6 @@ namespace Blog.Posts.Infrastructure.Messaging
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                // The deadline elapsed rather than the caller giving up.
                 _logger.LogWarning("Analytics {Operation} exceeded its deadline.", operation);
 
                 return null;

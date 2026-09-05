@@ -8,11 +8,6 @@ using Blog.Posts.Application.Posts;
 
 namespace Blog.Api.Controllers;
 
-/// <summary>
-/// Translates HTTP to <see cref="PostService"/> calls and back. It holds no rules of its own:
-/// caching, ownership and paging all moved into the application layer, where they can be
-/// tested without a web server.
-/// </summary>
 [Route("api/[controller]")]
 [ApiController]
 [EnableRateLimiting("reads")]
@@ -95,7 +90,6 @@ public class BlogPostsController : ControllerBase
             return null;
         }
 
-        // Rotated daily so a visitor can be counted once per day without the raw IP being stored.
         var material = $"{address}|{Request.Headers.UserAgent}|{DateTime.UtcNow:yyyy-MM-dd}";
 
         var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(material));

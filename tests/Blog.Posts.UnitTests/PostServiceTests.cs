@@ -8,12 +8,6 @@ using Xunit;
 
 namespace Blog.Posts.UnitTests;
 
-/// <summary>
-/// These are the tests that the layering was for. Before the split, every one of these
-/// behaviours - what gets cached, who may edit a post, when a view is counted - could only be
-/// reached through an HTTP request against a real database. Now the collaborators are
-/// interfaces, so each rule can be stated directly and the failure mode is unambiguous.
-/// </summary>
 public class PostServiceTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 27, 12, 0, 0, TimeSpan.Zero);
@@ -30,8 +24,6 @@ public class PostServiceTests
     private void ExpectCacheVersion(string version = "v1") =>
         _cache.Setup(c => c.GetVersionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(version);
 
-    // ---- reading a page -------------------------------------------------------------------
-
     [Fact]
     public async Task GetPage_ServedFromCache_DoesNotTouchTheDatabase()
     {
@@ -47,7 +39,6 @@ public class PostServiceTests
         Assert.True(result.IsSuccess);
         Assert.Equal(7, result.Value!.Items[0].Id);
 
-        // The point of the cache: a hit must not reach the repository at all.
         _repository.Verify(
             r => r.GetPageAsync(It.IsAny<PostCursor?>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Never);
@@ -90,7 +81,6 @@ public class PostServiceTests
 
         Assert.True(result.IsSuccess);
 
-        // A per-user page in a shared cache would serve one author's drafts to another.
         _cache.Verify(
             c => c.GetAsync<PagedResult<PostSummaryDto>>(It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
@@ -127,11 +117,8 @@ public class PostServiceTests
 
         await Service().GetPageAsync(null, requested, false, Caller.Anonymous);
 
-        // An unbounded limit is how a single request turns into a full table read.
         _repository.Verify(r => r.GetPageAsync(null, expected, null, It.IsAny<CancellationToken>()), Times.Once);
     }
-
-    // ---- reading one post -----------------------------------------------------------------
 
     [Fact]
     public async Task Get_CountsAView_WhenThePostExists()
@@ -167,11 +154,8 @@ public class PostServiceTests
 
         Assert.Equal(ResultStatus.NotFound, result.Status);
 
-        // Otherwise scanning for ids that do not exist would inflate the numbers.
         _analytics.Verify(a => a.PublishPostViewed(It.IsAny<PostViewedEvent>()), Times.Never);
     }
-
-    // ---- searching ------------------------------------------------------------------------
 
     [Fact]
     public async Task Search_WithABlankQuery_IsRejectedWithoutQueryingAnything()
@@ -197,8 +181,6 @@ public class PostServiceTests
 
         _search.Verify(s => s.SearchAsync("kafka", PostService.MaxSearchResults, It.IsAny<CancellationToken>()), Times.Once);
     }
-
-    // ---- writing --------------------------------------------------------------------------
 
     [Fact]
     public async Task Create_InvalidatesTheCache_SoTheNewPostIsVisibleImmediately()

@@ -75,9 +75,6 @@ spec:
             - name: tmp
               mountPath: /tmp
 
-      # An email in flight should finish rather than be cut off mid-SMTP. The worker acks only
-      # after the mail server accepts, so an unfinished message is redelivered rather than
-      # lost - but a clean exit avoids the duplicate.
       terminationGracePeriodSeconds: 45
 
       volumes:

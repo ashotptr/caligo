@@ -6,11 +6,4 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <!--
-    The analytics service is a worker with a read API, not a domain model: it counts things
-    other services tell it about and answers questions about those counts. Two projects is the
-    proportionate split - ports and logic here, the stores and consumers behind them. Layering
-    it as heavily as the posts service would be ceremony rather than structure.
-  -->
-
 </Project>

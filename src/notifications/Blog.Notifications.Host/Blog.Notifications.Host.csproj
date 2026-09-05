@@ -6,11 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <!--
-    References Blog.Contracts but not Blog.Contracts.Grpc: this service consumes JSON events
-    and speaks no gRPC, so it has no reason to carry Protobuf. That separation is why the
-    generated contract lives in its own project.
-  -->
   <ItemGroup>
     <ProjectReference Include="../Blog.Notifications.Core/Blog.Notifications.Core.csproj" />
     <ProjectReference Include="../../shared/Blog.Contracts/Blog.Contracts.csproj" />

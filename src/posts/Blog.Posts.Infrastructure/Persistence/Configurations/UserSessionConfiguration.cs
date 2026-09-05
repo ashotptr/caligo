@@ -10,7 +10,6 @@ namespace Blog.Posts.Infrastructure.Persistence
         {
             session.HasKey(s => s.Id);
 
-            // Refresh tokens are looked up by hash on every refresh, and revoked in bulk per user.
             session.HasIndex(s => s.TokenHash).IsUnique();
             session.HasIndex(s => new { s.UserId, s.ExpiresAt });
 

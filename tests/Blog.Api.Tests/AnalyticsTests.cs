@@ -37,8 +37,6 @@ public class AnalyticsTests : IClassFixture<SqliteApiFactory>
         var client = _factory.CreateClient();
         var response = await client.GetAsync($"/api/BlogPosts/{post.Id}");
 
-        // Analytics is best-effort by design: with no broker configured, reading a post must
-        // behave exactly as it does with one.
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 

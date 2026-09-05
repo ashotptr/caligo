@@ -27,9 +27,6 @@ namespace Blog.Posts.Infrastructure.Persistence
 
             if (_isNpgsql)
             {
-                // Partial index: the dispatcher only ever asks for unsent rows, so the index
-                // stays the size of the backlog rather than the size of the whole table. Without
-                // the filter it would grow forever alongside the history of every event sent.
                 outbox.HasIndex(m => m.OccurredAt)
                       .HasDatabaseName("IX_outbox_messages_pending")
                       .HasFilter("\"ProcessedAt\" IS NULL");

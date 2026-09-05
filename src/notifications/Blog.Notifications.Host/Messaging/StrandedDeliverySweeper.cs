@@ -3,19 +3,6 @@ using Blog.Notifications.Core;
 
 namespace Blog.Notifications.Host.Messaging;
 
-/// <summary>
-/// Re-enqueues deliveries that were recorded but never reached the broker.
-///
-/// The relay writes a Pending row, then publishes. If the process dies in between - or RabbitMQ
-/// is unreachable at that moment - the row exists and no command does, so an email is owed and
-/// nothing is going to send it. Kafka does not help here: either its offset was committed, and
-/// the event is gone, or it was not, and the deduplication table now suppresses the retry.
-///
-/// A full outbox with its own relay would close this properly, as the posts service does for
-/// its lifecycle events. This is the cheaper answer for a lower-stakes payload: the Pending row
-/// is already the record that something is owed, so recovering it is a query rather than a
-/// second table and a second background loop. Worth naming as the trade-off it is.
-/// </summary>
 public class StrandedDeliverySweeper : BackgroundService
 {
     private readonly IServiceScopeFactory _scopes;
@@ -89,8 +76,6 @@ public class StrandedDeliverySweeper : BackgroundService
 
             if (subscriber is null || !subscriber.IsActive)
             {
-                // They unsubscribed while this sat here. Sending anyway would be worse than
-                // dropping it, so it is closed out rather than delivered late.
                 await ledger.MarkFailedAsync(
                     delivery.Id, delivery.Attempts, "Subscriber is no longer active.", cancellationToken);
 

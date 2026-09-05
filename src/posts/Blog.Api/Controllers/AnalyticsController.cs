@@ -7,14 +7,6 @@ using Blog.Posts.Infrastructure.Persistence;
 
 namespace Blog.Api.Controllers;
 
-/// <summary>
-/// Composes analytics with posts.
-///
-/// The counts come from the analytics service over gRPC; the titles come from this service's
-/// own database. Neither side could answer on its own: analytics does not know what a title
-/// is, and the posts database does not know what a view is. Joining them here is the point of
-/// the boundary, and it used to be a single LINQ query when both lived in one process.
-/// </summary>
 [Route("api/[controller]")]
 [ApiController]
 [EnableRateLimiting("reads")]
@@ -34,8 +26,6 @@ public class AnalyticsController : ControllerBase
     {
         var stats = await _analytics.GetForPostAsync(id, cancellationToken);
 
-        // Null means the analytics service could not be reached. The page still renders; it
-        // just shows no numbers.
         return Ok(new
         {
             postId = id,
@@ -45,10 +35,6 @@ public class AnalyticsController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Counts for a set of posts in one call, so a listing costs one round trip rather than
-    /// one per post.
-    /// </summary>
     [HttpGet("posts")]
     public async Task<IActionResult> ForPosts([FromQuery] string ids, CancellationToken cancellationToken)
     {
@@ -117,14 +103,6 @@ public class AnalyticsController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Bridges the analytics gRPC stream to the browser as Server-Sent Events.
-    ///
-    /// Browsers cannot consume a native gRPC stream, and gRPC-Web does not support server
-    /// streaming over every proxy. Terminating the stream here and re-emitting it as SSE keeps
-    /// the internal hop binary and typed while giving the SPA something EventSource can read,
-    /// with post titles joined in on the way through.
-    /// </summary>
     [HttpGet("trending/stream")]
     public async Task TrendingStream(
         [FromQuery] int windowHours = 24,
@@ -137,8 +115,6 @@ public class AnalyticsController : ControllerBase
         Response.Headers.ContentType = "text/event-stream";
         Response.Headers.CacheControl = "no-cache";
 
-        // Without this, nginx buffers the response and the client sees nothing until the
-        // stream closes - which for an endless stream means nothing at all.
         Response.Headers["X-Accel-Buffering"] = "no";
 
         if (!_analytics.IsConfigured)
@@ -174,8 +150,6 @@ public class AnalyticsController : ControllerBase
     {
         await Response.WriteAsync($"event: {name}\ndata: {json}\n\n", cancellationToken);
 
-        // SSE only reaches the client when the response is flushed; buffering would batch every
-        // update into one write at the end.
         await Response.Body.FlushAsync(cancellationToken);
     }
 

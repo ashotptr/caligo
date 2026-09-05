@@ -7,19 +7,7 @@ resources:
   - ../../base
   - keda.yaml
 
-# No dependency manifests here, deliberately. PostgreSQL, Kafka, Redis, MongoDB and RabbitMQ
-# are managed services in production - the dev overlay runs them in-cluster only so that
-# `kubectl apply -k` works on an empty laptop cluster.
-#
-# There is also no Secret in this overlay. Committing production credentials to git is the
-# thing this whole file exists to avoid; `blog-secrets` is expected to be created out of band,
-# by External Secrets Operator, Sealed Secrets, or the cloud provider's CSI driver. The
-# manifests reference it by name and do not care which.
-
 patches:
-  # KEDA owns the replica count for the two workers once a ScaledObject targets them, and it
-  # manages its own HPA underneath. Leaving a static replica count here would have the two
-  # fight over the Deployment.
   - target:
       kind: Deployment
       name: blog-analytics

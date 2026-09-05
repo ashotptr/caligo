@@ -2,11 +2,6 @@ using System.Text;
 
 namespace Blog.Posts.Application.Posts
 {
-    /// <summary>
-    /// Encodes the sort key of the last row on a page. Posts are ordered by
-    /// (PublishedDate DESC, Id DESC); Id breaks ties so the ordering is total and the
-    /// cursor can never straddle two rows.
-    /// </summary>
     public readonly record struct PostCursor(DateTime PublishedDate, int Id)
     {
         public string Encode()
@@ -19,10 +14,6 @@ namespace Blog.Posts.Application.Posts
                           .Replace('/', '_');
         }
 
-        /// <summary>
-        /// Cursors arrive from the network, so a malformed one is an expected input rather
-        /// than an exception: callers treat null as "start from the beginning".
-        /// </summary>
         public static PostCursor? TryDecode(string? cursor)
         {
             if (string.IsNullOrWhiteSpace(cursor))

@@ -28,8 +28,6 @@ public class EfSubscriberStore : ISubscriberStore
 
         if (existing is not null)
         {
-            // Re-subscribing reactivates rather than creating a second row, so the unique index
-            // on the address is never in the way of someone changing their mind.
             existing.IsActive = true;
             existing.UnsubscribedAt = null;
             existing.DisplayName = displayName ?? existing.DisplayName;
@@ -97,7 +95,6 @@ public class EfDeliveryLedger : IDeliveryLedger
             return Array.Empty<NotificationDelivery>();
         }
 
-        // Which of these have already been claimed for this event, by this or another instance.
         var already = await _context.Deliveries
             .AsNoTracking()
             .Where(d => d.EventId == eventId)
@@ -131,9 +128,6 @@ public class EfDeliveryLedger : IDeliveryLedger
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            // Two relay instances claimed the same event at once. The read above narrows the
-            // window but cannot close it; the unique index is what actually decides, and losing
-            // the race simply means the other instance is sending these.
             _logger.LogInformation("Event {EventId} was claimed concurrently; yielding.", eventId);
 
             foreach (var entry in _context.ChangeTracker.Entries<NotificationDelivery>().ToList())

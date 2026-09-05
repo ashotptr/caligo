@@ -9,8 +9,6 @@ resources:
   - dependencies/stateful.yaml
   - dependencies/kafka.yaml
 
-# A laptop cluster does not need three of everything, and the PodDisruptionBudget in the base
-# would block a single-node drain if minAvailable could never be met.
 patches:
   - target:
       kind: Deployment
@@ -65,7 +63,6 @@ patches:
         path: /spec/rules/0/host
         value: blog.localtest.me
 
-# Locally built images rather than whatever is in the registry.
 images:
   - name: ghcr.io/ashotptr/blog/blog-api
     newName: blog-blog-api

@@ -10,7 +10,6 @@ public class NotificationsOptions
 {
     public const string SectionName = "Notifications";
 
-    /// <summary>amqp://user:pass@host:5672/. Empty disables outbound email entirely.</summary>
     public string RabbitMq { get; set; } = string.Empty;
 
     public bool RabbitConfigured => !string.IsNullOrWhiteSpace(RabbitMq);
@@ -19,24 +18,17 @@ public class NotificationsOptions
 
     public bool KafkaConfigured => !string.IsNullOrWhiteSpace(KafkaBootstrapServers);
 
-    /// <summary>Consumer group reading the post lifecycle topic.</summary>
     public string RelayGroup { get; set; } = "notifications-relay";
 
-    /// <summary>How many emails one worker will have in flight at a time.</summary>
     public ushort Prefetch { get; set; } = 10;
 
-    /// <summary>Base URL used to build unsubscribe links.</summary>
     public string SiteUrl { get; set; } = "http://localhost:8080";
 
     public TimeSpan SweepInterval { get; set; } = TimeSpan.FromMinutes(1);
 
-    /// <summary>How long a Pending row waits before the sweeper assumes it was stranded.</summary>
     public TimeSpan StrandedAfter { get; set; } = TimeSpan.FromMinutes(2);
 }
 
-/// <summary>
-/// Publishes email commands, and moves failed ones along the retry ladder.
-/// </summary>
 public class RabbitCommandQueue : ICommandQueue, IDisposable
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -70,8 +62,6 @@ public class RabbitCommandQueue : ICommandQueue, IDisposable
 
         if (nextAttempt >= RabbitTopology.MaxAttempts)
         {
-            // Out of attempts. Parking keeps the message and its history where someone can see
-            // it, rather than discarding a real email nobody ever received.
             _logger.LogError(
                 "Delivery {DeliveryId} to {Email} failed {Attempts} times and is being parked: {Error}",
                 command.DeliveryId, command.Email, nextAttempt, error);
@@ -87,8 +77,6 @@ public class RabbitCommandQueue : ICommandQueue, IDisposable
             "Delivery {DeliveryId} to {Email} failed (attempt {Attempt}); retrying in {Delay}: {Error}",
             command.DeliveryId, command.Email, nextAttempt, delay, error);
 
-        // Into the TTL queue for this attempt. It waits there and dead-letters itself back to
-        // the working queue when the TTL expires - no timer, no scheduler, no plugin.
         Publish(
             RabbitTopology.RetryExchange,
             RabbitTopology.RetryRoutingKey(command.Attempt),
@@ -114,8 +102,6 @@ public class RabbitCommandQueue : ICommandQueue, IDisposable
 
         var properties = channel.CreateBasicProperties();
 
-        // Survives a broker restart. An unroutable in-memory message would be an email silently
-        // never sent.
         properties.Persistent = true;
         properties.ContentType = "application/json";
         properties.MessageId = command.DeliveryId.ToString();
@@ -204,7 +190,6 @@ public class RabbitCommandQueue : ICommandQueue, IDisposable
             }
             catch
             {
-                // Shutting down; a broker that has already gone is not an error.
             }
         }
 

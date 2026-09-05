@@ -3,8 +3,6 @@ kind: Ingress
 metadata:
   name: blog
   annotations:
-    # The trending endpoint is Server-Sent Events. Without these the ingress buffers the
-    # response and the browser sees nothing until the stream ends - which it never does.
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
 spec:
@@ -13,9 +11,6 @@ spec:
     - host: blog.example.com
       http:
         paths:
-          # Subscriptions belong to the notifications service, which owns the subscriber list.
-          # Routed straight there rather than proxied through the posts API, which has no
-          # business knowing who is subscribed. Longest prefix wins, so this must precede /api.
           - path: /api/subscriptions
             pathType: Prefix
             backend:

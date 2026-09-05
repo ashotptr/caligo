@@ -3,13 +3,6 @@ using RabbitMQ.Client;
 
 namespace Blog.Notifications.Host;
 
-/// <summary>
-/// Readiness check for RabbitMQ: can this process open a connection and a channel.
-///
-/// Hand-written for the same reason as the Kafka one - the packaged check's options-based API
-/// silently accepted a lambda that set nothing and then threw at startup, and a connection
-/// attempt is a short, obvious way to answer the question.
-/// </summary>
 public class RabbitMqHealthCheck : IHealthCheck
 {
     private readonly string _connectionString;

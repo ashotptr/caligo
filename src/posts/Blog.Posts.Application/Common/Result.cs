@@ -9,11 +9,6 @@ public enum ResultStatus
     Unauthorized
 }
 
-/// <summary>
-/// What a use case answers with. Deliberately not an <c>IActionResult</c>: the application
-/// layer states what happened, and the API layer decides which status code that maps to.
-/// That is what lets these be unit tested without spinning up ASP.NET.
-/// </summary>
 public readonly record struct Result<T>(ResultStatus Status, T? Value, string? Error)
 {
     public bool IsSuccess => Status == ResultStatus.Ok;
@@ -29,7 +24,6 @@ public readonly record struct Result<T>(ResultStatus Status, T? Value, string? E
     public static Result<T> Unauthorized(string? error = null) => new(ResultStatus.Unauthorized, default, error);
 }
 
-/// <summary>Result of a use case that produces no value.</summary>
 public readonly record struct Result(ResultStatus Status, string? Error)
 {
     public bool IsSuccess => Status == ResultStatus.Ok;

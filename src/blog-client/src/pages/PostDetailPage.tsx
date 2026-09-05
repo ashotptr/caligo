@@ -31,9 +31,6 @@ const PostDetailPage = () => {
   }, [id]);
 
   useEffect(() => {
-    // Deliberately a second request rather than part of the post payload. The count comes from
-    // a different service, and folding it into the post response would make rendering a post
-    // depend on analytics being up.
     const fetchStats = async () => {
       try {
         const response = await api.get<PostStats & { enabled: boolean }>(`/api/analytics/posts/${id}`);

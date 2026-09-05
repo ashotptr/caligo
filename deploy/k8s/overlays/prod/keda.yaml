@@ -1,12 +1,3 @@
-# Autoscaling the analytics consumers on Kafka consumer lag rather than on CPU.
-#
-# CPU is the wrong signal for a consumer. A backlog of a million events looks exactly like an
-# idle consumer if the bottleneck is MongoDB rather than the CPU - the pod sits waiting on I/O,
-# utilisation stays low, and the HPA concludes everything is fine while the lag grows. Lag is
-# the thing that actually matters: it is the queue of work not yet done, measured in the units
-# the work arrives in.
-#
-# KEDA also scales to zero, which a CPU HPA cannot, and back up the moment lag appears.
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
@@ -17,8 +8,6 @@ spec:
 
   minReplicaCount: 2
 
-  # Never more consumers than partitions: the extra pods would be assigned nothing and idle.
-  # blog.post.viewed.v1 has six, which is therefore the ceiling.
   maxReplicaCount: 6
 
   pollingInterval: 15
@@ -30,12 +19,9 @@ spec:
         bootstrapServers: kafka:9092
         consumerGroup: analytics-raw-writer
         topic: blog.post.viewed.v1
-        # Scale out once a partition is more than a thousand events behind.
         lagThreshold: "1000"
         offsetResetPolicy: earliest
 ---
-# The notifications worker scales on RabbitMQ queue depth, for the same reason: the queue
-# length is the backlog, and an email worker blocked on a slow SMTP server uses almost no CPU.
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:

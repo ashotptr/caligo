@@ -97,8 +97,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
-    // Best effort: tell the server to revoke the refresh sessions, but never block signing
-    // out on the network. Clearing local storage is what the user actually asked for.
     api.post('/api/account/logout').catch(() => undefined);
 
     localStorage.removeItem('accessToken');

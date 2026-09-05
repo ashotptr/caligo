@@ -21,7 +21,6 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="MongoDB.Driver" />
-    <!-- The raw client, not IDistributedCache: trending needs sorted-set operations. -->
     <PackageReference Include="StackExchange.Redis" />
   </ItemGroup>
 

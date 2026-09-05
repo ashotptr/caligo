@@ -19,8 +19,6 @@ const PostsListPage = () => {
     setError(null);
     try {
       if (searchTerm) {
-        // Search is relevance-ranked rather than keyset paged, so it returns a plain
-        // top-N list and there is no cursor to carry.
         const response = await api.get<PostSummary[]>('/api/blogposts/search', {
           params: { query: searchTerm }
         });
@@ -68,8 +66,6 @@ const PostsListPage = () => {
       return;
     }
 
-    // One batched call for the whole page. Asking per post would be twenty round trips to
-    // render one screen, which is why the gRPC contract has a batch method at all.
     const ids = posts.map(p => p.id).join(',');
 
     api

@@ -2,24 +2,12 @@ using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Blog.Contracts.Analytics;
 
-// The generated messages are imported plainly, because this file mostly speaks the wire
-// contract. The internal model deliberately shares two of those names - PostStats and
-// TrendingEntry describe the same idea on either side of the boundary - so it comes in by
-// alias rather than by a second wildcard import that would make every use ambiguous.
 using IViewStore = Blog.Analytics.Core.Views.IViewStore;
 using ITrendingStore = Blog.Analytics.Core.Views.ITrendingStore;
 using CoreStats = Blog.Analytics.Core.Views.PostStats;
 
 namespace Blog.Analytics.Host.Services;
 
-/// <summary>
-/// The gRPC read API.
-///
-/// Everything here returns counts keyed by post id and nothing else. This service has no idea
-/// what a post title is, and asking it would mean either duplicating the posts database or
-/// calling back into the API that called it. The caller joins titles from its own database,
-/// which is what keeps the boundary somewhere defensible.
-/// </summary>
 public class AnalyticsReaderService : AnalyticsReader.AnalyticsReaderBase
 {
     private const int MaxBatchSize = 100;
@@ -58,7 +46,6 @@ public class AnalyticsReaderService : AnalyticsReader.AnalyticsReaderBase
 
         if (request.PostIds.Count > MaxBatchSize)
         {
-            // Bounded so one caller cannot ask for an aggregation over every post there is.
             throw new RpcException(new Status(
                 StatusCode.InvalidArgument, $"At most {MaxBatchSize} post ids per request."));
         }
@@ -84,13 +71,6 @@ public class AnalyticsReaderService : AnalyticsReader.AnalyticsReaderBase
         return response;
     }
 
-    /// <summary>
-    /// Pushes a trending snapshot on an interval for as long as the caller listens.
-    ///
-    /// Server streaming is the reason this API is gRPC rather than REST. The alternative is
-    /// every dashboard polling on a timer, which costs a request per client per interval
-    /// whether or not anything changed, and still shows stale data between polls.
-    /// </summary>
     public override async Task StreamTrending(
         StreamTrendingRequest request,
         IServerStreamWriter<TrendingSnapshot> responseStream,
@@ -106,8 +86,6 @@ public class AnalyticsReaderService : AnalyticsReader.AnalyticsReaderBase
 
         try
         {
-            // Suppresses the push when nothing has moved, so an idle dashboard costs one
-            // read against Redis per interval and no traffic at all on the wire.
             var lastSent = string.Empty;
 
             while (!context.CancellationToken.IsCancellationRequested)
@@ -140,7 +118,6 @@ public class AnalyticsReaderService : AnalyticsReader.AnalyticsReaderBase
         }
         catch (OperationCanceledException)
         {
-            // The client hung up, which is the normal way a stream ends.
         }
         finally
         {

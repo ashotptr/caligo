@@ -23,15 +23,9 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent
 OVERLAYS = ["dev", "prod"]
 
-# Objects an overlay references but deliberately does not contain, because they are created
-# out of band. Production credentials are not in git on purpose: `blog-secrets` is expected
-# from External Secrets Operator, Sealed Secrets, or a cloud CSI driver. Listing them here
-# keeps the check meaningful for dev - where a missing Secret really is a mistake - without
-# making prod fail for doing the right thing.
 EXTERNALLY_SUPPLIED: dict[str, set[str]] = {
     "prod": {"blog-secrets"},
 }
-
 
 def build(overlay: str) -> list[dict]:
     result = subprocess.run(
@@ -43,7 +37,6 @@ def build(overlay: str) -> list[dict]:
         sys.exit(f"kustomize build failed for {overlay}:\n{result.stderr}")
 
     return [doc for doc in yaml.safe_load_all(result.stdout) if doc]
-
 
 def check(overlay: str, docs: list[dict]) -> list[str]:
     problems: list[str] = []
@@ -62,7 +55,6 @@ def check(overlay: str, docs: list[dict]) -> list[str]:
         pod = workload["spec"]["template"]
         pod_labels = pod["metadata"].get("labels", {})
 
-        # A selector that does not match its own template means the Deployment adopts no pods.
         selector = workload["spec"]["selector"]["matchLabels"]
         if not selector.items() <= pod_labels.items():
             problems.append(f"{name}: selector {selector} does not match pod labels {pod_labels}")
@@ -94,8 +86,6 @@ def check(overlay: str, docs: list[dict]) -> list[str]:
                         f"'{source['configMapRef']['name']}' is not defined in the {overlay} overlay"
                     )
 
-            # A read-only root filesystem needs somewhere writable, or the runtime fails on
-            # its first temp file - usually minutes in, under load.
             security = container.get("securityContext", {})
             if security.get("readOnlyRootFilesystem"):
                 mounts = {m["mountPath"] for m in container.get("volumeMounts", [])}
@@ -104,12 +94,9 @@ def check(overlay: str, docs: list[dict]) -> list[str]:
                         f"{name}/{container['name']}: readOnlyRootFilesystem without a /tmp volume"
                     )
 
-            # An HPA or a KEDA trigger has nothing to measure utilisation against without a
-            # CPU request.
             if "resources" not in container or "requests" not in container.get("resources", {}):
                 problems.append(f"{name}/{container['name']}: no resource requests")
 
-    # Every Service must select some pod.
     for name, service in services.items():
         selector = service["spec"].get("selector")
         if not selector:
@@ -121,7 +108,6 @@ def check(overlay: str, docs: list[dict]) -> list[str]:
         ):
             problems.append(f"Service/{name}: selector {selector} matches no workload")
 
-    # Ingress backends must exist.
     for name, ingress in by_kind.get("Ingress", {}).items():
         for rule in ingress["spec"].get("rules", []):
             for path in rule.get("http", {}).get("paths", []):
@@ -138,7 +124,6 @@ def check(overlay: str, docs: list[dict]) -> list[str]:
                                 f"named '{port['name']}'"
                             )
 
-    # Autoscalers and disruption budgets must point at something real.
     for kind, path in (("HorizontalPodAutoscaler", ("spec", "scaleTargetRef", "name")),
                        ("ScaledObject", ("spec", "scaleTargetRef", "name"))):
         for name, doc in by_kind.get(kind, {}).items():
@@ -148,7 +133,6 @@ def check(overlay: str, docs: list[dict]) -> list[str]:
             if target and target not in workloads:
                 problems.append(f"{kind}/{name}: targets '{target}', which is not in this overlay")
 
-    # KEDA manages replicas itself; a static replica count alongside it makes the two fight.
     for name, doc in by_kind.get("ScaledObject", {}).items():
         target = doc["spec"]["scaleTargetRef"]["name"]
         if target in workloads and "replicas" in workloads[target]["spec"]:
@@ -158,7 +142,6 @@ def check(overlay: str, docs: list[dict]) -> list[str]:
             )
 
     return problems
-
 
 def main() -> int:
     failed = False
@@ -186,7 +169,6 @@ def main() -> int:
             print("  all cross-resource checks passed")
 
     return 1 if failed else 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

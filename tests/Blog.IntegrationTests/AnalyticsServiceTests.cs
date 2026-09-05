@@ -11,13 +11,6 @@ using CoreStats = Blog.Analytics.Core.Views.PostStats;
 
 namespace Blog.IntegrationTests;
 
-/// <summary>
-/// The analytics service over real gRPC, backed by real MongoDB and Redis.
-///
-/// These exercise the boundary itself: the proto contract, the generated client and server,
-/// and the two stores behind them. A test that called the service class directly would prove
-/// the aggregation works while saying nothing about whether the two sides of the wire agree.
-/// </summary>
 [Collection(InfrastructureCollection.Name)]
 public class AnalyticsServiceTests : IAsyncLifetime
 {
@@ -36,8 +29,6 @@ public class AnalyticsServiceTests : IAsyncLifetime
     {
         _host = new AnalyticsHostFactory(_infrastructure);
 
-        // Routes gRPC over the in-memory test server rather than a socket, so the whole
-        // client/server stack is real without needing a port.
         _channel = GrpcChannel.ForAddress(
             _host.Server.BaseAddress,
             new GrpcChannelOptions { HttpHandler = _host.Server.CreateHandler() });
@@ -100,8 +91,6 @@ public class AnalyticsServiceTests : IAsyncLifetime
 
         var batch = await _client.GetPostStatsBatchAsync(request);
 
-        // Posts with no views still come back, so a caller can zip the response against its
-        // request without checking for gaps.
         Assert.Equal(2, batch.Stats.Count);
         Assert.Equal(1, batch.Stats.Single(s => s.PostId == withViews).Views);
         Assert.Equal(0, batch.Stats.Single(s => s.PostId == withNone).Views);
@@ -152,7 +141,6 @@ public class AnalyticsServiceTests : IAsyncLifetime
             new StreamTrendingRequest { WindowHours = 24, Limit = 20 },
             cancellationToken: cancellation.Token);
 
-        // The client sends one request and the server pushes. Nothing here asks again.
         var received = await call.ResponseStream.MoveNext(cancellation.Token);
 
         Assert.True(received, "the server should push a snapshot without being polled");
@@ -171,7 +159,6 @@ public class AnalyticsServiceTests : IAsyncLifetime
 
         await Trending.IncrementAsync(recent, DateTime.UtcNow);
 
-        // Written into a bucket outside the one-hour window being queried.
         await Trending.IncrementAsync(old, DateTime.UtcNow.AddHours(-5));
 
         var top = await Trending.TopAsync(windowHours: 1, limit: 50);
@@ -179,7 +166,6 @@ public class AnalyticsServiceTests : IAsyncLifetime
         Assert.Contains(top, e => e.PostId == recent);
         Assert.DoesNotContain(top, e => e.PostId == old);
 
-        // Widening the window brings it back, which is what makes the bucketing worth having.
         var wider = await Trending.TopAsync(windowHours: 24, limit: 50);
 
         Assert.Contains(wider, e => e.PostId == old);
@@ -194,7 +180,6 @@ public class AnalyticsServiceTests : IAsyncLifetime
     };
 }
 
-/// <summary>The analytics service in-process, wired to the shared containers.</summary>
 public class AnalyticsHostFactory : WebApplicationFactory<AnalyticsHostMarker>
 {
     private readonly InfrastructureFixture _infrastructure;
@@ -214,8 +199,6 @@ public class AnalyticsHostFactory : WebApplicationFactory<AnalyticsHostMarker>
                 ["ConnectionStrings:Mongo"] = _infrastructure.MongoConnectionString,
                 ["ConnectionStrings:Redis"] = _infrastructure.RedisConnectionString,
 
-                // The consumers are not wanted here: these tests drive the stores directly so
-                // that what they assert is the gRPC surface, not Kafka timing.
                 ["Kafka:BootstrapServers"] = "",
 
                 ["Analytics:TrendingPushInterval"] = "00:00:00.200"

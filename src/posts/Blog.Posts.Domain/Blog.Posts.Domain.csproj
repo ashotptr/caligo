@@ -6,9 +6,4 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <!--
-    Deliberately has no PackageReference of any kind. If this project ever needs one, the
-    thing being added is not domain logic.
-  -->
-
 </Project>

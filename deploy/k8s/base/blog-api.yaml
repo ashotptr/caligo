@@ -16,9 +16,6 @@ spec:
         app.kubernetes.io/name: blog-api
         app.kubernetes.io/part-of: blog
     spec:
-      # Keeps replicas off the same node, so losing one node does not take the whole API with
-      # it. ScheduleAnyway rather than DoNotSchedule: on a small cluster, spreading is a
-      # preference, not a reason to leave a pod unschedulable.
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
@@ -49,20 +46,13 @@ spec:
             - secretRef:
                 name: blog-secrets
 
-          # Requests are what the scheduler packs against and what the HPA measures utilisation
-          # against - without them, a CPU-target HPA has no denominator and never scales.
           resources:
             requests:
               cpu: 100m
               memory: 192Mi
             limits:
-              # No CPU limit on purpose: throttling a latency-sensitive API to a quota tends to
-              # add tail latency without protecting anything the request already reserves.
               memory: 512Mi
 
-          # Answers "is this process wedged" and nothing else. If it probed PostgreSQL, a
-          # database blip would fail liveness and the kubelet would restart every replica -
-          # turning a recoverable outage into a restart storm.
           livenessProbe:
             httpGet:
               path: /health/live
@@ -71,9 +61,6 @@ spec:
             periodSeconds: 20
             failureThreshold: 3
 
-          # Answers "can this instance serve traffic". Failing it removes the pod from the
-          # Service endpoints without killing it, so it rejoins by itself when the dependency
-          # comes back.
           readinessProbe:
             httpGet:
               path: /health/ready
@@ -82,8 +69,6 @@ spec:
             periodSeconds: 10
             failureThreshold: 3
 
-          # Migrations run at startup and the pod must not be declared dead while they do.
-          # A startup probe gives that a long budget without loosening liveness afterwards.
           startupProbe:
             httpGet:
               path: /health/live
@@ -101,7 +86,6 @@ spec:
             - name: tmp
               mountPath: /tmp
 
-      # The root filesystem is read-only, but the runtime still needs somewhere to write.
       volumes:
         - name: tmp
           emptyDir: {}
@@ -126,8 +110,6 @@ kind: PodDisruptionBudget
 metadata:
   name: blog-api
 spec:
-  # Voluntary disruption - a node drain, a cluster upgrade - may never take the API below two
-  # replicas. Without this, a drain can evict all three at once.
   minAvailable: 2
   selector:
     matchLabels:
@@ -153,6 +135,4 @@ spec:
           averageUtilization: 70
   behavior:
     scaleDown:
-      # Scaling in fast is how you end up flapping. Five minutes of stability before shrinking
-      # costs a little idle capacity and avoids removing the replicas that were coping.
       stabilizationWindowSeconds: 300

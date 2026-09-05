@@ -22,10 +22,8 @@ namespace Blog.Analytics.Infrastructure.Messaging
 
         public bool Enabled => !string.IsNullOrWhiteSpace(BootstrapServers);
 
-        /// <summary>Writes every view to MongoDB, for exact historical aggregation.</summary>
         public string RawViewsGroup { get; set; } = "analytics-raw-writer";
 
-        /// <summary>Maintains the rolling Redis leaderboard.</summary>
         public string TrendingGroup { get; set; } = "analytics-trending";
 
         public int BatchSize { get; set; } = 200;
@@ -33,17 +31,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
         public TimeSpan BatchLinger { get; set; } = TimeSpan.FromSeconds(2);
     }
 
-    /// <summary>
-    /// Base for the two consumer groups that read <c>blog.post.viewed.v1</c>.
-    ///
-    /// Both read the same topic, independently, at their own offsets. That is the whole reason
-    /// views are on a Kafka topic rather than a RabbitMQ queue: with a queue, whichever consumer
-    /// received a message would have taken it from the other, so the two projections would each
-    /// see roughly half the traffic.
-    ///
-    /// Offsets are committed only after a batch has been stored. Auto-commit acknowledges at
-    /// poll time, which would silently lose whatever was in flight when a process died.
-    /// </summary>
     public abstract class ViewConsumer : BackgroundService
     {
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -64,7 +51,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
 
         protected abstract string GroupId { get; }
 
-        /// <summary>Stores a batch. Returning false leaves the offset alone so it is redelivered.</summary>
         protected abstract Task<bool> HandleAsync(
             IServiceProvider services, IReadOnlyList<PostView> batch, CancellationToken cancellationToken);
 
@@ -77,8 +63,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
                 return Task.CompletedTask;
             }
 
-            // The Confluent consumer is a blocking, single-threaded API. A dedicated thread keeps
-            // it off the thread pool, where a blocking Consume would hold a worker indefinitely.
             return Task.Factory.StartNew(
                 () => ConsumeLoop(stoppingToken),
                 stoppingToken,
@@ -93,17 +77,12 @@ namespace Blog.Analytics.Infrastructure.Messaging
                 BootstrapServers = Options.BootstrapServers,
                 GroupId = GroupId,
 
-                // A new group reads the retained history rather than only what arrives next,
-                // which is what lets a projection be rebuilt from the log.
                 AutoOffsetReset = AutoOffsetReset.Earliest,
 
                 EnableAutoCommit = false,
                 SessionTimeoutMs = 45000,
                 MaxPollIntervalMs = 300000,
 
-                // Never let a consumer define a topic. Partition count cannot be lowered once
-                // set, so an accidental single-partition topic created here would permanently
-                // cap the parallelism of every group that reads it.
                 AllowAutoCreateTopics = false
             };
 
@@ -132,11 +111,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
                     }
                     catch (ConsumeException ex) when (ex.Error.Code == ErrorCode.UnknownTopicOrPart)
                     {
-                        // Service start order is not guaranteed, and this consumer can come up
-                        // before whatever produces the topic has created it. That is a wait,
-                        // not a failure: without this the exception escapes ExecuteAsync and
-                        // the default BackgroundServiceExceptionBehavior takes the whole
-                        // process down for a condition that resolves itself in seconds.
                         _logger.LogInformation(
                             "{Group} is waiting for topic {Topic} to be created.", GroupId, Topics.PostViewed);
 
@@ -166,8 +140,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
                         continue;
                     }
 
-                    // One span per batch rather than per message: the batch is the unit of work
-                    // that is actually stored and committed, so it is the unit worth timing.
                     using (var activity = StartBatchSpan(batch.Count))
                     {
                         if (Store(batch, stoppingToken))
@@ -178,7 +150,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
                         {
                             activity?.SetStatus(ActivityStatusCode.Error, "batch not stored");
 
-                            // Offsets stay put, so these records come back round.
                             Thread.Sleep(TimeSpan.FromSeconds(5));
                         }
                     }
@@ -188,12 +159,9 @@ namespace Blog.Analytics.Infrastructure.Messaging
             }
             catch (OperationCanceledException)
             {
-                // Shutting down.
             }
             finally
             {
-                // Leave the group cleanly so partitions are reassigned immediately rather than
-                // after the session times out.
                 consumer.Close();
             }
         }
@@ -230,10 +198,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
 
         private PostView? TryRead(ConsumeResult<string, byte[]> result)
         {
-            // Remembers the trace the most recent message came from, so the batch span attaches
-            // to a real producer rather than starting an orphan trace. A batch can span several
-            // traces; this links it to the latest, which is the pragmatic choice short of
-            // adding a span link per message.
             _lastParent = KafkaTracing.Extract(key =>
                 result.Message.Headers is not null
                 && result.Message.Headers.TryGetLastBytes(key, out var raw)
@@ -262,8 +226,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
             }
             catch (JsonException ex)
             {
-                // Unreadable on the wire. Stopping the partition for one bad record would block
-                // every later view behind it, so it is dropped and reported.
                 _logger.LogError(ex, "{Group} discarding unreadable message at {Offset}.", GroupId, result.TopicPartitionOffset);
 
                 return null;
@@ -271,7 +233,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
         }
     }
 
-    /// <summary>Writes every view to MongoDB. Deduplicates on event id via a unique index.</summary>
     public class RawViewConsumer : ViewConsumer
     {
         public RawViewConsumer(
@@ -291,13 +252,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
         }
     }
 
-    /// <summary>
-    /// Maintains the Redis leaderboard from the same stream, at its own offset.
-    ///
-    /// It does not deduplicate. A replayed batch inflates a disposable ranking that ages out
-    /// within hours, and paying for exactness here would cost a round trip per view for no
-    /// benefit the reader could notice.
-    /// </summary>
     public class TrendingConsumer : ViewConsumer
     {
         public TrendingConsumer(

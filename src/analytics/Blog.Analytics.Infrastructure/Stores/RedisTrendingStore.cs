@@ -5,26 +5,10 @@ using Blog.Analytics.Core.Views;
 
 namespace Blog.Analytics.Infrastructure.Stores
 {
-    /// <summary>
-    /// The trending leaderboard, kept in Redis sorted sets.
-    ///
-    /// One sorted set per hour, member = post id, score = views in that hour. Trending over the
-    /// last N hours is then a ZUNIONSTORE across N small keys rather than an aggregation over
-    /// every raw view in the window, and expiring a bucket is what makes old traffic fall out
-    /// of the ranking without anything having to delete it.
-    ///
-    /// This is the second consumer group's projection of the same Kafka topic the raw writer
-    /// reads. Neither knows about the other, and either can be rebuilt from the log alone.
-    /// </summary>
     public class RedisTrendingStore : ITrendingStore
     {
         private const string KeyPrefix = "trending";
 
-        /// <summary>
-        /// The union is recomputed on every read - it spans at most 48 small sorted sets, which
-        /// is cheaper than reasoning about staleness. This expiry exists only so the destination
-        /// key does not outlive the request that produced it.
-        /// </summary>
         private static readonly TimeSpan UnionKeyTtl = TimeSpan.FromMinutes(1);
 
         private readonly IConnectionMultiplexer? _redis;
@@ -74,8 +58,6 @@ namespace Blog.Analytics.Infrastructure.Stores
             {
                 var database = _redis.GetDatabase();
 
-                // Collapse the batch in memory first: a hundred views of the same post in one
-                // Kafka batch should be one ZINCRBY of 100, not a hundred round trips.
                 var increments = views
                     .GroupBy(v => (Bucket: BucketKey(v.ViewedAt), v.PostId))
                     .Select(g => (g.Key.Bucket, g.Key.PostId, Count: (double)g.Count()));
@@ -87,9 +69,6 @@ namespace Blog.Analytics.Infrastructure.Stores
                 {
                     tasks.Add(batch.SortedSetIncrementAsync(bucket, postId, count));
 
-                    // Buckets expire on their own, so nothing has to sweep them. The extra day
-                    // of slack keeps a bucket alive slightly longer than the widest window that
-                    // could still ask for it.
                     tasks.Add(batch.KeyExpireAsync(bucket, TimeSpan.FromHours(49)));
                 }
 
@@ -99,8 +78,6 @@ namespace Blog.Analytics.Infrastructure.Stores
             }
             catch (RedisException ex)
             {
-                // Trending is a disposable projection; losing an increment costs a little
-                // accuracy on a leaderboard and nothing else.
                 _logger.LogWarning(ex, "Could not update trending for {Count} view(s).", views.Count);
             }
         }
@@ -128,8 +105,6 @@ namespace Blog.Analytics.Infrastructure.Stores
 
                 var destination = (RedisKey)$"{KeyPrefix}:union:{windowHours}h";
 
-                // Redis does the union server-side; pulling every bucket back to add them up
-                // here would move far more data than the answer is worth.
                 await database.SortedSetCombineAndStoreAsync(SetOperation.Union, destination, buckets);
                 await database.KeyExpireAsync(destination, UnionKeyTtl);
 

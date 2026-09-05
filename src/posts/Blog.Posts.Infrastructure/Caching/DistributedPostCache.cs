@@ -77,8 +77,6 @@ namespace Blog.Posts.Infrastructure.Caching
             {
                 _logger.LogWarning(ex, "Cache version read failed; serving uncached.");
 
-                // A fresh version every call means nothing can be read back, so reads fall
-                // through to the database rather than serving something stale.
                 return NewVersion();
             }
         }

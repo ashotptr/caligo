@@ -10,21 +10,6 @@ using Blog.Notifications.Core;
 
 namespace Blog.Notifications.Host.Messaging;
 
-/// <summary>
-/// Reads the post lifecycle topic and turns one published fact into one command per subscriber.
-///
-/// This is the fact-to-command boundary, and it is the reason both brokers exist in one system.
-/// Kafka carries "a post was published" - said once, to whoever is interested, replayable,
-/// with no idea who is listening. RabbitMQ carries "send this email to this address" - one
-/// worker, per-message acknowledgement, retried with backoff, parked when it will not succeed.
-///
-/// Translating between them is exactly what neither broker can do for you, and doing it here
-/// keeps the API ignorant of who subscribes and the workers ignorant of why they were asked.
-///
-/// The asymmetry to notice: replaying this topic is harmless for the analytics projections,
-/// which simply recount. Here it would re-send every announcement to every subscriber, so this
-/// side deduplicates on (event id, subscriber) before anything reaches the queue.
-/// </summary>
 public class PostLifecycleRelay : BackgroundService
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -95,7 +80,6 @@ public class PostLifecycleRelay : BackgroundService
                 }
                 catch (ConsumeException ex) when (ex.Error.Code == ErrorCode.UnknownTopicOrPart)
                 {
-                    // The posts service creates this topic; start order is not guaranteed.
                     _logger.LogInformation("Waiting for topic {Topic}.", Topics.PostLifecycle);
 
                     Thread.Sleep(TimeSpan.FromSeconds(5));
@@ -122,14 +106,12 @@ public class PostLifecycleRelay : BackgroundService
                 }
                 else
                 {
-                    // Leave the offset so the event is redelivered once whatever failed recovers.
                     Thread.Sleep(TimeSpan.FromSeconds(5));
                 }
             }
         }
         catch (OperationCanceledException)
         {
-            // Shutting down.
         }
         finally
         {
@@ -139,17 +121,12 @@ public class PostLifecycleRelay : BackgroundService
 
     private bool Handle(ConsumeResult<string, byte[]> result, CancellationToken cancellationToken)
     {
-        // Rejoins the trace of the request that published the post, however long ago that was.
-        // Without it, "someone created a post" and "an email went out" are two unrelated
-        // traces, and the causal link that makes the fan-out understandable is lost.
         var parent = KafkaTracing.Extract(key => Header(result, key));
 
         using var activity = KafkaTracing.StartConsume(Topics.PostLifecycle, _options.RelayGroup, parent);
 
         var eventType = Header(result, EventHeaders.EventType);
 
-        // Only publication is announced. Edits and deletions travel on the same topic and are
-        // deliberately ignored rather than mailed about.
         if (eventType is not null && eventType != "post.published")
         {
             return true;
@@ -190,8 +167,6 @@ public class PostLifecycleRelay : BackgroundService
                 return true;
             }
 
-            // Written before anything is enqueued. Rows that already exist come back excluded,
-            // so a replayed event produces no commands at all.
             var claimed = ledger.ClaimAsync(
                 published.EventId, published.PostId, published.Title, audience, cancellationToken)
                 .GetAwaiter().GetResult();

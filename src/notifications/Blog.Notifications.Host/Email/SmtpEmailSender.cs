@@ -52,8 +52,6 @@ public class SmtpEmailSender : IEmailSender
     {
         if (!IsConfigured)
         {
-            // Thrown rather than ignored: a command that cannot be executed must travel the
-            // retry ladder and end up visible, not disappear into a successful no-op.
             throw new InvalidOperationException("No SMTP host is configured.");
         }
 
@@ -76,15 +74,6 @@ public class SmtpEmailSender : IEmailSender
                 $"<p style=\"font-size:12px;color:#666\"><a href=\"{unsubscribeUrl}\">Unsubscribe</a></p>"
         };
 
-        // Lets a mail client offer one-click unsubscribe, which is what keeps announcement mail
-        // out of spam folders and is expected of anything sending in bulk.
-        //
-        // Written through SetValue rather than Headers.Add because MimeKit formats a header
-        // value at the moment it is added, using the default 78-character line limit. An
-        // unsubscribe URL exceeds that, so Headers.Add would fold it onto a continuation line -
-        // valid RFC 5322, but mishandled by enough parsers in the wild that it is not worth
-        // relying on. Passing format options to SendAsync does not help: by then the value has
-        // already been formatted. 998 is the hard line limit from the same RFC.
         var unfolded = FormatOptions.Default.Clone();
         unfolded.MaxLineLength = 998;
 

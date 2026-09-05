@@ -5,17 +5,11 @@ using Xunit;
 
 namespace Blog.Posts.UnitTests;
 
-/// <summary>
-/// The dependency rule, enforced rather than documented. Layering that is only described in a
-/// README erodes the first time someone reaches for a DbContext in the wrong place; these
-/// tests fail the build instead.
-/// </summary>
 public class ArchitectureTests
 {
     private static readonly Assembly Domain = typeof(BlogPost).Assembly;
     private static readonly Assembly Application = typeof(PostService).Assembly;
 
-    /// <summary>Anything that would mean a layer has reached outside its allowed dependencies.</summary>
     private static readonly string[] ForbiddenPrefixes =
     {
         "Microsoft.EntityFrameworkCore",
