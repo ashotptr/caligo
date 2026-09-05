@@ -4,36 +4,26 @@ A distributed blog platform. React 19 + TypeScript frontend, three ASP.NET Core 
 Kafka and RabbitMQ, gRPC, and PostgreSQL / MongoDB / Redis.
 
 ```mermaid
-flowchart LR
+flowchart TB
     client["blog-client<br/>React + nginx"]
 
-    api["<b>Blog.Api</b><br/>posts, identity"]
-    analytics["<b>Blog.Analytics</b><br/>view counts, trending"]
-    notifications["<b>Blog.Notifications</b><br/>subscribers, email"]
+    client -->|REST + SSE| api["Blog.Api"]
+    client -->|subscribe| notifications["Blog.Notifications"]
 
-    pg[("PostgreSQL")]
-    redis[("Redis")]
-    mongo[("MongoDB")]
-    kafka{{Kafka}}
-    rabbit{{RabbitMQ}}
+    api -->|"gRPC:<br/>unary + streaming"| analytics["Blog.Analytics"]
+    api -.->|"post.viewed<br/>post.lifecycle"| kafka{{Kafka}}
 
-    client -->|REST + SSE| api
-    client -->|subscribe| notifications
-
-    api -->|"gRPC: unary + streaming"| analytics
-    api --> pg
-    api --> redis
-
-    api -.->|"post.viewed / post.lifecycle"| kafka
     kafka -.-> analytics
     kafka -.-> notifications
 
-    analytics --> mongo
-    analytics --> redis
-
-    notifications -->|"per-subscriber commands"| rabbit
+    notifications -->|"per-subscriber<br/>commands"| rabbit{{RabbitMQ}}
     rabbit --> notifications
     notifications --> smtp["SMTP"]
+
+    api --> pg[("PostgreSQL")]
+    api --> redis[("Redis")]
+    analytics --> mongo[("MongoDB")]
+    analytics --> redis
 ```
 
 | Service | Owns | Talks to |
