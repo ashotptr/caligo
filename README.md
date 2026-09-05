@@ -3,28 +3,10 @@
 A distributed blog platform. React 19 + TypeScript frontend, three ASP.NET Core 8 services,
 Kafka and RabbitMQ, gRPC, and PostgreSQL / MongoDB / Redis.
 
-```mermaid
-flowchart TB
-    client["blog-client<br/>React + nginx"]
-
-    client -->|REST + SSE| api["Blog.Api"]
-    client -->|subscribe| notifications["Blog.Notifications"]
-
-    api -->|"gRPC:<br/>unary + streaming"| analytics["Blog.Analytics"]
-    api -.->|"post.viewed<br/>post.lifecycle"| kafka{{Kafka}}
-
-    kafka -.-> analytics
-    kafka -.-> notifications
-
-    notifications -->|"per-subscriber<br/>commands"| rabbit{{RabbitMQ}}
-    rabbit --> notifications
-    notifications --> smtp["SMTP"]
-
-    api --> pg[("PostgreSQL")]
-    api --> redis[("Redis")]
-    analytics --> mongo[("MongoDB")]
-    analytics --> redis
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-dark.svg">
+  <img alt="Architecture: blog-client to Blog.Api, gRPC to Blog.Analytics, Kafka to both consumers, RabbitMQ to SMTP" src="docs/architecture-light.svg" width="660">
+</picture>
 
 | Service | Owns | Talks to |
 |---|---|---|
