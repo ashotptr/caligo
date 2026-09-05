@@ -14,8 +14,7 @@ a gRPC call, and each path is chosen for what it has to guarantee.
   <img alt="Architecture: blog-client to Blog.Api, gRPC to Blog.Analytics, Kafka to both consumers, RabbitMQ to SMTP" src="docs/architecture-light.svg" width="660">
 </picture>
 
-The three services
-------------------
+## The three services
 
 **Blog.Api:** posts and identity. Owns PostgreSQL and Redis. Produces to Kafka
 and calls analytics over gRPC.
@@ -53,8 +52,9 @@ infrastructure implements.
   retry and a circuit breaker.
 - `Search/PostgresPostSearch.cs` and `Search/SqlitePostSearch.cs`: two backends
   behind one interface, because SQLite has no `tsvector`.
-- `Caching/DistributedPostCache.cs`: Redis, versioned so a write invalidates a
-  whole generation of keys instead of hunting for them.
+- `Caching/DistributedPostCache.cs`: Redis. Keys carry a version number, and a
+  write increments it, which invalidates every key of the previous generation
+  at once.
 
 `Blog.Api/`: controllers and DI wiring only. `TokenService.cs` issues the JWTs,
 `RefreshSessionService.cs` handles rotation.
@@ -64,26 +64,28 @@ infrastructure implements.
 `Messaging/ViewConsumer.cs`: the Kafka consumers. Two groups read the same
 `post.viewed` topic at their own offsets, so both get every message.
 
-`Stores/MongoViewStore.cs`: writes every view. A unique index on `EventId` is
-what makes replayed events harmless, the duplicate-key error is caught and
-ignored.
+`Stores/MongoViewStore.cs`: writes every view into the `post_views` collection.
+Two indexes: a compound one on `(ViewedAt, PostId)` for the time-window queries,
+and a unique one on `EventId`. On a replayed event the insert raises error 11000
+and the store catches it.
 
 `Stores/RedisTrendingStore.cs`: the leaderboard. One sorted set per hour, keyed
 `trending:2026090514`, incremented with `ZINCRBY` and expired after 49 hours.
 Reads union the last N buckets with `ZUNIONSTORE`.
 
 `Services/AnalyticsReaderService.cs`: the gRPC server. Implements the four RPCs
-in `analytics.proto`, including `StreamTrending`, which pushes snapshots instead
-of being polled.
+declared in `analytics.proto`.
 
 ## src/notifications/
 
-`Messaging/PostLifecycleRelay.cs`: consumes one `post.published` fact and
-produces N per-subscriber commands.
+`Messaging/PostLifecycleRelay.cs`: consumes `blog.post.lifecycle.v1`, filters on
+the `event-type` header, and publishes one RabbitMQ command per subscriber. It
+commits the Kafka offset only after the commands are queued.
 
-`Persistence/EfStores.cs`: the delivery ledger. `ClaimAsync` inserts a Pending
-row per subscriber, and a unique index on `(event_id, subscriber_id)` decides the
-race when two instances claim the same event at once. The loser sends nothing.
+`Persistence/EfStores.cs`: the delivery ledger. `ClaimAsync` inserts one Pending
+row per subscriber. A unique index on `(event_id, subscriber_id)` resolves the
+case where two instances claim the same event at once: the second insert fails
+and that instance returns an empty list.
 
 `Messaging/RabbitTopology.cs`: the exchanges and queues.
 `blog.notifications` → `blog.notifications.email`, with retry queues at 5s, 30s
@@ -91,49 +93,89 @@ and 5m and a fanout to `blog.notifications.dlq` at the end.
 
 `Messaging/EmailWorker.cs`: consumes commands and sends through SMTP.
 
-`Messaging/StrandedDeliverySweeper.cs`: finds deliveries left Queued by a process
-that died mid-flight and puts them back.
+`Messaging/StrandedDeliverySweeper.cs`: finds deliveries left in Queued by a
+process that stopped mid-flight and returns them to Pending.
 
 ## src/shared/
 
-`Blog.Contracts/`: the integration events and `Topics.cs`. References nothing, so
-every service can depend on it.
+`Blog.Contracts/`: the integration events, `Topics.cs` and the header names.
+References nothing outside the BCL, so all three services depend on it.
 
-`Blog.Contracts.Grpc/`: the generated gRPC contract. One `.proto` builds both the
-server base class and the client, so the compiler checks both sides.
+`Blog.Contracts.Grpc/`: the generated gRPC contract. `Grpc.Tools` runs protoc at
+build time with `GrpcServices="Both"`, producing `AnalyticsReaderBase` for the
+server and `AnalyticsReaderClient` for the caller from the one `.proto`.
 
 `Blog.Observability/`:
 
 - `Telemetry.cs`: traces, metrics and logs over OTLP. If `Otlp:Endpoint` is
-  empty the service runs exactly as before, just unobserved.
+  empty the method returns early and no exporter is registered.
 - `KafkaTracing.cs`: writes the W3C `traceparent` into Kafka headers and reads it
   back on the other side.
 - `HealthEndpoints.cs`: `/health/live` and `/health/ready`.
 
 ## Messaging
 
-**Kafka carries facts.** `post.viewed` is high volume and append-only, and two
-consumer groups read it at their own offsets. A queue cannot do that, whichever
-consumer took the message would have taken it from the other. Kafka also keeps
-the log, so a metric added next month can be backfilled from it.
+**Kafka.** Two topics, declared in `Blog.Contracts/Topics.cs` and created at boot
+by `KafkaTopicProvisioner.cs`:
 
-**RabbitMQ carries tasks.** An email goes to one person, fails on its own, and
-needs retry with backoff and a dead letter queue. It must never be replayed in
-bulk.
+```
+blog.post.viewed.v1      6 partitions, 7 day retention
+blog.post.lifecycle.v1   3 partitions, 30 day retention
+```
 
-**The outbox protects what cannot be lost.** No transaction spans PostgreSQL and
-Kafka, so publishing a post writes the event as a row in the same transaction and
-the relay ships it afterwards. Views skip the outbox and go straight to Kafka. A
-view is a measurement, and writing a row on every page render costs more than it
-protects.
+`KafkaProducer.cs` publishes with `acks=all`, idempotence enabled, 10 retries at
+200 ms, 5 ms linger and Snappy compression. Every message carries three headers:
+`event-type`, `schema-version` and `traceparent`.
 
-**gRPC handles the internal read.** Every post render needs a view count, which
-is internal, synchronous and frequent. Protobuf over HTTP/2 on a reused
-connection, a batch method so a listing costs one call instead of twenty, and
-server streaming for the trending panel.
+Three consumer groups read those topics. `analytics-raw-writer` and
+`analytics-trending` both read `blog.post.viewed.v1` at their own offsets, so
+each one receives every message. `notifications-relay` reads
+`blog.post.lifecycle.v1`.
 
-Delivery is at-least-once, not exactly-once. Consumers deduplicate on `EventId`
-rather than pretending otherwise. Replaying the whole lifecycle topic produced 8
+**The outbox.** No transaction spans PostgreSQL and Kafka, so the event is
+written as a row instead. `OutboxDomainEventDispatcher.cs` adds it to the same
+`DbContext` as the post, and one `SaveChangesAsync` commits both or neither.
+`OutboxRelay.cs` polls every 2 seconds, claims up to 100 rows with
+`FOR UPDATE SKIP LOCKED`, publishes them and marks them sent. A row that fails 10
+times stops being retried and stays in the table.
+
+SKIP LOCKED is what lets several API instances each run a relay. Every instance
+claims a different set of rows instead of blocking on whichever one got there
+first.
+
+`post.viewed` does not use the outbox. `KafkaAnalyticsPublisher.cs` hands it to
+the producer's background send thread and returns without waiting for the result.
+
+**RabbitMQ.** `RabbitTopology.cs` declares three exchanges and five queues:
+
+```
+blog.notifications         direct   → blog.notifications.email
+blog.notifications.retry   direct   → retry.5s, retry.30s, retry.5m
+blog.notifications.dlq     fanout   → blog.notifications.dlq
+```
+
+The retry queues have no consumer. Each carries an `x-message-ttl` of 5000,
+30000 or 300000 ms and dead-letters back to the main exchange when the TTL
+expires, so a failed message reappears on the email queue after the delay. After
+4 attempts it is routed to the fanout instead.
+
+**gRPC.** `analytics.proto` declares four RPCs. `Blog.Analytics.Host/Program.cs`
+binds port 8080 as HTTP/2 for them and port 8081 as HTTP/1 for health probes.
+Traffic between pods is cleartext, and Kestrel cannot negotiate the protocol
+without TLS, so the split is per port rather than per request.
+
+`GetPostStats`, `GetPostStatsBatch` and `GetTopPosts` are unary. `StreamTrending`
+is a server stream, which the API bridges to Server-Sent Events because a browser
+cannot consume gRPC.
+
+`GrpcViewStatsClient.cs` wraps all four with a 150 ms deadline, one retry on a
+transient `RpcException`, and a circuit breaker that opens at a 0.5 failure ratio
+over 8 calls in 15 seconds. Every failure path returns null, which the controller
+renders as no counts.
+
+Delivery is at-least-once. `MongoViewStore.cs` carries a unique index on
+`EventId` and catches the duplicate-key error, `EfStores.cs` carries one on
+`(event_id, subscriber_id)`. Replaying the whole lifecycle topic produced 8
 emails before and 8 after.
 
 Implemented features: posts with tags and full-text search, keyset paging, JWT
@@ -147,9 +189,8 @@ kept in `localStorage` rather than an HttpOnly cookie.
 
 ## Failure behaviour
 
-A slow dependency degrades, it does not cascade. The gRPC client carries a 150 ms
-deadline, one retry and a circuit breaker, and every failure path returns no
-counts instead of an error.
+The gRPC client carries a 150 ms deadline, one retry and a circuit breaker, and
+every failure path returns no counts rather than propagating the error.
 
 Measured with the analytics service stopped, calls cost about 350 ms while the
 breaker samples, then 24 ms once it opens. Posts keep rendering throughout.
