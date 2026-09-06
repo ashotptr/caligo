@@ -41,9 +41,9 @@ that fails 10 times stops being retried and stays in the table.
 **RabbitMQ.** Three exchanges and five queues:
 
 ```
-blog.notifications         direct   → blog.notifications.email
-blog.notifications.retry   direct   → retry.5s, retry.30s, retry.5m
-blog.notifications.dlq     fanout   → blog.notifications.dlq
+blog.notifications         direct   - blog.notifications.email
+blog.notifications.retry   direct   - retry.5s, retry.30s, retry.5m
+blog.notifications.dlq     fanout   - blog.notifications.dlq
 ```
 
 The retry queues have no consumer. Each carries an `x-message-ttl` of 5000,
