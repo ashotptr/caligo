@@ -8,7 +8,9 @@ services:
       POSTGRES_DB: blogdb
       POSTGRES_USER: bloguser
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_MULTIPLE_DATABASES: blognotifications
     volumes:
+      - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U bloguser -d blogdb"]
@@ -63,7 +65,7 @@ services:
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=blogdb;Username=bloguser;Password=${POSTGRES_PASSWORD}"
       ConnectionStrings__Redis: "redis:6379"
       Kafka__BootstrapServers: "kafka:29092"
-      ConnectionStrings__Mongo: "mongodb://blog:${MONGO_PASSWORD}@mongo:27017/"
+      Analytics__Address: "http://blog-analytics:8080"
       Jwt__Key: ${JWT_KEY:?}
       Jwt__Issuer: blog-api
       Jwt__Audience: blog-client
@@ -79,6 +81,81 @@ services:
       rabbitmq:
         condition: service_healthy
       mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    restart: unless-stopped
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafkadata:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
+
+  blog-analytics:
+    build:
+      context: ../..
+      dockerfile: src/analytics/Blog.Analytics.Host/Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__Mongo: "mongodb://blog:${MONGO_PASSWORD:?}@mongo:27017/"
+      ConnectionStrings__Redis: "redis:6379"
+      Kafka__BootstrapServers: "kafka:29092"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  blog-notifications:
+    build:
+      context: ../..
+      dockerfile: src/notifications/Blog.Notifications.Host/Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__Notifications: "Host=postgres;Port=5432;Database=blognotifications;Username=bloguser;Password=${POSTGRES_PASSWORD:?}"
+      Notifications__RabbitMq: "amqp://blog:${RABBITMQ_PASSWORD:?}@rabbitmq:5672/"
+      Notifications__KafkaBootstrapServers: "kafka:29092"
+      Notifications__SiteUrl: "https://blog.${DOMAIN:?}"
+      Smtp__Host: "${SMTP_HOST:-}"
+      Smtp__Port: "${SMTP_PORT:-587}"
+      Smtp__UseStartTls: "${SMTP_STARTTLS:-true}"
+      Smtp__Username: "${SMTP_USERNAME:-}"
+      Smtp__Password: "${SMTP_PASSWORD:-}"
+      Smtp__FromAddress: "${SMTP_FROM:-blog@localhost}"
+      Smtp__FromName: "${SMTP_FROM_NAME:-Blog}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
 
   blog-client:
@@ -104,3 +181,4 @@ volumes:
   pgdata:
   rabbitdata:
   mongodata:
+  kafkadata:
