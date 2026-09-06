@@ -72,8 +72,9 @@ client carries a 150 ms deadline.
 
 ## Configuration
 
-`appsettings.json`. An empty value disables the thing it configures
-instead of failing the boot:
+`appsettings.json` holds the defaults. Compose overrides
+the values. An empty
+value disables the thing it configures instead of failing the boot:
 
 ```
 ConnectionStrings:Redis   Empty disables caching and trending.
@@ -82,7 +83,12 @@ Analytics:Address         http://host:port of the analytics gRPC service.
 Otlp:Endpoint             Empty disables telemetry export.
 Database:Provider         Postgres or Sqlite.
 Jwt:Key                   At least 32 bytes, checked at startup.
+Smtp:Host                 Empty disables sending. MailHog locally, a real relay in production.
 ```
+
+Mail is only sent on `post.published`, and only to addresses on the subscriber
+list, which is separate from the account list and joined through the subscribe
+form.
 
 ## Tests
 
@@ -110,14 +116,8 @@ RabbitMQ, create the Kafka topics, apply the migrations and seed an admin user.
 - Kafka topics and consumer lag: <http://localhost:8081>
 - RabbitMQ, the retry ladder and the DLQ: <http://localhost:15672>, `blog` /
   `blogpass`
-- Every email the stack sends: <http://localhost:8025>
+- Every email the stack sends, captured by MailHog: <http://localhost:8025>
 - Health: `:5028` api, `:5029` analytics, `:5030` notifications, `/health/ready`
-
-The trending stream, directly:
-
-```bash
-curl -N http://localhost:8080/api/analytics/trending/stream
-```
 
 ## CI
 

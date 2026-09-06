@@ -62,6 +62,7 @@ services:
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      Otlp__Endpoint: "http://aspire-dashboard:18889"
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=blogdb;Username=bloguser;Password=${POSTGRES_PASSWORD}"
       ConnectionStrings__Redis: "redis:6379"
       Kafka__BootstrapServers: "kafka:29092"
@@ -120,6 +121,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: "http://+:8080"
+      Otlp__Endpoint: "http://aspire-dashboard:18889"
       ConnectionStrings__Mongo: "mongodb://blog:${MONGO_PASSWORD:?}@mongo:27017/"
       ConnectionStrings__Redis: "redis:6379"
       Kafka__BootstrapServers: "kafka:29092"
@@ -139,6 +141,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: "http://+:8080"
+      Otlp__Endpoint: "http://aspire-dashboard:18889"
       ConnectionStrings__Notifications: "Host=postgres;Port=5432;Database=blognotifications;Username=bloguser;Password=${POSTGRES_PASSWORD:?}"
       Notifications__RabbitMq: "amqp://blog:${RABBITMQ_PASSWORD:?}@rabbitmq:5672/"
       Notifications__KafkaBootstrapServers: "kafka:29092"
@@ -157,6 +160,14 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:8.2
+    restart: unless-stopped
+    environment:
+      DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "127.0.0.1:18888:18888"
 
   blog-client:
     build:
