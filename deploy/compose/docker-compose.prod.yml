@@ -1,9 +1,16 @@
 name: blog-deploy
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB: blogdb
       POSTGRES_USER: bloguser
@@ -21,6 +28,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -28,11 +36,14 @@ services:
       retries: 10
 
   rabbitmq:
-    image: rabbitmq:3.13-alpine
+    image: rabbitmq:3.13-management-alpine
     restart: unless-stopped
+    logging: *default-logging
     environment:
       RABBITMQ_DEFAULT_USER: blog
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?}
+    ports:
+      - "127.0.0.1:15672:15672"
     volumes:
       - rabbitdata:/var/lib/rabbitmq
     healthcheck:
@@ -44,6 +55,7 @@ services:
   mongo:
     image: mongo:7
     restart: unless-stopped
+    logging: *default-logging
     environment:
       MONGO_INITDB_ROOT_USERNAME: blog
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?}
@@ -60,6 +72,7 @@ services:
       context: ../..
       dockerfile: src/posts/Blog.Api/Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       Otlp__Endpoint: "http://aspire-dashboard:18889"
@@ -74,6 +87,14 @@ services:
       AdminUser__Email: ${ADMIN_EMAIL:?}
       AdminUser__Password: ${ADMIN_PASSWORD:?}
       Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID:-}
+    volumes:
+      - dpkeys:/home/app/.aspnet/DataProtection-Keys
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,6 +110,7 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.7.1
     restart: unless-stopped
+    logging: *default-logging
     environment:
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
       KAFKA_NODE_ID: 1
@@ -118,6 +140,7 @@ services:
       context: ../..
       dockerfile: src/analytics/Blog.Analytics.Host/Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: "http://+:8080"
@@ -125,6 +148,12 @@ services:
       ConnectionStrings__Mongo: "mongodb://blog:${MONGO_PASSWORD:?}@mongo:27017/"
       ConnectionStrings__Redis: "redis:6379"
       Kafka__BootstrapServers: "kafka:29092"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     depends_on:
       kafka:
         condition: service_healthy
@@ -138,6 +167,7 @@ services:
       context: ../..
       dockerfile: src/notifications/Blog.Notifications.Host/Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: "http://+:8080"
@@ -153,6 +183,12 @@ services:
       Smtp__Password: "${SMTP_PASSWORD:-}"
       Smtp__FromAddress: "${SMTP_FROM:-blog@localhost}"
       Smtp__FromName: "${SMTP_FROM_NAME:-Blog}"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     depends_on:
       postgres:
         condition: service_healthy
@@ -161,9 +197,24 @@ services:
       kafka:
         condition: service_healthy
 
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      KAFKA_CLUSTERS_0_NAME: blog
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      DYNAMIC_CONFIG_ENABLED: "false"
+    ports:
+      - "127.0.0.1:18081:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
   aspire-dashboard:
     image: mcr.microsoft.com/dotnet/aspire-dashboard:8.2
     restart: unless-stopped
+    logging: *default-logging
     environment:
       DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
     ports:
@@ -176,12 +227,20 @@ services:
         VITE_API_URL: ""
         VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:80/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     depends_on:
       - blog-api
 
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
+    logging: *default-logging
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:?}
@@ -190,6 +249,7 @@ services:
 
 volumes:
   pgdata:
+  dpkeys:
   rabbitdata:
   mongodata:
   kafkadata:
