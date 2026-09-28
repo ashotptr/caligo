@@ -31,6 +31,19 @@ public sealed record PostViewedEvent : PostEvent
     public string? VisitorHash { get; init; }
 }
 
+public sealed record PostClappedEvent : PostEvent
+{
+    public override string EventType => "post.clapped";
+
+    public string UserId { get; init; } = string.Empty;
+
+    public int Delta { get; init; }
+
+    public int ReaderTotal { get; init; }
+
+    public bool FirstClap { get; init; }
+}
+
 public sealed record PostPublishedEvent : PostEvent
 {
     public override string EventType => "post.published";

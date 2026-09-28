@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Blog.Posts.Application.Abstractions;
 using Blog.Posts.Application.Posts;
+using Blog.Posts.Domain.Posts;
 using Blog.Posts.Infrastructure.Persistence;
 
 namespace Blog.Posts.Infrastructure.Search
@@ -21,6 +22,7 @@ namespace Blog.Posts.Infrastructure.Search
 
             var rows = await _context.BlogPosts
                 .AsNoTracking()
+                .Where(p => p.Status == PostStatus.Published)
                 .Where(p => EF.Functions.Like(p.Title, pattern) || EF.Functions.Like(p.Content, pattern))
                 .OrderByDescending(p => p.PublishedDate)
                 .ThenByDescending(p => p.Id)
@@ -35,7 +37,9 @@ namespace Blog.Posts.Infrastructure.Search
                         .Where(u => u.Id == p.AuthorId)
                         .Select(u => u.UserName ?? "Unknown")
                         .FirstOrDefault() ?? "Unknown",
-                    Tags = p.Tags.ToList()
+                    Tags = p.Tags.ToList(),
+                    Status = p.Status,
+                    ScheduledFor = p.ScheduledFor
                 })
                 .ToListAsync(cancellationToken);
 

@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -19,6 +20,9 @@ namespace Blog.Posts.Infrastructure.Messaging
         public bool Enabled => !string.IsNullOrWhiteSpace(Address);
 
         public TimeSpan Deadline { get; set; } = TimeSpan.FromMilliseconds(150);
+
+        // Rollup queries scan more than a single-post lookup, so they get their own budget.
+        public TimeSpan OlapDeadline { get; set; } = TimeSpan.FromSeconds(2);
     }
 
     public class GrpcViewStatsClient : IViewStatsClient
@@ -75,6 +79,9 @@ namespace Blog.Posts.Infrastructure.Messaging
         private CallOptions Call(CancellationToken cancellationToken) =>
             new(deadline: DateTime.UtcNow.Add(_options.Deadline), cancellationToken: cancellationToken);
 
+        private CallOptions OlapCall(CancellationToken cancellationToken) =>
+            new(deadline: DateTime.UtcNow.Add(_options.OlapDeadline), cancellationToken: cancellationToken);
+
         public Task<ViewStats?> GetForPostAsync(int postId, CancellationToken cancellationToken = default) =>
             TryAsync(
                 async token =>
@@ -125,6 +132,69 @@ namespace Blog.Posts.Infrastructure.Messaging
                         .ToList();
                 },
                 nameof(GetTopPostsAsync),
+                cancellationToken);
+
+        public Task<IReadOnlyList<Application.Abstractions.SeriesPoint>?> GetSeriesAsync(
+            int postId, DateTime from, DateTime to, SeriesGranularity granularity,
+            CancellationToken cancellationToken = default) =>
+            TryAsync(
+                async token =>
+                {
+                    var series = await _client.GetViewSeriesAsync(
+                        new GetViewSeriesRequest
+                        {
+                            PostId = postId,
+                            From = Timestamp.FromDateTime(DateTime.SpecifyKind(from, DateTimeKind.Utc)),
+                            To = Timestamp.FromDateTime(DateTime.SpecifyKind(to, DateTimeKind.Utc)),
+                            Bucket = granularity switch
+                            {
+                                SeriesGranularity.Minute => SeriesBucket.Minute,
+                                SeriesGranularity.Day => SeriesBucket.Day,
+                                _ => SeriesBucket.Hour
+                            }
+                        },
+                        OlapCall(token));
+
+                    return (IReadOnlyList<Application.Abstractions.SeriesPoint>?)series.Points
+                        .Select(p => new Application.Abstractions.SeriesPoint(
+                            p.BucketStart.ToDateTime(), p.Views, p.UniqueVisitors, p.Claps))
+                        .ToList();
+                },
+                nameof(GetSeriesAsync),
+                cancellationToken);
+
+        public Task<IReadOnlyList<WindowPost>?> GetTopInWindowAsync(
+            int minutes, WindowRanking ranking, int limit, CancellationToken cancellationToken = default) =>
+            TryAsync(
+                async token =>
+                {
+                    var top = await _client.GetTopInWindowAsync(
+                        new GetTopInWindowRequest
+                        {
+                            Minutes = minutes,
+                            Limit = limit,
+                            Order = ranking == WindowRanking.Claps ? WindowOrder.Claps : WindowOrder.Views
+                        },
+                        OlapCall(token));
+
+                    return (IReadOnlyList<WindowPost>?)top.Entries
+                        .Select(e => new WindowPost(e.PostId, e.Views, e.UniqueVisitors, e.Claps))
+                        .ToList();
+                },
+                nameof(GetTopInWindowAsync),
+                cancellationToken);
+
+        public Task<Engagement?> GetEngagementAsync(int postId, int days, CancellationToken cancellationToken = default) =>
+            TryAsync(
+                async token =>
+                {
+                    var funnel = await _client.GetEngagementFunnelAsync(
+                        new GetEngagementFunnelRequest { PostId = postId, Days = days }, OlapCall(token));
+
+                    return (Engagement?)new Engagement(
+                        funnel.PostId, funnel.Views, funnel.UniqueVisitors, funnel.Clappers, funnel.Claps, funnel.Days);
+                },
+                nameof(GetEngagementAsync),
                 cancellationToken);
 
         public async IAsyncEnumerable<IReadOnlyList<TrendingPost>> StreamTrendingAsync(

@@ -27,6 +27,8 @@ public class NotificationsOptions
     public TimeSpan SweepInterval { get; set; } = TimeSpan.FromMinutes(1);
 
     public TimeSpan StrandedAfter { get; set; } = TimeSpan.FromMinutes(2);
+
+    public int FanOutChunkSize { get; set; } = 5000;
 }
 
 public class RabbitCommandQueue : ICommandQueue, IDisposable
@@ -49,12 +51,8 @@ public class RabbitCommandQueue : ICommandQueue, IDisposable
 
     public bool IsConfigured => _options.RabbitConfigured;
 
-    public Task EnqueueAsync(SendEmailCommand command, CancellationToken cancellationToken = default)
-    {
-        Publish(RabbitTopology.Exchange, RabbitTopology.EmailRoutingKey, command);
-
-        return Task.CompletedTask;
-    }
+    public Task<bool> EnqueueAsync(SendEmailCommand command, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Publish(RabbitTopology.Exchange, RabbitTopology.EmailRoutingKey, command));
 
     public Task RetryOrParkAsync(SendEmailCommand command, string error, CancellationToken cancellationToken = default)
     {
@@ -86,18 +84,20 @@ public class RabbitCommandQueue : ICommandQueue, IDisposable
         return Task.CompletedTask;
     }
 
-    private void Publish(string exchange, string routingKey, SendEmailCommand command, string? error = null)
+    // Returns false when nothing was handed to the broker, so the caller leaves the delivery Pending
+    // for the sweeper instead of marking it Queued with no message behind it.
+    private bool Publish(string exchange, string routingKey, SendEmailCommand command, string? error = null)
     {
         if (!IsConfigured)
         {
-            return;
+            return false;
         }
 
         var channel = EnsureChannel();
 
         if (channel is null)
         {
-            return;
+            return false;
         }
 
         var properties = channel.CreateBasicProperties();
@@ -125,6 +125,8 @@ public class RabbitCommandQueue : ICommandQueue, IDisposable
                 properties,
                 Encoding.UTF8.GetBytes(JsonSerializer.Serialize(command, Json)));
         }
+
+        return true;
     }
 
     private IModel? EnsureChannel()

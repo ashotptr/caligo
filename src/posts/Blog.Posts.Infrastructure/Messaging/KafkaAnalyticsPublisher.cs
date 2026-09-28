@@ -36,5 +36,28 @@ namespace Blog.Posts.Infrastructure.Messaging
                 integrationEvent.SchemaVersion,
                 Activity.Current?.Id));
         }
+
+        // Fire-and-forget like views: Postgres holds the authoritative clap counts, this stream only
+        // feeds analytics.
+        public void PublishPostClapped(Application.Abstractions.PostClappedEvent clapped)
+        {
+            var integrationEvent = new Contracts.Events.PostClappedEvent
+            {
+                PostId = clapped.PostId,
+                OccurredAt = clapped.ClappedAt,
+                UserId = clapped.UserId,
+                Delta = clapped.Delta,
+                ReaderTotal = clapped.ReaderTotal,
+                FirstClap = clapped.FirstClap
+            };
+
+            _producer.Produce(new KafkaMessage(
+                Topics.PostClapped,
+                integrationEvent.PartitionKey,
+                JsonSerializer.Serialize(integrationEvent, Json),
+                integrationEvent.EventType,
+                integrationEvent.SchemaVersion,
+                Activity.Current?.Id));
+        }
     }
 }

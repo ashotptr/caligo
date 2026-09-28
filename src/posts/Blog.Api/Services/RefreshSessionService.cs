@@ -55,7 +55,9 @@ namespace Blog.Api.Services
         {
             var hash = Hash(refreshToken);
 
-            var session = await _context.UserSessions.FirstOrDefaultAsync(s => s.TokenHash == hash, cancellationToken);
+            var session = await _context.UserSessions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.TokenHash == hash, cancellationToken);
 
             if (session is null)
             {
@@ -64,12 +66,7 @@ namespace Blog.Api.Services
 
             if (session.ReplacedBySessionId is not null)
             {
-                await RevokeAllAsync(session.UserId, cancellationToken);
-
-                _logger.LogWarning(
-                    "Refresh token replay detected for user {UserId}; all sessions revoked.", session.UserId);
-
-                return RefreshResult.Failed(RefreshOutcome.Reused);
+                return await ReplayDetectedAsync(session.UserId, cancellationToken);
             }
 
             if (!session.IsActive)
@@ -85,25 +82,59 @@ namespace Blog.Api.Services
             }
 
             var token = CreateToken();
+            var now = DateTime.UtcNow;
 
             var replacement = new UserSession
             {
                 UserId = session.UserId,
                 TokenHash = Hash(token),
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.Add(Lifetime),
+                CreatedAt = now,
+                ExpiresAt = now.Add(Lifetime),
                 CreatedByIp = Truncate(ip, 64),
                 UserAgent = Truncate(userAgent, 256)
             };
 
-            _context.UserSessions.Add(replacement);
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
 
-            session.RevokedAt = DateTime.UtcNow;
-            session.ReplacedBySessionId = replacement.Id;
+            _context.UserSessions.Add(replacement);
 
             await _context.SaveChangesAsync(cancellationToken);
 
+            // Compare-and-set. The check above ran on a snapshot that a concurrent refresh with the
+            // same token may already have acted on. This UPDATE only matches while the old session is
+            // still unrotated; under concurrency the second one waits on the row lock, re-checks the
+            // condition against the committed row, and matches nothing. Exactly one rotation wins.
+            var rotated = await _context.UserSessions
+                .Where(s => s.Id == session.Id && s.ReplacedBySessionId == null && s.RevokedAt == null)
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(x => x.RevokedAt, now)
+                          .SetProperty(x => x.ReplacedBySessionId, replacement.Id),
+                    cancellationToken);
+
+            if (rotated == 0)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+
+                _context.ChangeTracker.Clear();
+
+                return await ReplayDetectedAsync(session.UserId, cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+
             return new RefreshResult(RefreshOutcome.Success, user, token);
+        }
+
+        // A refresh token is good for one rotation. A second use, whether it comes long after the
+        // first or races it, looks the same as a stolen token being replayed, so the whole chain
+        // is revoked.
+        private async Task<RefreshResult> ReplayDetectedAsync(string userId, CancellationToken cancellationToken)
+        {
+            await RevokeAllAsync(userId, cancellationToken);
+
+            _logger.LogWarning("Refresh token replay detected for user {UserId}; all sessions revoked.", userId);
+
+            return RefreshResult.Failed(RefreshOutcome.Reused);
         }
 
         public async Task RevokeAllAsync(string userId, CancellationToken cancellationToken = default)

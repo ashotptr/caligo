@@ -104,7 +104,9 @@ namespace Blog.Notifications.Host.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.HasIndex("IsActive");
+                    b.HasIndex("Id")
+                        .HasDatabaseName("IX_subscribers_active_id")
+                        .HasFilter("\"IsActive\"");
 
                     b.HasIndex("UnsubscribeToken")
                         .IsUnique();

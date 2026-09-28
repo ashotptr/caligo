@@ -98,6 +98,28 @@ services:
       timeout: 5s
       retries: 10
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.8
+    environment:
+      CLICKHOUSE_DB: blog_analytics
+      CLICKHOUSE_USER: blog
+      CLICKHOUSE_PASSWORD: blogpass
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "8123:8123"
+    volumes:
+      - clickhousedata:/var/lib/clickhouse
+      - ./clickhouse-dev.xml:/etc/clickhouse-server/config.d/dev.xml:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   blog-api:
     build:
       context: ../..
@@ -116,6 +138,10 @@ services:
       Cors__AllowedOrigins: "http://localhost:8080,http://localhost:5173"
       AdminUser__Email: "admin@localhost.dev"
       AdminUser__Password: "AdminDev04!"
+      # Requests arrive through nginx on the compose network; trust its X-Forwarded-For.
+      ForwardedHeaders__KnownNetworks__0: "172.16.0.0/12"
+      ForwardedHeaders__KnownNetworks__1: "192.168.0.0/16"
+      ForwardedHeaders__KnownNetworks__2: "10.0.0.0/8"
     ports:
       - "5028:8080"
     depends_on:
@@ -138,6 +164,7 @@ services:
       ASPNETCORE_URLS: "http://+:8080"
       ConnectionStrings__Mongo: "mongodb://blog:blogpass@mongo:27017/"
       ConnectionStrings__Redis: "redis:6379"
+      ConnectionStrings__ClickHouse: "Host=clickhouse;Port=8123;Username=blog;Password=blogpass;Database=blog_analytics"
       Kafka__BootstrapServers: "kafka:29092"
     ports:
       - "5029:8081"
@@ -147,6 +174,8 @@ services:
       mongo:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
 
   aspire-dashboard:
@@ -206,3 +235,4 @@ volumes:
   pgdata:
   mongodata:
   kafkadata:
+  clickhousedata:

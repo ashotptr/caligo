@@ -5,6 +5,8 @@ namespace Blog.Notifications.Host.Messaging;
 
 public class StrandedDeliverySweeper : BackgroundService
 {
+    public const string SweepLock = "notifications:stranded-sweep";
+
     private readonly IServiceScopeFactory _scopes;
     private readonly ICommandQueue _queue;
     private readonly NotificationsOptions _options;
@@ -61,6 +63,19 @@ public class StrandedDeliverySweeper : BackgroundService
 
         var ledger = scope.ServiceProvider.GetRequiredService<IDeliveryLedger>();
 
+        // Every replica runs this loop. Without the lock each one would read the same stranded rows
+        // and enqueue them, and every subscriber would get one email per replica.
+        var swept = await ledger.RunExclusiveAsync(
+            SweepLock, () => RequeueStrandedAsync(ledger, cancellationToken), cancellationToken);
+
+        if (!swept)
+        {
+            _logger.LogDebug("Another replica is sweeping; skipping this round.");
+        }
+    }
+
+    private async Task RequeueStrandedAsync(IDeliveryLedger ledger, CancellationToken cancellationToken)
+    {
         var stranded = await ledger.StrandedAsync(_options.StrandedAfter, 100, cancellationToken);
 
         if (stranded.Count == 0)
@@ -82,7 +97,7 @@ public class StrandedDeliverySweeper : BackgroundService
                 continue;
             }
 
-            await _queue.EnqueueAsync(new SendEmailCommand(
+            var published = await _queue.EnqueueAsync(new SendEmailCommand(
                 delivery.Id,
                 delivery.EventId,
                 subscriber.Id,
@@ -92,7 +107,10 @@ public class StrandedDeliverySweeper : BackgroundService
                 delivery.PostTitle,
                 subscriber.UnsubscribeToken), cancellationToken);
 
-            requeued.Add(delivery.Id);
+            if (published)
+            {
+                requeued.Add(delivery.Id);
+            }
         }
 
         await ledger.MarkQueuedAsync(requeued, cancellationToken);

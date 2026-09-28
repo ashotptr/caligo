@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
@@ -46,12 +48,30 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Behind nginx or the ingress every request comes from the proxy's address. Trusting
+// X-Forwarded-For from the proxy networks listed here gives the per-client rate limit and the
+// visitor hash the real client address. Nothing is trusted beyond the loopback default unless
+// networks are configured.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    foreach (var network in builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [])
+    {
+        var parts = network.Split('/');
+
+        options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse(parts[0]), int.Parse(parts[1])));
+    }
+});
+
+var limits = builder.Configuration.GetSection("RateLimiting");
+
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("auth", opt =>
     {
-        opt.PermitLimit = 10;
-        opt.Window = TimeSpan.FromSeconds(12);
+        opt.PermitLimit = limits.GetValue("AuthPermitLimit", 10);
+        opt.Window = limits.GetValue("AuthWindow", TimeSpan.FromSeconds(12));
         opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         opt.QueueLimit = 2;
     });
@@ -60,8 +80,8 @@ builder.Services.AddRateLimiter(options =>
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions
         {
-            PermitLimit = 120,
-            Window = TimeSpan.FromMinutes(1),
+            PermitLimit = limits.GetValue("ReadsPermitLimit", 120),
+            Window = limits.GetValue("ReadsWindow", TimeSpan.FromMinutes(1)),
             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
             QueueLimit = 0
         }));
@@ -144,6 +164,8 @@ app.Use(async (context, next) =>
 
     await next();
 });
+
+app.UseForwardedHeaders();
 
 app.UseCors();
 

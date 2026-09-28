@@ -15,18 +15,15 @@ public class PostLifecycleRelay : BackgroundService
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly IServiceScopeFactory _scopes;
-    private readonly ICommandQueue _queue;
     private readonly NotificationsOptions _options;
     private readonly ILogger<PostLifecycleRelay> _logger;
 
     public PostLifecycleRelay(
         IServiceScopeFactory scopes,
-        ICommandQueue queue,
         IOptions<NotificationsOptions> options,
         ILogger<PostLifecycleRelay> logger)
     {
         _scopes = scopes;
-        _queue = queue;
         _options = options.Value;
         _logger = logger;
     }
@@ -100,13 +97,27 @@ public class PostLifecycleRelay : BackgroundService
                     continue;
                 }
 
-                if (Handle(result, stoppingToken))
+                if (!Handle(result, stoppingToken))
+                {
+                    // Read the same message again after a pause. Moving on would let the next
+                    // commit cover this offset, and the post would never be announced.
+                    Thread.Sleep(TimeSpan.FromSeconds(5));
+
+                    Rewind(consumer, result.TopicPartitionOffset);
+
+                    continue;
+                }
+
+                try
                 {
                     consumer.Commit(result);
                 }
-                else
+                catch (KafkaException ex)
                 {
-                    Thread.Sleep(TimeSpan.FromSeconds(5));
+                    // Transient, such as the group coordinator loading or moving. The fan-out is
+                    // idempotent, so an offset that never gets committed only means the message is
+                    // relayed again. Letting this escape stopped the whole service.
+                    _logger.LogWarning(ex, "Committing {Offset} failed; carrying on.", result.TopicPartitionOffset);
                 }
             }
         }
@@ -155,61 +166,26 @@ public class PostLifecycleRelay : BackgroundService
         {
             using var scope = _scopes.CreateScope();
 
-            var subscribers = scope.ServiceProvider.GetRequiredService<ISubscriberStore>();
-            var ledger = scope.ServiceProvider.GetRequiredService<IDeliveryLedger>();
-
-            var audience = subscribers.ActiveAsync(cancellationToken).GetAwaiter().GetResult();
-
-            if (audience.Count == 0)
-            {
-                _logger.LogInformation("Post {PostId} published, but nobody is subscribed.", published.PostId);
-
-                return true;
-            }
-
-            var claimed = ledger.ClaimAsync(
-                published.EventId, published.PostId, published.Title, audience, cancellationToken)
+            var fanOut = scope.ServiceProvider.GetRequiredService<NewsletterFanOut>()
+                .RunAsync(published.EventId, published.PostId, published.Title, cancellationToken)
                 .GetAwaiter().GetResult();
 
-            if (claimed.Count == 0)
+            activity?.SetTag("blog.post_id", published.PostId);
+            activity?.SetTag("blog.deliveries_claimed", fanOut.Claimed);
+            activity?.SetTag("blog.commands_queued", fanOut.Queued);
+
+            if (fanOut.Claimed == 0)
             {
                 _logger.LogInformation(
-                    "Event {EventId} for post {PostId} was already relayed; nothing re-sent.",
+                    "Event {EventId} for post {PostId}: nothing to send (no subscribers, or already relayed).",
                     published.EventId, published.PostId);
-
-                return true;
             }
-
-            var byId = audience.ToDictionary(s => s.Id);
-            var queued = new List<Guid>();
-
-            foreach (var delivery in claimed)
+            else
             {
-                if (!byId.TryGetValue(delivery.SubscriberId, out var subscriber))
-                {
-                    continue;
-                }
-
-                _queue.EnqueueAsync(new SendEmailCommand(
-                    delivery.Id,
-                    delivery.EventId,
-                    subscriber.Id,
-                    subscriber.Email,
-                    subscriber.DisplayName,
-                    delivery.PostId,
-                    delivery.PostTitle,
-                    subscriber.UnsubscribeToken), cancellationToken).GetAwaiter().GetResult();
-
-                queued.Add(delivery.Id);
+                _logger.LogInformation(
+                    "Post {PostId} published: {Claimed} delivery(ies) claimed, {Queued} email command(s) queued.",
+                    published.PostId, fanOut.Claimed, fanOut.Queued);
             }
-
-            ledger.MarkQueuedAsync(queued, cancellationToken).GetAwaiter().GetResult();
-
-            activity?.SetTag("blog.post_id", published.PostId);
-            activity?.SetTag("blog.commands_queued", queued.Count);
-
-            _logger.LogInformation(
-                "Post {PostId} published: {Count} email command(s) queued.", published.PostId, queued.Count);
 
             return true;
         }
@@ -220,6 +196,19 @@ public class PostLifecycleRelay : BackgroundService
             _logger.LogError(ex, "Could not relay event {Offset}.", result.TopicPartitionOffset);
 
             return false;
+        }
+    }
+
+    private void Rewind(IConsumer<string, byte[]> consumer, TopicPartitionOffset failed)
+    {
+        try
+        {
+            consumer.Seek(failed);
+        }
+        catch (KafkaException ex)
+        {
+            // The partition went to another member, which resumes from the last commit, before this message.
+            _logger.LogWarning(ex, "Could not rewind to {Offset}; its new owner will read it.", failed);
         }
     }
 

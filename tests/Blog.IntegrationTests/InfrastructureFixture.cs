@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Testcontainers.ClickHouse;
 using Testcontainers.Kafka;
 using Testcontainers.MongoDb;
 using Testcontainers.PostgreSql;
@@ -13,11 +14,14 @@ namespace Blog.IntegrationTests;
 
 public class InfrastructureFixture : IAsyncLifetime
 {
+    // Several test hosts, each with its own connection pool and background workers, share this
+    // server while the concurrency tests open hundreds of connections at once.
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
         .WithImage("postgres:16-alpine")
         .WithDatabase("blogdb")
         .WithUsername("postgres")
         .WithPassword("postgres")
+        .WithCommand("-c", "max_connections=500")
         .Build();
 
     private readonly KafkaContainer _kafka = new KafkaBuilder()
@@ -32,7 +36,17 @@ public class InfrastructureFixture : IAsyncLifetime
         .WithImage("redis:7-alpine")
         .Build();
 
+    private readonly ClickHouseContainer _clickHouse = new ClickHouseBuilder()
+        .WithImage("clickhouse/clickhouse-server:26.8")
+        .Build();
+
     public string PostgresConnectionString => _postgres.GetConnectionString();
+
+    // Same server, the notifications service's own database (EF creates it on first migrate).
+    public string NotificationsConnectionString => new Npgsql.NpgsqlConnectionStringBuilder(PostgresConnectionString)
+    {
+        Database = "blognotifications"
+    }.ConnectionString;
 
     public string KafkaBootstrapServers => _kafka.GetBootstrapAddress();
 
@@ -40,10 +54,13 @@ public class InfrastructureFixture : IAsyncLifetime
 
     public string RedisConnectionString => _redis.GetConnectionString();
 
+    public string ClickHouseConnectionString => _clickHouse.GetConnectionString();
+
     public async Task InitializeAsync()
     {
         await Task.WhenAll(
-            _postgres.StartAsync(), _kafka.StartAsync(), _mongo.StartAsync(), _redis.StartAsync());
+            _postgres.StartAsync(), _kafka.StartAsync(), _mongo.StartAsync(), _redis.StartAsync(),
+            _clickHouse.StartAsync());
     }
 
     public async Task DisposeAsync()
@@ -52,7 +69,8 @@ public class InfrastructureFixture : IAsyncLifetime
             _postgres.DisposeAsync().AsTask(),
             _kafka.DisposeAsync().AsTask(),
             _mongo.DisposeAsync().AsTask(),
-            _redis.DisposeAsync().AsTask());
+            _redis.DisposeAsync().AsTask(),
+            _clickHouse.DisposeAsync().AsTask());
     }
 }
 

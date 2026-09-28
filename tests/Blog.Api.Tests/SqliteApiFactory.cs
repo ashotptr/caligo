@@ -39,7 +39,11 @@ public class SqliteApiFactory : WebApplicationFactory<Program>
                 ["ConnectionStrings:Mongo"] = "",
 
                 ["AdminUser:Email"] = "",
-                ["AdminUser:Password"] = ""
+                ["AdminUser:Password"] = "",
+
+                // Every request shares one in-memory SQLite connection, which must not also be used
+                // by a background loop; tests publish due posts explicitly instead.
+                ["Posts:SchedulerInterval"] = "00:00:00"
             });
         });
 

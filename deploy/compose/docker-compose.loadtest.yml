@@ -1,0 +1,64 @@
+# Overrides for the NBomber load tests (tests/Blog.LoadTests). Use with the dev file:
+#
+#   docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.loadtest.yml \
+#     up -d --build --scale blog-api=3
+#   docker compose -f deploy/compose/docker-compose.yml -f deploy/compose/docker-compose.loadtest.yml \
+#     run --rm load-tests all
+#
+# The tests go through nginx, which spreads requests over the API replicas.
+services:
+  postgres:
+    # pg_stat_statements lets the tests count the queries that reached Postgres; three API
+    # replicas with their workers need more than the default 100 connections.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - max_connections=400
+
+  blog-api:
+    # A fixed host port cannot be shared by three replicas; the tests use nginx instead.
+    ports: !reset []
+    environment:
+      # One load generator is one client address: without this it would be throttled at 120 req/min.
+      RateLimiting__ReadsPermitLimit: "10000000"
+      RateLimiting__AuthPermitLimit: "10000"
+      # The scheduled-burst scenario puts thousands of posts on one author's schedule.
+      Posts__MaxScheduledPerAuthor: "1000000"
+      # Trace 5% of requests, as a busy deployment would. Tracing every request of a load test
+      # measures the dashboard as much as the blog: at 100% the dashboard used more CPU than nginx.
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: "0.05"
+
+  blog-analytics:
+    environment:
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: "0.05"
+
+  blog-notifications:
+    environment:
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: "0.05"
+
+  # The scenarios, run from inside the compose network. From the host every request would also
+  # cross Docker Desktop's port forwarding, and the numbers would partly measure that.
+  load-tests:
+    profiles: ["load-tests"]
+    build:
+      context: ../..
+      dockerfile: tests/Blog.LoadTests/Dockerfile
+    environment:
+      BLOG_URL: http://blog-client
+      BLOG_POSTS_DB: Host=postgres;Database=blogdb;Username=postgres;Password=postgres
+      BLOG_NOTIFICATIONS_DB: Host=postgres;Database=blognotifications;Username=postgres;Password=postgres
+      BLOG_LAB_DB: Host=postgres;Database=bloglab;Username=postgres;Password=postgres;Maximum Pool Size=300
+      BLOG_CLICKHOUSE: Host=clickhouse;Port=8123;Username=blog;Password=blogpass;Database=blog_analytics
+      BLOG_KAFKA: kafka:29092
+      BLOG_REPORTS: /reports
+    volumes:
+      - ../../tests/Blog.LoadTests/reports:/reports
+    # No depends_on on purpose: `run` would bring the dependencies up at their configured scale,
+    # quietly putting blog-api back to one replica before every run. Start the stack first.

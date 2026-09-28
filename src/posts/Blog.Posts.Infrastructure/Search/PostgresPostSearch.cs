@@ -27,6 +27,7 @@ namespace Blog.Posts.Infrastructure.Search
 
             var candidates = _context.BlogPosts
                 .AsNoTracking()
+                .Where(p => p.Status == PostStatus.Published)
                 .Where(p => EF.Property<NpgsqlTsVector>(p, ApplicationDbContext.SearchVectorProperty)
                               .Matches(EF.Functions.PlainToTsQuery(TextSearchConfig, query))
                             || p.Tags.Contains(tag))
@@ -52,7 +53,9 @@ namespace Blog.Posts.Infrastructure.Search
                         .Where(u => u.Id == p.AuthorId)
                         .Select(u => u.UserName ?? "Unknown")
                         .FirstOrDefault() ?? "Unknown",
-                    Tags = p.Tags.ToList()
+                    Tags = p.Tags.ToList(),
+                    Status = p.Status,
+                    ScheduledFor = p.ScheduledFor
                 })
                 .ToListAsync(cancellationToken);
 

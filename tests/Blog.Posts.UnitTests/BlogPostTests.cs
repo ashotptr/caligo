@@ -98,6 +98,80 @@ public class BlogPostTests
 
         Assert.False(post.CanBeModifiedBy(null, isAdministrator: false));
     }
+
+    [Fact]
+    public void EveryRevision_BumpsTheVersion()
+    {
+        var post = BlogPost.Publish("Title", "Content", null, "author-1", Now);
+
+        post.Revise("One", "Content", null);
+        post.Revise("Two", "Content", null);
+
+        Assert.Equal(2, post.Version);
+    }
+
+    [Fact]
+    public void Schedule_AnnouncesNothing_UntilThePostGoesLive()
+    {
+        var post = BlogPost.Schedule("Title", "Content", null, "author-1", Now.AddHours(1));
+
+        Assert.Equal(PostStatus.Scheduled, post.Status);
+        Assert.False(post.HasPendingEvents);
+    }
+
+    [Fact]
+    public void PublishDue_BeforeItsTime_DoesNothing()
+    {
+        var post = BlogPost.Schedule("Title", "Content", null, "author-1", Now.AddHours(1));
+
+        Assert.False(post.PublishDue(Now));
+        Assert.Equal(PostStatus.Scheduled, post.Status);
+        Assert.False(post.HasPendingEvents);
+    }
+
+    [Fact]
+    public void PublishDue_OnceDue_PublishesAtThatMoment_AndRaisesPublishedExactlyOnce()
+    {
+        var post = BlogPost.Schedule("Title", "Content", new[] { "kafka" }, "author-1", Now);
+        var goLive = Now.AddSeconds(1);
+
+        Assert.True(post.PublishDue(goLive));
+        Assert.False(post.PublishDue(goLive));
+
+        Assert.True(post.IsPublished);
+        Assert.Equal(goLive, post.PublishedDate);
+        Assert.Equal(1, post.Version);
+        Assert.IsType<PostPublished>(Assert.Single(post.DrainDomainEvents()));
+    }
+
+    [Fact]
+    public void RevisingAScheduledPost_AnnouncesNothing()
+    {
+        var post = BlogPost.Schedule("Title", "Content", null, "author-1", Now.AddHours(1));
+
+        post.Revise("Edited before launch", "Content", null);
+        post.MarkDeleted();
+
+        Assert.False(post.HasPendingEvents);
+    }
+
+    [Fact]
+    public void APublishedPost_CannotBeRescheduled()
+    {
+        var post = BlogPost.Publish("Title", "Content", null, "author-1", Now);
+
+        Assert.Throws<InvalidOperationException>(() => post.Reschedule(Now.AddDays(1)));
+    }
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    [InlineData(50, true)]
+    [InlineData(51, false)]
+    public void AClapRequest_MustBeBetweenOneAndTheCap(int count, bool valid)
+    {
+        Assert.Equal(valid, ClapRules.IsValidRequest(count));
+    }
 }
 
 public class PostTagsTests

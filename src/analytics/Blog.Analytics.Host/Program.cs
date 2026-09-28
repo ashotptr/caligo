@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Blog.Analytics.Host;
 using Blog.Observability;
 using OpenTelemetry.Trace;
+using Blog.Analytics.Core.Olap;
 using Blog.Analytics.Core.Views;
 using Blog.Analytics.Host.Services;
 using Blog.Analytics.Infrastructure.Messaging;
@@ -25,6 +26,10 @@ builder.Services.AddHealthChecks()
     .AddCheck(
         "kafka",
         new KafkaBrokerHealthCheck(builder.Configuration["Kafka:BootstrapServers"] ?? string.Empty),
+        tags: new[] { HealthEndpoints.ReadinessTag })
+    .AddCheck(
+        "clickhouse",
+        new ClickHouseHealthCheck(builder.Configuration.GetConnectionString("ClickHouse")),
         tags: new[] { HealthEndpoints.ReadinessTag });
 
 builder.WebHost.ConfigureKestrel(options =>
@@ -40,11 +45,22 @@ builder.Services.AddGrpc(options =>
 
 builder.Services.AddOptions<AnalyticsOptions>().BindConfiguration(AnalyticsOptions.SectionName);
 
+builder.Services.Configure<ClickHouseOptions>(options =>
+    options.ConnectionString = builder.Configuration.GetConnectionString("ClickHouse") ?? string.Empty);
+
 builder.Services.AddSingleton<IViewStore, MongoViewStore>();
 builder.Services.AddSingleton<ITrendingStore, RedisTrendingStore>();
 
+builder.Services.AddSingleton<ClickHouseOlapStore>();
+builder.Services.AddSingleton<IOlapSink>(provider => provider.GetRequiredService<ClickHouseOlapStore>());
+builder.Services.AddSingleton<IOlapQueries>(provider => provider.GetRequiredService<ClickHouseOlapStore>());
+
+builder.Services.AddHostedService<ClickHouseSchemaInitializer>();
+
 builder.Services.AddHostedService<RawViewConsumer>();
 builder.Services.AddHostedService<TrendingConsumer>();
+builder.Services.AddHostedService<OlapViewConsumer>();
+builder.Services.AddHostedService<OlapClapConsumer>();
 
 var app = builder.Build();
 
@@ -57,9 +73,10 @@ app.MapGet("/", () => Results.Text(
     "text/plain"));
 
 app.Logger.LogInformation(
-    "Analytics service starting. Mongo configured: {Mongo}. Redis configured: {Redis}.",
+    "Analytics service starting. Mongo configured: {Mongo}. Redis configured: {Redis}. ClickHouse configured: {ClickHouse}.",
     app.Services.GetRequiredService<IViewStore>().IsConfigured,
-    app.Services.GetRequiredService<ITrendingStore>().IsConfigured);
+    app.Services.GetRequiredService<ITrendingStore>().IsConfigured,
+    app.Services.GetRequiredService<IOlapQueries>().IsConfigured);
 
 app.Run();
 

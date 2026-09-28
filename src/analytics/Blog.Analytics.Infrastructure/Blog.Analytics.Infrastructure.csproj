@@ -13,6 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="ClickHouse.Client" />
     <PackageReference Include="Confluent.Kafka" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
@@ -22,6 +23,10 @@
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Stores/ClickHouseSchema.sql" LogicalName="Blog.Analytics.Infrastructure.Stores.ClickHouseSchema.sql" />
   </ItemGroup>
 
 </Project>

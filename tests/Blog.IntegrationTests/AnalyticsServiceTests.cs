@@ -183,25 +183,37 @@ public class AnalyticsServiceTests : IAsyncLifetime
 public class AnalyticsHostFactory : WebApplicationFactory<AnalyticsHostMarker>
 {
     private readonly InfrastructureFixture _infrastructure;
+    private readonly Dictionary<string, string?> _overrides;
 
-    public AnalyticsHostFactory(InfrastructureFixture infrastructure)
+    public AnalyticsHostFactory(InfrastructureFixture infrastructure, Dictionary<string, string?>? overrides = null)
     {
         _infrastructure = infrastructure;
+        _overrides = overrides ?? new Dictionary<string, string?>();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
 
-        builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
-            new Dictionary<string, string?>
+        builder.ConfigureAppConfiguration((_, configuration) =>
+        {
+            var settings = new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Mongo"] = _infrastructure.MongoConnectionString,
                 ["ConnectionStrings:Redis"] = _infrastructure.RedisConnectionString,
+                ["ConnectionStrings:ClickHouse"] = "",
 
                 ["Kafka:BootstrapServers"] = "",
 
                 ["Analytics:TrendingPushInterval"] = "00:00:00.200"
-            }));
+            };
+
+            foreach (var (key, value) in _overrides)
+            {
+                settings[key] = value;
+            }
+
+            configuration.AddInMemoryCollection(settings);
+        });
     }
 }

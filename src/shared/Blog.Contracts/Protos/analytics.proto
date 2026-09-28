@@ -14,6 +14,13 @@ service AnalyticsReader {
   rpc GetTopPosts (GetTopPostsRequest) returns (TopPosts);
 
   rpc StreamTrending (StreamTrendingRequest) returns (stream TrendingSnapshot);
+
+  // Served from the ClickHouse rollups. FAILED_PRECONDITION when ClickHouse is not configured.
+  rpc GetViewSeries (GetViewSeriesRequest) returns (ViewSeries);
+
+  rpc GetTopInWindow (GetTopInWindowRequest) returns (TopInWindow);
+
+  rpc GetEngagementFunnel (GetEngagementFunnelRequest) returns (EngagementFunnel);
 }
 
 message GetPostStatsRequest {
@@ -57,4 +64,67 @@ message TrendingSnapshot {
   repeated TrendingEntry entries = 1;
   google.protobuf.Timestamp generated_at = 2;
   int32 window_hours = 3;
+}
+
+enum SeriesBucket {
+  SERIES_BUCKET_UNSPECIFIED = 0;
+  SERIES_BUCKET_MINUTE = 1;
+  SERIES_BUCKET_HOUR = 2;
+  SERIES_BUCKET_DAY = 3;
+}
+
+message GetViewSeriesRequest {
+  int32 post_id = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+  SeriesBucket bucket = 4;
+}
+
+message SeriesPoint {
+  google.protobuf.Timestamp bucket_start = 1;
+  int64 views = 2;
+  int64 unique_visitors = 3;
+  int64 claps = 4;
+}
+
+message ViewSeries {
+  repeated SeriesPoint points = 1;
+}
+
+enum WindowOrder {
+  WINDOW_ORDER_UNSPECIFIED = 0;
+  WINDOW_ORDER_VIEWS = 1;
+  WINDOW_ORDER_CLAPS = 2;
+}
+
+message GetTopInWindowRequest {
+  int32 minutes = 1;
+  WindowOrder order = 2;
+  int32 limit = 3;
+}
+
+message WindowEntry {
+  int32 post_id = 1;
+  int64 views = 2;
+  int64 unique_visitors = 3;
+  int64 claps = 4;
+}
+
+message TopInWindow {
+  repeated WindowEntry entries = 1;
+  int32 minutes = 2;
+}
+
+message GetEngagementFunnelRequest {
+  int32 post_id = 1;
+  int32 days = 2;
+}
+
+message EngagementFunnel {
+  int32 post_id = 1;
+  int64 views = 2;
+  int64 unique_visitors = 3;
+  int64 clappers = 4;
+  int64 claps = 5;
+  int32 days = 6;
 }

@@ -41,11 +41,19 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("PublishedDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("ScheduledFor")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("tsvector")
                         .HasColumnName("search_vector")
                         .HasComputedColumnSql("setweight(to_tsvector('english', coalesce(\"Title\", '')), 'A') || setweight(to_tsvector('english', coalesce(\"Content\", '')), 'B')", true);
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.PrimitiveCollection<string[]>("Tags")
                         .IsRequired()
@@ -56,9 +64,13 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.HasKey("Id");
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
-                    b.HasIndex("AuthorId");
+                    b.HasKey("Id");
 
                     b.HasIndex("SearchVector");
 
@@ -68,7 +80,16 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Tags"), "GIN");
 
-                    b.HasIndex("PublishedDate", "Id");
+                    b.HasIndex("PublishedDate", "Id")
+                        .HasDatabaseName("IX_BlogPosts_Published_PublishedDate_Id")
+                        .HasFilter("\"Status\" = 0");
+
+                    b.HasIndex("ScheduledFor", "Id")
+                        .HasDatabaseName("IX_BlogPosts_Scheduled_Due")
+                        .HasFilter("\"Status\" = 1");
+
+                    b.HasIndex("AuthorId", "PublishedDate", "Id")
+                        .HasDatabaseName("IX_BlogPosts_Author_PublishedDate_Id");
 
                     b.ToTable("BlogPosts");
                 });
@@ -182,6 +203,40 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
                     b.ToTable("UserSessions");
                 });
 
+            modelBuilder.Entity("Blog.Posts.Infrastructure.Persistence.ClapDelta", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Delta")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("FirstClap")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("PostId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("clap_deltas", (string)null);
+
+                    b
+                        .HasAnnotation("Npgsql:StorageParameter:autovacuum_vacuum_scale_factor", 0.0)
+                        .HasAnnotation("Npgsql:StorageParameter:autovacuum_vacuum_threshold", 5000);
+                });
+
             modelBuilder.Entity("Blog.Posts.Infrastructure.Persistence.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -234,6 +289,50 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
                         .HasFilter("\"ProcessedAt\" IS NULL");
 
                     b.ToTable("outbox_messages", (string)null);
+                });
+
+            modelBuilder.Entity("Blog.Posts.Infrastructure.Persistence.PostClap", b =>
+                {
+                    b.Property<int>("PostId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<int>("Claps")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LastApplied")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("PostId", "UserId");
+
+                    b.ToTable("post_claps", (string)null);
+                });
+
+            modelBuilder.Entity("Blog.Posts.Infrastructure.Persistence.PostClapTotal", b =>
+                {
+                    b.Property<int>("PostId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Clappers")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("Claps")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("PostId");
+
+                    b.ToTable("post_clap_totals", (string)null);
+
+                    b.HasAnnotation("Npgsql:StorageParameter:fillfactor", 70);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -385,6 +484,24 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Blog.Posts.Infrastructure.Persistence.PostClap", b =>
+                {
+                    b.HasOne("Blog.Posts.Domain.Posts.BlogPost", null)
+                        .WithMany()
+                        .HasForeignKey("PostId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Blog.Posts.Infrastructure.Persistence.PostClapTotal", b =>
+                {
+                    b.HasOne("Blog.Posts.Domain.Posts.BlogPost", null)
+                        .WithMany()
+                        .HasForeignKey("PostId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

@@ -7,20 +7,91 @@ namespace Blog.Posts.Infrastructure.Caching
 {
     public class DistributedPostCache : IPostCache
     {
-        private const string VersionKey = "posts:version";
-
-        private static readonly TimeSpan VersionTtl = TimeSpan.FromDays(30);
-
         private readonly IDistributedCache _cache;
+        private readonly IGenerationCounters _generations;
+        private readonly SingleFlight _flights;
         private readonly ILogger<DistributedPostCache> _logger;
 
-        public DistributedPostCache(IDistributedCache cache, ILogger<DistributedPostCache> logger)
+        public DistributedPostCache(
+            IDistributedCache cache,
+            IGenerationCounters generations,
+            SingleFlight flights,
+            ILogger<DistributedPostCache> logger)
         {
             _cache = cache;
+            _generations = generations;
+            _flights = flights;
             _logger = logger;
         }
 
-        public async Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default) where T : class
+        public async Task<T?> GetOrLoadAsync<T>(
+            string key,
+            Func<CancellationToken, Task<T?>> load,
+            Func<T, bool> shouldCache,
+            TimeSpan ttl,
+            CancellationToken cancellationToken = default) where T : class
+        {
+            var cached = await ReadAsync<T>(key, cancellationToken);
+
+            if (cached is not null)
+            {
+                return cached;
+            }
+
+            // On a hot key the entry expires for everyone at once; without this every request that
+            // misses would run the same query. Now one does, per replica, and the rest wait for it.
+            return await _flights.RunAsync(
+                key,
+                async () =>
+                {
+                    var filled = await ReadAsync<T>(key, CancellationToken.None);
+
+                    if (filled is not null)
+                    {
+                        return filled;
+                    }
+
+                    var loaded = await load(CancellationToken.None);
+
+                    if (loaded is not null && shouldCache(loaded))
+                    {
+                        await WriteAsync(key, loaded, Jitter(ttl));
+                    }
+
+                    return loaded;
+                },
+                cancellationToken);
+        }
+
+        public async Task<long> GetGenerationAsync(string scope, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                return await _generations.CurrentAsync(scope);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Cache generation read failed for {Scope}; serving uncached.", scope);
+
+                // A generation no writer will ever produce, so this request neither reads nor
+                // pollutes a real entry.
+                return -Random.Shared.NextInt64(1, long.MaxValue);
+            }
+        }
+
+        public async Task InvalidateAsync(string scope, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                await _generations.BumpAsync(scope);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Cache invalidation failed for {Scope}; entries will expire on their TTL.", scope);
+            }
+        }
+
+        private async Task<T?> ReadAsync<T>(string key, CancellationToken cancellationToken) where T : class
         {
             try
             {
@@ -36,67 +107,23 @@ namespace Blog.Posts.Infrastructure.Caching
             }
         }
 
-        public async Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken cancellationToken = default) where T : class
+        private async Task WriteAsync<T>(string key, T value, TimeSpan ttl) where T : class
         {
             try
             {
                 await _cache.SetStringAsync(
                     key,
                     JsonSerializer.Serialize(value),
-                    new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = ttl },
-                    cancellationToken);
+                    new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = ttl });
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Cache write failed for {CacheKey}", key);
             }
         }
 
-        public async Task<string> GetVersionAsync(CancellationToken cancellationToken = default)
-        {
-            try
-            {
-                var version = await _cache.GetStringAsync(VersionKey, cancellationToken);
-
-                if (version is not null)
-                {
-                    return version;
-                }
-
-                version = NewVersion();
-
-                await _cache.SetStringAsync(
-                    VersionKey,
-                    version,
-                    new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = VersionTtl },
-                    cancellationToken);
-
-                return version;
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogWarning(ex, "Cache version read failed; serving uncached.");
-
-                return NewVersion();
-            }
-        }
-
-        public async Task InvalidateAsync(CancellationToken cancellationToken = default)
-        {
-            try
-            {
-                await _cache.SetStringAsync(
-                    VersionKey,
-                    NewVersion(),
-                    new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = VersionTtl },
-                    cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogWarning(ex, "Cache invalidation failed; entries will expire on their TTL.");
-            }
-        }
-
-        private static string NewVersion() => Guid.NewGuid().ToString("N")[..8];
+        // Entries written together would otherwise all expire together and stampede together.
+        private static TimeSpan Jitter(TimeSpan ttl) =>
+            TimeSpan.FromTicks((long)(ttl.Ticks * (0.9 + Random.Shared.NextDouble() * 0.2)));
     }
 }

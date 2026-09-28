@@ -6,16 +6,20 @@ public static class Topics
 
     public const string PostLifecycle = "blog.post.lifecycle.v1";
 
+    public const string PostClapped = "blog.post.clapped.v1";
+
     public static readonly IReadOnlyDictionary<string, int> Partitions = new Dictionary<string, int>
     {
         [PostViewed] = 6,
-        [PostLifecycle] = 3
+        [PostLifecycle] = 3,
+        [PostClapped] = 6
     };
 
     public static readonly IReadOnlyDictionary<string, TimeSpan> Retention = new Dictionary<string, TimeSpan>
     {
         [PostViewed] = TimeSpan.FromDays(7),
-        [PostLifecycle] = TimeSpan.FromDays(30)
+        [PostLifecycle] = TimeSpan.FromDays(30),
+        [PostClapped] = TimeSpan.FromDays(7)
     };
 }
 

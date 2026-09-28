@@ -1,14 +1,16 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
-using System.Linq.Expressions;
 using Blog.Posts.Application.Abstractions;
+using Blog.Posts.Application.Common;
 using Blog.Posts.Application.Posts;
 using Blog.Posts.Domain.Posts;
-using Blog.Posts.Infrastructure.Identity;
 
 namespace Blog.Posts.Infrastructure.Persistence
 {
     public class EfPostRepository : IPostRepository
     {
+        private const int MaxSerializableAttempts = 10;
+
         private readonly ApplicationDbContext _context;
         private readonly IDomainEventDispatcher _events;
 
@@ -23,16 +25,23 @@ namespace Blog.Posts.Infrastructure.Persistence
         {
             var query = _context.BlogPosts.AsNoTracking();
 
-            if (authorId is not null)
-            {
-                query = query.Where(p => p.AuthorId == authorId);
-            }
+            query = authorId is null
+                ? query.Where(p => p.Status == PostStatus.Published)
+                : query.Where(p => p.AuthorId == authorId);
 
             if (cursor is { } from)
             {
-                query = query.Where(p =>
-                    p.PublishedDate < from.PublishedDate ||
-                    (p.PublishedDate == from.PublishedDate && p.Id < from.Id));
+                // On PostgreSQL the cursor is a row comparison, (PublishedDate, Id) < (@date, @id),
+                // which the btree index takes as its start key: a page deep in the feed begins reading
+                // at the cursor. The equivalent OR below is only a filter there, so every newer row is
+                // read and thrown away first. SQLite gets the portable form.
+                query = _context.Database.IsNpgsql()
+                    ? query.Where(p => EF.Functions.LessThan(
+                        ValueTuple.Create(p.PublishedDate, p.Id),
+                        ValueTuple.Create(from.PublishedDate, from.Id)))
+                    : query.Where(p =>
+                        p.PublishedDate < from.PublishedDate ||
+                        (p.PublishedDate == from.PublishedDate && p.Id < from.Id));
             }
 
             var rows = await Project(query
@@ -59,23 +68,53 @@ namespace Blog.Posts.Infrastructure.Persistence
 
         public async Task<PostDetailDto?> GetDetailAsync(int id, CancellationToken cancellationToken = default)
         {
-            return await _context.BlogPosts
+            var row = await _context.BlogPosts
                 .AsNoTracking()
                 .Where(p => p.Id == id)
-                .Select(p => new PostDetailDto
+                .Select(p => new
                 {
-                    Id = p.Id,
-                    Title = p.Title,
-                    Content = p.Content,
-                    PublishedDate = p.PublishedDate,
+                    p.Id,
+                    p.Title,
+                    p.Content,
+                    p.PublishedDate,
                     AuthorName = _context.Users
                         .Where(u => u.Id == p.AuthorId)
                         .Select(u => u.UserName ?? "Unknown")
                         .FirstOrDefault() ?? "Unknown",
-                    AuthorId = p.AuthorId,
-                    Tags = p.Tags.ToList()
+                    p.AuthorId,
+                    Tags = p.Tags.ToList(),
+                    p.Status,
+                    p.ScheduledFor,
+                    p.Version
                 })
                 .FirstOrDefaultAsync(cancellationToken);
+
+            return row is null
+                ? null
+                : new PostDetailDto
+                {
+                    Id = row.Id,
+                    Title = row.Title,
+                    Content = row.Content,
+                    PublishedDate = row.PublishedDate,
+                    AuthorName = row.AuthorName,
+                    AuthorId = row.AuthorId,
+                    Tags = row.Tags,
+                    Status = StatusName(row.Status),
+                    ScheduledFor = row.ScheduledFor,
+                    Version = row.Version
+                };
+        }
+
+        public async Task<PostHeader?> GetHeaderAsync(int id, CancellationToken cancellationToken = default)
+        {
+            var row = await _context.BlogPosts
+                .AsNoTracking()
+                .Where(p => p.Id == id)
+                .Select(p => new { p.Id, p.AuthorId, p.Status })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            return row is null ? null : new PostHeader(row.Id, row.AuthorId, row.Status == PostStatus.Published);
         }
 
         public Task<BlogPost?> FindAsync(int id, CancellationToken cancellationToken = default) =>
@@ -85,31 +124,98 @@ namespace Blog.Posts.Infrastructure.Persistence
 
         public void Remove(BlogPost post) => _context.BlogPosts.Remove(post);
 
+        public async Task<bool> TryAddScheduledAsync(
+            BlogPost post, int maxScheduledPerAuthor, CancellationToken cancellationToken = default)
+        {
+            // "Count this author's scheduled posts, then insert one more" reads a set of rows and
+            // writes a row that set would include. Under READ COMMITTED or REPEATABLE READ two such
+            // transactions both count N-1, both insert, and the author ends up over the quota (write
+            // skew). SERIALIZABLE sees the read/write dependency cycle and aborts one with 40001; the
+            // retry then counts the other's row. Scheduling is rare, so the retries cost almost nothing.
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync(
+                        IsolationLevel.Serializable, cancellationToken);
+
+                    var scheduled = await _context.BlogPosts.CountAsync(
+                        p => p.AuthorId == post.AuthorId && p.Status == PostStatus.Scheduled,
+                        cancellationToken);
+
+                    if (scheduled >= maxScheduledPerAuthor)
+                    {
+                        return false;
+                    }
+
+                    _context.BlogPosts.Add(post);
+
+                    await _context.SaveChangesAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+
+                    return true;
+                }
+                catch (Exception ex) when (PostgresConflicts.IsRetryable(ex))
+                {
+                    _context.ChangeTracker.Clear();
+
+                    if (attempt == MaxSerializableAttempts)
+                    {
+                        throw new ConcurrencyConflictException(
+                            "The scheduling quota check kept colliding with other requests.", ex);
+                    }
+
+                    await Task.Delay(PostgresConflicts.Backoff(attempt), cancellationToken);
+                }
+            }
+        }
+
         public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
-            var sources = _context.CaptureEventSources();
-
-            if (sources.Count == 0)
+            try
             {
-                return await _context.SaveChangesAsync(cancellationToken);
+                var sources = _context.CaptureEventSources();
+
+                if (sources.Count == 0)
+                {
+                    return await _context.SaveChangesAsync(cancellationToken);
+                }
+
+                // A caller that already opened a transaction (the scheduled publisher claims rows
+                // under one) gets the post and its outbox rows written inside it.
+                if (_context.Database.CurrentTransaction is not null)
+                {
+                    return await SaveWithEventsAsync(sources, cancellationToken);
+                }
+
+                var strategy = _context.Database.CreateExecutionStrategy();
+
+                return await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+                    var written = await SaveWithEventsAsync(sources, cancellationToken);
+
+                    await transaction.CommitAsync(cancellationToken);
+
+                    return written;
+                });
             }
-
-            var strategy = _context.Database.CreateExecutionStrategy();
-
-            return await strategy.ExecuteAsync(async () =>
+            catch (DbUpdateConcurrencyException ex)
             {
-                await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+                throw new ConcurrencyConflictException("The post was changed or deleted concurrently.", ex);
+            }
+        }
 
-                var written = await _context.SaveChangesAsync(cancellationToken);
+        private async Task<int> SaveWithEventsAsync(IReadOnlyList<BlogPost> sources, CancellationToken cancellationToken)
+        {
+            var written = await _context.SaveChangesAsync(cancellationToken);
 
-                var events = ApplicationDbContext.DrainEvents(sources);
+            var events = ApplicationDbContext.DrainEvents(sources);
 
-                await _events.DispatchAsync(events, cancellationToken);
+            await _events.DispatchAsync(events, cancellationToken);
 
-                await transaction.CommitAsync(cancellationToken);
-
-                return written;
-            });
+            return written;
         }
 
         private IQueryable<PostRow> Project(IQueryable<BlogPost> query) =>
@@ -123,7 +229,9 @@ namespace Blog.Posts.Infrastructure.Persistence
                     .Where(u => u.Id == p.AuthorId)
                     .Select(u => u.UserName ?? "Unknown")
                     .FirstOrDefault() ?? "Unknown",
-                Tags = p.Tags.ToList()
+                Tags = p.Tags.ToList(),
+                Status = p.Status,
+                ScheduledFor = p.ScheduledFor
             });
 
         internal static PostSummaryDto ToSummary(PostRow row) => new()
@@ -133,8 +241,14 @@ namespace Blog.Posts.Infrastructure.Persistence
             Excerpt = Excerpt.From(row.Content),
             PublishedDate = row.PublishedDate,
             AuthorName = row.AuthorName,
-            Tags = row.Tags
+            Tags = row.Tags,
+            Status = StatusName(row.Status),
+            ScheduledFor = row.ScheduledFor
         };
+
+        internal static string StatusName(PostStatus status) => status == PostStatus.Scheduled
+            ? PostStatuses.Scheduled
+            : PostStatuses.Published;
 
         internal sealed class PostRow
         {
@@ -144,6 +258,8 @@ namespace Blog.Posts.Infrastructure.Persistence
             public DateTime PublishedDate { get; init; }
             public string AuthorName { get; init; } = string.Empty;
             public List<string> Tags { get; init; } = new();
+            public PostStatus Status { get; init; }
+            public DateTime? ScheduledFor { get; init; }
         }
     }
 }

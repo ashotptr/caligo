@@ -21,6 +21,12 @@ namespace Blog.Posts.Infrastructure.Persistence
 
         public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
+        public DbSet<PostClap> PostClaps => Set<PostClap>();
+
+        public DbSet<ClapDelta> ClapDeltas => Set<ClapDelta>();
+
+        public DbSet<PostClapTotal> PostClapTotals => Set<PostClapTotal>();
+
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
@@ -30,6 +36,12 @@ namespace Blog.Posts.Infrastructure.Persistence
             builder.ApplyConfiguration(new BlogPostConfiguration(Database.ProviderName));
             builder.ApplyConfiguration(new UserSessionConfiguration());
             builder.ApplyConfiguration(new OutboxMessageConfiguration(isNpgsql));
+
+            var claps = new ClapConfiguration(isNpgsql);
+
+            builder.ApplyConfiguration<PostClap>(claps);
+            builder.ApplyConfiguration<ClapDelta>(claps);
+            builder.ApplyConfiguration<PostClapTotal>(claps);
         }
 
         public IReadOnlyList<BlogPost> CaptureEventSources() =>

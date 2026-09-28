@@ -8,6 +8,7 @@ resources:
   - secrets.yaml
   - dependencies/stateful.yaml
   - dependencies/kafka.yaml
+  - dependencies/clickhouse.yaml
 
 patches:
   - target:

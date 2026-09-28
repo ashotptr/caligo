@@ -30,19 +30,35 @@ namespace Blog.Posts.Infrastructure.Persistence
             post.Property(p => p.Content).IsRequired();
             post.Property(p => p.PublishedDate).IsRequired();
 
+            post.Property(p => p.Status).HasDefaultValue(PostStatus.Published);
+
+            post.Property(p => p.Version).IsConcurrencyToken().HasDefaultValue(0);
+
             post.Property(p => p.Tags)
                 .HasField("_tags")
                 .UsePropertyAccessMode(PropertyAccessMode.Field);
-
-            post.HasIndex(p => new { p.PublishedDate, p.Id });
 
             post.HasOne<ApplicationUser>()
                 .WithMany()
                 .HasForeignKey(p => p.AuthorId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // "My posts" pages by author, newest first, scheduled posts included.
+            post.HasIndex(p => new { p.AuthorId, p.PublishedDate, p.Id })
+                .HasDatabaseName("IX_BlogPosts_Author_PublishedDate_Id");
+
             if (IsNpgsql)
             {
+                // The public feed only ever reads published posts, so its keyset index leaves the
+                // scheduled ones out, and the scheduler's index holds nothing but the scheduled ones.
+                post.HasIndex(p => new { p.PublishedDate, p.Id })
+                    .HasDatabaseName("IX_BlogPosts_Published_PublishedDate_Id")
+                    .HasFilter("\"Status\" = 0");
+
+                post.HasIndex(p => new { p.ScheduledFor, p.Id })
+                    .HasDatabaseName("IX_BlogPosts_Scheduled_Due")
+                    .HasFilter("\"Status\" = 1");
+
                 post.Property<NpgsqlTsVector>(ApplicationDbContext.SearchVectorProperty)
                     .HasColumnName("search_vector")
                     .HasComputedColumnSql(
@@ -53,6 +69,12 @@ namespace Blog.Posts.Infrastructure.Persistence
                 post.HasIndex(ApplicationDbContext.SearchVectorProperty).HasMethod("GIN");
 
                 post.HasIndex(p => p.Tags).HasMethod("GIN");
+            }
+            else
+            {
+                post.HasIndex(p => new { p.PublishedDate, p.Id });
+
+                post.HasIndex(p => new { p.Status, p.ScheduledFor });
             }
 
             if (IsSqlite)

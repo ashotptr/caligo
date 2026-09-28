@@ -13,42 +13,29 @@ public class EfSubscriberStore : ISubscriberStore
         _context = context;
     }
 
-    public async Task<IReadOnlyList<Subscriber>> ActiveAsync(CancellationToken cancellationToken = default) =>
-        await _context.Subscribers
-            .AsNoTracking()
-            .Where(s => s.IsActive)
-            .ToListAsync(cancellationToken);
-
     public async Task<Subscriber> SubscribeAsync(
         string email, string? displayName, CancellationToken cancellationToken = default)
     {
         var normalized = email.Trim().ToLowerInvariant();
 
-        var existing = await _context.Subscribers.FirstOrDefaultAsync(s => s.Email == normalized, cancellationToken);
+        // An upsert, not "look up, then insert": two requests subscribing the same address at once
+        // both succeed, one inserting and the other reactivating, instead of the loser tripping the
+        // unique index and answering 500.
+        var rows = await _context.Subscribers
+            .FromSql($"""
+                INSERT INTO subscribers
+                    ("Id", "Email", "DisplayName", "IsActive", "SubscribedAt", "UnsubscribedAt", "UnsubscribeToken")
+                VALUES ({Guid.NewGuid()}, {normalized}, {displayName}, true, now(), NULL, {NewToken()})
+                ON CONFLICT ("Email") DO UPDATE
+                    SET "IsActive" = true,
+                        "UnsubscribedAt" = NULL,
+                        "DisplayName" = COALESCE(EXCLUDED."DisplayName", subscribers."DisplayName")
+                RETURNING *
+                """)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
 
-        if (existing is not null)
-        {
-            existing.IsActive = true;
-            existing.UnsubscribedAt = null;
-            existing.DisplayName = displayName ?? existing.DisplayName;
-
-            await _context.SaveChangesAsync(cancellationToken);
-
-            return existing;
-        }
-
-        var subscriber = new Subscriber
-        {
-            Email = normalized,
-            DisplayName = displayName,
-            UnsubscribeToken = NewToken()
-        };
-
-        _context.Subscribers.Add(subscriber);
-
-        await _context.SaveChangesAsync(cancellationToken);
-
-        return subscriber;
+        return rows[0];
     }
 
     public async Task<bool> UnsubscribeAsync(string token, CancellationToken cancellationToken = default)
@@ -77,68 +64,71 @@ public class EfSubscriberStore : ISubscriberStore
 public class EfDeliveryLedger : IDeliveryLedger
 {
     private readonly NotificationsDbContext _context;
-    private readonly ILogger<EfDeliveryLedger> _logger;
 
-    public EfDeliveryLedger(NotificationsDbContext context, ILogger<EfDeliveryLedger> logger)
+    public EfDeliveryLedger(NotificationsDbContext context)
     {
         _context = context;
-        _logger = logger;
     }
 
-    public async Task<IReadOnlyList<NotificationDelivery>> ClaimAsync(
-        Guid eventId, int postId, string postTitle,
-        IReadOnlyList<Subscriber> subscribers,
+    public async Task<FanOutChunk> ClaimChunkAsync(
+        Guid eventId, int postId, string postTitle, Guid after, int chunkSize,
         CancellationToken cancellationToken = default)
     {
-        if (subscribers.Count == 0)
-        {
-            return Array.Empty<NotificationDelivery>();
-        }
-
-        var already = await _context.Deliveries
+        // Walk the active subscribers by id (keyset, served by the partial index on active ids), so
+        // a big list is claimed in bounded pieces instead of being loaded into memory at once.
+        var chunk = await _context.Subscribers
+            .FromSql($"""
+                SELECT * FROM subscribers
+                WHERE "IsActive" AND "Id" > {after}
+                ORDER BY "Id"
+                LIMIT {chunkSize}
+                """)
             .AsNoTracking()
-            .Where(d => d.EventId == eventId)
-            .Select(d => d.SubscriberId)
             .ToListAsync(cancellationToken);
 
-        var seen = already.ToHashSet();
+        if (chunk.Count == 0)
+        {
+            return new FanOutChunk(Array.Empty<SendEmailCommand>(), null);
+        }
 
-        var fresh = subscribers
-            .Where(s => !seen.Contains(s.Id))
-            .Select(s => new NotificationDelivery
+        var subscriberIds = chunk.Select(s => s.Id).ToArray();
+
+        // One set-based statement per chunk. The unique (EventId, SubscriberId) index decides who
+        // owns each delivery: a replayed event, or a second relay racing this one, gets DO NOTHING
+        // for rows that already exist, and only the rows this statement created come back. Nothing
+        // is read first, so nothing can be dropped between the read and the write.
+        var claimed = await _context.Database
+            .SqlQuery<ClaimedRow>($"""
+                INSERT INTO notification_deliveries
+                    ("Id", "EventId", "SubscriberId", "PostId", "PostTitle", "Status", "Attempts", "CreatedAt")
+                SELECT gen_random_uuid(), {eventId}, subscriber_id, {postId}, {postTitle},
+                       {nameof(DeliveryStatus.Pending)}, 0, now()
+                FROM unnest({subscriberIds}) AS subscriber_id
+                ON CONFLICT ("EventId", "SubscriberId") DO NOTHING
+                RETURNING "Id", "SubscriberId"
+                """)
+            .ToListAsync(cancellationToken);
+
+        var bySubscriber = chunk.ToDictionary(s => s.Id);
+
+        var commands = claimed
+            .Select(row =>
             {
-                EventId = eventId,
-                SubscriberId = s.Id,
-                PostId = postId,
-                PostTitle = postTitle,
-                Status = DeliveryStatus.Pending
+                var subscriber = bySubscriber[row.SubscriberId];
+
+                return new SendEmailCommand(
+                    row.Id,
+                    eventId,
+                    subscriber.Id,
+                    subscriber.Email,
+                    subscriber.DisplayName,
+                    postId,
+                    postTitle,
+                    subscriber.UnsubscribeToken);
             })
             .ToList();
 
-        if (fresh.Count == 0)
-        {
-            return Array.Empty<NotificationDelivery>();
-        }
-
-        _context.Deliveries.AddRange(fresh);
-
-        try
-        {
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
-        {
-            _logger.LogInformation("Event {EventId} was claimed concurrently; yielding.", eventId);
-
-            foreach (var entry in _context.ChangeTracker.Entries<NotificationDelivery>().ToList())
-            {
-                entry.State = EntityState.Detached;
-            }
-
-            return Array.Empty<NotificationDelivery>();
-        }
-
-        return fresh;
+        return new FanOutChunk(commands, chunk.Count == chunkSize ? chunk[^1].Id : null);
     }
 
     public async Task MarkQueuedAsync(IReadOnlyList<Guid> deliveryIds, CancellationToken cancellationToken = default)
@@ -153,12 +143,13 @@ public class EfDeliveryLedger : IDeliveryLedger
             .ExecuteUpdateAsync(d => d.SetProperty(x => x.Status, DeliveryStatus.Queued), cancellationToken);
     }
 
+    // Transitions below only move a delivery out of Pending or Queued. Sent and Failed are final,
+    // so a duplicate or late message cannot drag a sent email back to Failed.
     public async Task MarkSentAsync(Guid deliveryId, CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
 
-        await _context.Deliveries
-            .Where(d => d.Id == deliveryId)
+        await Open(deliveryId)
             .ExecuteUpdateAsync(
                 d => d.SetProperty(x => x.Status, DeliveryStatus.Sent)
                       .SetProperty(x => x.SentAt, now)
@@ -169,8 +160,7 @@ public class EfDeliveryLedger : IDeliveryLedger
     public async Task MarkFailedAsync(
         Guid deliveryId, int attempts, string error, CancellationToken cancellationToken = default)
     {
-        await _context.Deliveries
-            .Where(d => d.Id == deliveryId)
+        await Open(deliveryId)
             .ExecuteUpdateAsync(
                 d => d.SetProperty(x => x.Status, DeliveryStatus.Failed)
                       .SetProperty(x => x.Attempts, attempts)
@@ -181,8 +171,7 @@ public class EfDeliveryLedger : IDeliveryLedger
     public async Task RecordAttemptAsync(
         Guid deliveryId, int attempts, string error, CancellationToken cancellationToken = default)
     {
-        await _context.Deliveries
-            .Where(d => d.Id == deliveryId)
+        await Open(deliveryId)
             .ExecuteUpdateAsync(
                 d => d.SetProperty(x => x.Attempts, attempts)
                       .SetProperty(x => x.LastError, Truncate(error)),
@@ -205,9 +194,41 @@ public class EfDeliveryLedger : IDeliveryLedger
     public async Task<Subscriber?> SubscriberAsync(Guid subscriberId, CancellationToken cancellationToken = default) =>
         await _context.Subscribers.AsNoTracking().FirstOrDefaultAsync(s => s.Id == subscriberId, cancellationToken);
 
+    public async Task<bool> RunExclusiveAsync(
+        string lockName, Func<Task> work, CancellationToken cancellationToken = default)
+    {
+        // A transaction-scoped advisory lock: Postgres releases it at commit or rollback, so it can't
+        // outlive a crashed sweep or leak to the next user of a pooled connection, which a
+        // session-level lock can. The try- variant returns at once instead of queueing replicas.
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+        var acquired = await _context.Database
+            .SqlQuery<bool>($"""SELECT pg_try_advisory_xact_lock(hashtext({lockName})) AS "Value" """)
+            .ToListAsync(cancellationToken);
+
+        if (!acquired[0])
+        {
+            return false;
+        }
+
+        await work();
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return true;
+    }
+
+    private IQueryable<NotificationDelivery> Open(Guid deliveryId) =>
+        _context.Deliveries.Where(d =>
+            d.Id == deliveryId &&
+            (d.Status == DeliveryStatus.Pending || d.Status == DeliveryStatus.Queued));
+
     private static string Truncate(string value) => value.Length <= 2000 ? value : value[..2000];
 
-    private static bool IsUniqueViolation(DbUpdateException exception) =>
-        exception.InnerException?.Message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase) == true
-        || exception.InnerException?.Message.Contains("UNIQUE constraint", StringComparison.OrdinalIgnoreCase) == true;
+    internal sealed class ClaimedRow
+    {
+        public Guid Id { get; set; }
+
+        public Guid SubscriberId { get; set; }
+    }
 }

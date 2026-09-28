@@ -4,6 +4,25 @@ public record ViewStats(int PostId, long Views, long UniqueVisitors);
 
 public record TrendingPost(int PostId, long Score);
 
+public enum SeriesGranularity
+{
+    Minute,
+    Hour,
+    Day
+}
+
+public enum WindowRanking
+{
+    Views,
+    Claps
+}
+
+public record SeriesPoint(DateTime BucketStart, long Views, long UniqueVisitors, long Claps);
+
+public record WindowPost(int PostId, long Views, long UniqueVisitors, long Claps);
+
+public record Engagement(int PostId, long Views, long UniqueVisitors, long Clappers, long Claps, int Days);
+
 public interface IViewStatsClient
 {
     bool IsConfigured { get; }
@@ -18,4 +37,14 @@ public interface IViewStatsClient
 
     IAsyncEnumerable<IReadOnlyList<TrendingPost>> StreamTrendingAsync(
         int windowHours, int limit, CancellationToken cancellationToken = default);
+
+    // The OLAP queries below return null when analytics or its ClickHouse store is unavailable.
+    Task<IReadOnlyList<SeriesPoint>?> GetSeriesAsync(
+        int postId, DateTime from, DateTime to, SeriesGranularity granularity,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<WindowPost>?> GetTopInWindowAsync(
+        int minutes, WindowRanking ranking, int limit, CancellationToken cancellationToken = default);
+
+    Task<Engagement?> GetEngagementAsync(int postId, int days, CancellationToken cancellationToken = default);
 }

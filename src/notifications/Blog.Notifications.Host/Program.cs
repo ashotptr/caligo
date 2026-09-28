@@ -44,6 +44,7 @@ builder.Services.AddDbContext<NotificationsDbContext>((provider, options) =>
 builder.Services.AddScoped<ISubscriberStore, EfSubscriberStore>();
 builder.Services.AddScoped<IDeliveryLedger, EfDeliveryLedger>();
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+builder.Services.AddScoped<NewsletterFanOut>();
 
 builder.Services.AddSingleton<RabbitCommandQueue>();
 builder.Services.AddSingleton<ICommandQueue>(p => p.GetRequiredService<RabbitCommandQueue>());

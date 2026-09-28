@@ -85,44 +85,10 @@ namespace Blog.Posts.Infrastructure.Messaging
                 return 0;
             }
 
-            foreach (var message in batch)
-            {
-                try
-                {
-                    await _producer.ProduceAsync(
-                        new KafkaMessage(
-                            message.Topic,
-                            message.PartitionKey,
-                            message.Payload,
-                            message.EventType,
-                            message.SchemaVersion,
-                            message.TraceParent),
-                        cancellationToken);
-
-                    message.ProcessedAt = DateTime.UtcNow;
-                    message.LastError = null;
-                }
-                catch (Exception ex)
-                {
-                    message.Attempts++;
-                    message.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
-
-                    if (message.Attempts >= _options.MaxDeliveryAttempts)
-                    {
-                        _logger.LogError(
-                            ex,
-                            "Outbox message {MessageId} ({EventType}) failed {Attempts} times and will no longer be retried.",
-                            message.Id, message.EventType, message.Attempts);
-                    }
-                    else
-                    {
-                        _logger.LogWarning(
-                            ex,
-                            "Outbox message {MessageId} failed (attempt {Attempts}); will retry.",
-                            message.Id, message.Attempts);
-                    }
-                }
-            }
+            // All sends are handed to the producer before any is awaited, so librdkafka can pack the
+            // batch into a few produce requests instead of one round trip per row. Messages are
+            // enqueued in claim order and the producer is idempotent, so each partition keeps its order.
+            await Task.WhenAll(batch.Select(message => SendAsync(message, cancellationToken)).ToList());
 
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -135,6 +101,45 @@ namespace Blog.Posts.Infrastructure.Messaging
             }
 
             return batch.Count;
+        }
+
+        private async Task SendAsync(OutboxMessage message, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await _producer.ProduceAsync(
+                    new KafkaMessage(
+                        message.Topic,
+                        message.PartitionKey,
+                        message.Payload,
+                        message.EventType,
+                        message.SchemaVersion,
+                        message.TraceParent),
+                    cancellationToken);
+
+                message.ProcessedAt = DateTime.UtcNow;
+                message.LastError = null;
+            }
+            catch (Exception ex)
+            {
+                message.Attempts++;
+                message.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
+
+                if (message.Attempts >= _options.MaxDeliveryAttempts)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Outbox message {MessageId} ({EventType}) failed {Attempts} times and will no longer be retried.",
+                        message.Id, message.EventType, message.Attempts);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Outbox message {MessageId} failed (attempt {Attempts}); will retry.",
+                        message.Id, message.Attempts);
+                }
+            }
         }
 
         private async Task<List<OutboxMessage>> ClaimBatchAsync(

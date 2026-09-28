@@ -6,7 +6,9 @@ public enum ResultStatus
     NotFound,
     Forbidden,
     Invalid,
-    Unauthorized
+    Unauthorized,
+    Conflict,
+    PreconditionFailed
 }
 
 public readonly record struct Result<T>(ResultStatus Status, T? Value, string? Error)
@@ -22,6 +24,10 @@ public readonly record struct Result<T>(ResultStatus Status, T? Value, string? E
     public static Result<T> Invalid(string error) => new(ResultStatus.Invalid, default, error);
 
     public static Result<T> Unauthorized(string? error = null) => new(ResultStatus.Unauthorized, default, error);
+
+    public static Result<T> Conflict(string? error = null) => new(ResultStatus.Conflict, default, error);
+
+    public static Result<T> PreconditionFailed(string? error = null) => new(ResultStatus.PreconditionFailed, default, error);
 }
 
 public readonly record struct Result(ResultStatus Status, string? Error)
@@ -37,4 +43,8 @@ public readonly record struct Result(ResultStatus Status, string? Error)
     public static Result Invalid(string error) => new(ResultStatus.Invalid, error);
 
     public static Result Unauthorized(string? error = null) => new(ResultStatus.Unauthorized, error);
+
+    public static Result Conflict(string? error = null) => new(ResultStatus.Conflict, error);
+
+    public static Result PreconditionFailed(string? error = null) => new(ResultStatus.PreconditionFailed, error);
 }

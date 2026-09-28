@@ -10,6 +10,7 @@
 	<ItemGroup>
 		<ProjectReference Include="../../src/posts/Blog.Api/Blog.Api.csproj" />
 		<ProjectReference Include="../../src/analytics/Blog.Analytics.Host/Blog.Analytics.Host.csproj" />
+		<ProjectReference Include="../../src/notifications/Blog.Notifications.Host/Blog.Notifications.Host.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -17,6 +18,7 @@
 		<PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
 		<PackageReference Include="Microsoft.NET.Test.Sdk" />
 		<PackageReference Include="Moq" />
+		<PackageReference Include="Testcontainers.ClickHouse" />
 		<PackageReference Include="Testcontainers.Kafka" />
 		<PackageReference Include="Testcontainers.MongoDb" />
 		<PackageReference Include="Testcontainers.Redis" />

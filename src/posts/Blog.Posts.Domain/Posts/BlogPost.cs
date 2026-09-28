@@ -2,6 +2,13 @@ using Blog.Posts.Domain.Events;
 
 namespace Blog.Posts.Domain.Posts;
 
+public enum PostStatus
+{
+    Published = 0,
+
+    Scheduled = 1
+}
+
 public class BlogPost
 {
     private readonly List<Func<BlogPost, IDomainEvent>> _eventFactories = new();
@@ -24,6 +31,16 @@ public class BlogPost
 
     public IReadOnlyList<string> Tags => _tags;
 
+    public PostStatus Status { get; private set; }
+
+    public DateTime? ScheduledFor { get; private set; }
+
+    // Optimistic concurrency token: every change bumps it, and the UPDATE only matches the row
+    // if nobody else bumped it since this copy was loaded.
+    public int Version { get; private set; }
+
+    public bool IsPublished => Status == PostStatus.Published;
+
     public bool HasPendingEvents => _eventFactories.Count > 0;
 
     public static BlogPost Publish(string title, string content, IEnumerable<string>? tags, string? authorId, DateTime publishedAt)
@@ -34,6 +51,7 @@ public class BlogPost
             Content = Require(content, nameof(content)),
             AuthorId = authorId,
             PublishedDate = publishedAt,
+            Status = PostStatus.Published,
             _tags = PostTags.Normalize(tags).ToList()
         };
 
@@ -42,16 +60,71 @@ public class BlogPost
         return post;
     }
 
+    // Nothing is announced until the post actually goes live, so a scheduled post raises no event.
+    public static BlogPost Schedule(string title, string content, IEnumerable<string>? tags, string? authorId, DateTime publishAt) =>
+        new()
+        {
+            Title = Require(title, nameof(title)),
+            Content = Require(content, nameof(content)),
+            AuthorId = authorId,
+            PublishedDate = publishAt,
+            ScheduledFor = publishAt,
+            Status = PostStatus.Scheduled,
+            _tags = PostTags.Normalize(tags).ToList()
+        };
+
     public void Revise(string title, string content, IEnumerable<string>? tags)
     {
         Title = Require(title, nameof(title));
         Content = Require(content, nameof(content));
         _tags = PostTags.Normalize(tags).ToList();
 
-        _eventFactories.Add(static p => new PostUpdated(p.Id, p.Title));
+        Version++;
+
+        if (IsPublished)
+        {
+            _eventFactories.Add(static p => new PostUpdated(p.Id, p.Title));
+        }
     }
 
-    public void MarkDeleted() => _eventFactories.Add(static p => new PostDeleted(p.Id));
+    public void Reschedule(DateTime publishAt)
+    {
+        if (IsPublished)
+        {
+            throw new InvalidOperationException("A published post cannot be rescheduled.");
+        }
+
+        ScheduledFor = publishAt;
+        PublishedDate = publishAt;
+
+        Version++;
+    }
+
+    // Returns false when the post is not due, so a publisher that claimed it can skip it safely.
+    public bool PublishDue(DateTime now)
+    {
+        if (IsPublished || ScheduledFor > now)
+        {
+            return false;
+        }
+
+        Status = PostStatus.Published;
+        PublishedDate = now;
+
+        Version++;
+
+        _eventFactories.Add(static p => new PostPublished(p.Id, p.Title, p.AuthorId, p.Tags));
+
+        return true;
+    }
+
+    public void MarkDeleted()
+    {
+        if (IsPublished)
+        {
+            _eventFactories.Add(static p => new PostDeleted(p.Id));
+        }
+    }
 
     public IReadOnlyList<IDomainEvent> DrainDomainEvents()
     {

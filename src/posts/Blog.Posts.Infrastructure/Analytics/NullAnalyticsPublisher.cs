@@ -7,5 +7,9 @@ namespace Blog.Posts.Infrastructure.Analytics
         public void PublishPostViewed(PostViewedEvent viewed)
         {
         }
+
+        public void PublishPostClapped(PostClappedEvent clapped)
+        {
+        }
     }
 }

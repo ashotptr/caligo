@@ -67,6 +67,26 @@ services:
       timeout: 5s
       retries: 10
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.8
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      CLICKHOUSE_DB: blog_analytics
+      CLICKHOUSE_USER: blog
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?}
+    volumes:
+      - clickhousedata:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   blog-api:
     build:
       context: ../..
@@ -87,6 +107,7 @@ services:
       AdminUser__Email: ${ADMIN_EMAIL:?}
       AdminUser__Password: ${ADMIN_PASSWORD:?}
       Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID:-}
+      ForwardedHeaders__KnownNetworks__0: "172.16.0.0/12"
     volumes:
       - dpkeys:/home/app/.aspnet/DataProtection-Keys
     healthcheck:
@@ -145,6 +166,7 @@ services:
       Otlp__Endpoint: "http://aspire-dashboard:18889"
       ConnectionStrings__Mongo: "mongodb://blog:${MONGO_PASSWORD:?}@mongo:27017/"
       ConnectionStrings__Redis: "redis:6379"
+      ConnectionStrings__ClickHouse: "Host=clickhouse;Port=8123;Username=blog;Password=${CLICKHOUSE_PASSWORD:?};Database=blog_analytics"
       Kafka__BootstrapServers: "kafka:29092"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/health/ready || exit 1"]
@@ -158,6 +180,8 @@ services:
       mongo:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
 
   blog-notifications:
@@ -251,3 +275,4 @@ volumes:
   rabbitdata:
   mongodata:
   kafkadata:
+  clickhousedata:

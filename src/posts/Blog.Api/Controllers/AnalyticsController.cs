@@ -103,6 +103,123 @@ public class AnalyticsController : ControllerBase
         });
     }
 
+    // Views, unique visitors and claps per minute, hour or day, from the ClickHouse rollups.
+    [HttpGet("posts/{id}/series")]
+    public async Task<IActionResult> Series(
+        int id,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] string bucket = "hour",
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.TryParse<SeriesGranularity>(bucket, ignoreCase: true, out var granularity))
+        {
+            return BadRequest("bucket must be minute, hour or day.");
+        }
+
+        var end = (to ?? DateTime.UtcNow).ToUniversalTime();
+        var start = (from ?? end - DefaultRange(granularity)).ToUniversalTime();
+
+        if (start >= end || end - start > MaxRange(granularity))
+        {
+            return BadRequest(
+                $"from must be before to, and a {bucket} series spans at most {MaxRange(granularity).TotalDays:0} day(s).");
+        }
+
+        var points = await _analytics.GetSeriesAsync(id, start, end, granularity, cancellationToken);
+
+        return Ok(new
+        {
+            postId = id,
+            bucket = granularity.ToString().ToLowerInvariant(),
+            from = start,
+            to = end,
+            enabled = points is not null,
+            points = points ?? Array.Empty<SeriesPoint>()
+        });
+    }
+
+    // Top posts over the last N minutes, exact to the minute.
+    [HttpGet("top/window")]
+    [Authorize(Roles = "Admin,Writer")]
+    public async Task<IActionResult> TopInWindow(
+        [FromQuery] int minutes = 60,
+        [FromQuery] string by = "views",
+        [FromQuery] int limit = 10,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.TryParse<WindowRanking>(by, ignoreCase: true, out var ranking))
+        {
+            return BadRequest("by must be views or claps.");
+        }
+
+        minutes = Math.Clamp(minutes, 1, 7 * 24 * 60);
+        limit = Math.Clamp(limit, 1, 50);
+
+        var entries = await _analytics.GetTopInWindowAsync(minutes, ranking, limit, cancellationToken);
+
+        if (entries is null || entries.Count == 0)
+        {
+            return Ok(new { enabled = entries is not null, minutes, by = ranking.ToString().ToLowerInvariant(), posts = Array.Empty<object>() });
+        }
+
+        var titles = await TitlesFor(entries.Select(e => e.PostId).ToList(), cancellationToken);
+
+        return Ok(new
+        {
+            enabled = true,
+            minutes,
+            by = ranking.ToString().ToLowerInvariant(),
+            posts = entries.Select(e => new
+            {
+                postId = e.PostId,
+                title = titles.GetValueOrDefault(e.PostId, "(deleted)"),
+                views = e.Views,
+                uniqueVisitors = e.UniqueVisitors,
+                claps = e.Claps
+            })
+        });
+    }
+
+    // Views -> unique visitors -> clappers -> claps for one post, joining the two event streams.
+    [HttpGet("posts/{id}/funnel")]
+    [Authorize(Roles = "Admin,Writer")]
+    public async Task<IActionResult> Funnel(int id, [FromQuery] int days = 7, CancellationToken cancellationToken = default)
+    {
+        days = Math.Clamp(days, 1, 180);
+
+        var funnel = await _analytics.GetEngagementAsync(id, days, cancellationToken);
+
+        var visitors = funnel?.UniqueVisitors ?? 0;
+        var clappers = funnel?.Clappers ?? 0;
+
+        return Ok(new
+        {
+            postId = id,
+            days,
+            enabled = funnel is not null,
+            views = funnel?.Views ?? 0,
+            uniqueVisitors = visitors,
+            clappers,
+            claps = funnel?.Claps ?? 0,
+            clapperRate = visitors == 0 ? 0 : Math.Round((double)clappers / visitors, 4)
+        });
+    }
+
+    private static TimeSpan DefaultRange(SeriesGranularity granularity) => granularity switch
+    {
+        SeriesGranularity.Minute => TimeSpan.FromHours(1),
+        SeriesGranularity.Hour => TimeSpan.FromDays(1),
+        _ => TimeSpan.FromDays(30)
+    };
+
+    private static TimeSpan MaxRange(SeriesGranularity granularity) => granularity switch
+    {
+        SeriesGranularity.Minute => TimeSpan.FromDays(1),
+        SeriesGranularity.Hour => TimeSpan.FromDays(31),
+        _ => TimeSpan.FromDays(366)
+    };
+
     [HttpGet("trending/stream")]
     public async Task TrendingStream(
         [FromQuery] int windowHours = 24,

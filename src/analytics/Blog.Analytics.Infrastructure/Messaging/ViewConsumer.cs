@@ -1,209 +1,32 @@
-using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using OpenTelemetry.Context.Propagation;
 using Confluent.Kafka;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Blog.Analytics.Core.Olap;
 using Blog.Analytics.Core.Views;
 using Blog.Contracts;
-using Blog.Observability;
 using Blog.Contracts.Events;
 
 namespace Blog.Analytics.Infrastructure.Messaging
 {
-    public class AnalyticsOptions
-    {
-        public const string SectionName = "Kafka";
-
-        public string BootstrapServers { get; set; } = string.Empty;
-
-        public bool Enabled => !string.IsNullOrWhiteSpace(BootstrapServers);
-
-        public string RawViewsGroup { get; set; } = "analytics-raw-writer";
-
-        public string TrendingGroup { get; set; } = "analytics-trending";
-
-        public int BatchSize { get; set; } = 200;
-
-        public TimeSpan BatchLinger { get; set; } = TimeSpan.FromSeconds(2);
-    }
-
-    public abstract class ViewConsumer : BackgroundService
+    public abstract class ViewConsumer : BatchConsumer<PostView>
     {
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-        private readonly IServiceScopeFactory _scopes;
         private readonly ILogger _logger;
 
-        private PropagationContext _lastParent;
-
         protected ViewConsumer(IServiceScopeFactory scopes, IOptions<AnalyticsOptions> options, ILogger logger)
+            : base(scopes, options, logger)
         {
-            _scopes = scopes;
-            Options = options.Value;
             _logger = logger;
         }
 
-        protected AnalyticsOptions Options { get; }
+        protected override string Topic => Topics.PostViewed;
 
-        protected abstract string GroupId { get; }
-
-        protected abstract Task<bool> HandleAsync(
-            IServiceProvider services, IReadOnlyList<PostView> batch, CancellationToken cancellationToken);
-
-        protected override Task ExecuteAsync(CancellationToken stoppingToken)
+        protected override PostView? Parse(ConsumeResult<string, byte[]> result)
         {
-            if (!Options.Enabled)
-            {
-                _logger.LogInformation("No Kafka broker configured; {Group} not started.", GroupId);
-
-                return Task.CompletedTask;
-            }
-
-            return Task.Factory.StartNew(
-                () => ConsumeLoop(stoppingToken),
-                stoppingToken,
-                TaskCreationOptions.LongRunning,
-                TaskScheduler.Default);
-        }
-
-        private void ConsumeLoop(CancellationToken stoppingToken)
-        {
-            var config = new ConsumerConfig
-            {
-                BootstrapServers = Options.BootstrapServers,
-                GroupId = GroupId,
-
-                AutoOffsetReset = AutoOffsetReset.Earliest,
-
-                EnableAutoCommit = false,
-                SessionTimeoutMs = 45000,
-                MaxPollIntervalMs = 300000,
-
-                AllowAutoCreateTopics = false
-            };
-
-            using var consumer = new ConsumerBuilder<string, byte[]>(config)
-                .SetErrorHandler((_, error) => _logger.LogWarning("Kafka error in {Group}: {Reason}", GroupId, error.Reason))
-                .SetPartitionsAssignedHandler((_, partitions) =>
-                    _logger.LogInformation("{Group} assigned {Partitions}", GroupId, string.Join(", ", partitions)))
-                .Build();
-
-            consumer.Subscribe(Topics.PostViewed);
-
-            _logger.LogInformation("{Group} consuming {Topic}.", GroupId, Topics.PostViewed);
-
-            var batch = new List<PostView>(Options.BatchSize);
-            var batchStarted = DateTime.UtcNow;
-
-            try
-            {
-                while (!stoppingToken.IsCancellationRequested)
-                {
-                    ConsumeResult<string, byte[]>? result;
-
-                    try
-                    {
-                        result = consumer.Consume(TimeSpan.FromMilliseconds(500));
-                    }
-                    catch (ConsumeException ex) when (ex.Error.Code == ErrorCode.UnknownTopicOrPart)
-                    {
-                        _logger.LogInformation(
-                            "{Group} is waiting for topic {Topic} to be created.", GroupId, Topics.PostViewed);
-
-                        Thread.Sleep(TimeSpan.FromSeconds(5));
-
-                        continue;
-                    }
-                    catch (ConsumeException ex)
-                    {
-                        _logger.LogWarning(ex, "{Group} consume failed; retrying.", GroupId);
-
-                        Thread.Sleep(TimeSpan.FromSeconds(2));
-
-                        continue;
-                    }
-
-                    if (result?.Message?.Value is not null && TryRead(result) is { } view)
-                    {
-                        batch.Add(view);
-                    }
-
-                    var full = batch.Count >= Options.BatchSize;
-                    var stale = batch.Count > 0 && DateTime.UtcNow - batchStarted > Options.BatchLinger;
-
-                    if (!full && !stale)
-                    {
-                        continue;
-                    }
-
-                    using (var activity = StartBatchSpan(batch.Count))
-                    {
-                        if (Store(batch, stoppingToken))
-                        {
-                            consumer.Commit();
-                        }
-                        else
-                        {
-                            activity?.SetStatus(ActivityStatusCode.Error, "batch not stored");
-
-                            Thread.Sleep(TimeSpan.FromSeconds(5));
-                        }
-                    }
-                    batch.Clear();
-                    batchStarted = DateTime.UtcNow;
-                }
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            finally
-            {
-                consumer.Close();
-            }
-        }
-
-        private bool Store(List<PostView> batch, CancellationToken cancellationToken)
-        {
-            if (batch.Count == 0)
-            {
-                return true;
-            }
-
-            try
-            {
-                using var scope = _scopes.CreateScope();
-
-                return HandleAsync(scope.ServiceProvider, batch, cancellationToken).GetAwaiter().GetResult();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "{Group} could not store {Count} view(s); redelivering.", GroupId, batch.Count);
-
-                return false;
-            }
-        }
-
-        private Activity? StartBatchSpan(int size)
-        {
-            var activity = KafkaTracing.StartConsume(Topics.PostViewed, GroupId, _lastParent);
-
-            activity?.SetTag("messaging.batch.message_count", size);
-
-            return activity;
-        }
-
-        private PostView? TryRead(ConsumeResult<string, byte[]> result)
-        {
-            _lastParent = KafkaTracing.Extract(key =>
-                result.Message.Headers is not null
-                && result.Message.Headers.TryGetLastBytes(key, out var raw)
-                    ? Encoding.UTF8.GetString(raw)
-                    : null);
-
             try
             {
                 var viewed = JsonSerializer.Deserialize<PostViewedEvent>(
@@ -244,9 +67,9 @@ namespace Blog.Analytics.Infrastructure.Messaging
         protected override string GroupId => Options.RawViewsGroup;
 
         protected override async Task<bool> HandleAsync(
-            IServiceProvider services, IReadOnlyList<PostView> batch, CancellationToken cancellationToken)
+            IServiceProvider services, ConsumedBatch<PostView> batch, CancellationToken cancellationToken)
         {
-            await services.GetRequiredService<IViewStore>().RecordManyAsync(batch, cancellationToken);
+            await services.GetRequiredService<IViewStore>().RecordManyAsync(batch.Items, cancellationToken);
 
             return true;
         }
@@ -263,9 +86,101 @@ namespace Blog.Analytics.Infrastructure.Messaging
         protected override string GroupId => Options.TrendingGroup;
 
         protected override async Task<bool> HandleAsync(
-            IServiceProvider services, IReadOnlyList<PostView> batch, CancellationToken cancellationToken)
+            IServiceProvider services, ConsumedBatch<PostView> batch, CancellationToken cancellationToken)
         {
-            await services.GetRequiredService<ITrendingStore>().IncrementManyAsync(batch, cancellationToken);
+            await services.GetRequiredService<ITrendingStore>().IncrementManyAsync(batch.Items, cancellationToken);
+
+            return true;
+        }
+    }
+
+    // A third group on the view topic with its own offsets: ClickHouse falling behind, or being down,
+    // never slows the Mongo or Redis writers.
+    public class OlapViewConsumer : ViewConsumer
+    {
+        private readonly IOlapSink _sink;
+
+        public OlapViewConsumer(
+            IServiceScopeFactory scopes,
+            IOptions<AnalyticsOptions> options,
+            IOlapSink sink,
+            ILogger<OlapViewConsumer> logger)
+            : base(scopes, options, logger)
+        {
+            _sink = sink;
+        }
+
+        protected override string GroupId => Options.OlapViewsGroup;
+
+        protected override bool IsEnabled => base.IsEnabled && _sink.IsConfigured;
+
+        protected override async Task<bool> HandleAsync(
+            IServiceProvider services, ConsumedBatch<PostView> batch, CancellationToken cancellationToken)
+        {
+            await _sink.WriteViewsAsync(batch.Items, batch.Id, cancellationToken);
+
+            return true;
+        }
+    }
+
+    public class OlapClapConsumer : BatchConsumer<ClapEvent>
+    {
+        private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+        private readonly IOlapSink _sink;
+        private readonly ILogger<OlapClapConsumer> _logger;
+
+        public OlapClapConsumer(
+            IServiceScopeFactory scopes,
+            IOptions<AnalyticsOptions> options,
+            IOlapSink sink,
+            ILogger<OlapClapConsumer> logger)
+            : base(scopes, options, logger)
+        {
+            _sink = sink;
+            _logger = logger;
+        }
+
+        protected override string Topic => Topics.PostClapped;
+
+        protected override string GroupId => Options.OlapClapsGroup;
+
+        protected override bool IsEnabled => base.IsEnabled && _sink.IsConfigured;
+
+        protected override ClapEvent? Parse(ConsumeResult<string, byte[]> result)
+        {
+            try
+            {
+                var clapped = JsonSerializer.Deserialize<PostClappedEvent>(
+                    Encoding.UTF8.GetString(result.Message.Value), Json);
+
+                if (clapped is null)
+                {
+                    return null;
+                }
+
+                return new ClapEvent
+                {
+                    EventId = clapped.EventId.ToString(),
+                    PostId = clapped.PostId,
+                    UserId = clapped.UserId,
+                    Delta = clapped.Delta,
+                    FirstClap = clapped.FirstClap,
+                    ClappedAt = clapped.OccurredAt
+                };
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "{Group} discarding unreadable message at {Offset}.", GroupId, result.TopicPartitionOffset);
+
+                return null;
+            }
+        }
+
+        protected override async Task<bool> HandleAsync(
+            IServiceProvider services, ConsumedBatch<ClapEvent> batch, CancellationToken cancellationToken)
+        {
+            await _sink.WriteClapsAsync(batch.Items, batch.Id, cancellationToken);
 
             return true;
         }

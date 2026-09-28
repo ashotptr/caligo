@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using Blog.Api.Dtos;
+using Blog.Posts.Application.Claps;
 using Blog.Posts.Application.Common;
 using Blog.Posts.Application.Posts;
 
@@ -14,10 +15,12 @@ namespace Blog.Api.Controllers;
 public class BlogPostsController : ControllerBase
 {
     private readonly PostService _posts;
+    private readonly ClapService _claps;
 
-    public BlogPostsController(PostService posts)
+    public BlogPostsController(PostService posts, ClapService claps)
     {
         _posts = posts;
+        _claps = claps;
     }
 
     [HttpGet]
@@ -29,8 +32,17 @@ public class BlogPostsController : ControllerBase
         Respond(await _posts.GetPageAsync(cursor, limit, mine, CurrentCaller(), cancellationToken));
 
     [HttpGet("{id}")]
-    public async Task<IActionResult> GetBlogPost(int id, CancellationToken cancellationToken) =>
-        Respond(await _posts.GetAsync(id, CurrentView(), CurrentCaller(), cancellationToken));
+    public async Task<IActionResult> GetBlogPost(int id, CancellationToken cancellationToken)
+    {
+        var result = await _posts.GetAsync(id, CurrentView(), CurrentCaller(), cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            Response.Headers.ETag = ETag(result.Value!.Version);
+        }
+
+        return Respond(result);
+    }
 
     [HttpGet("search")]
     public async Task<IActionResult> SearchBlogPosts(
@@ -55,6 +67,9 @@ public class BlogPostsController : ControllerBase
             : Respond(result);
     }
 
+    // If-Match makes the write conditional: a client that sends the ETag it read gets 412 instead of
+    // silently overwriting a newer version. Without the header, a concurrent change between this
+    // request's read and write still fails with 409 rather than being lost.
     [HttpPut("{id}")]
     [Authorize]
     public async Task<IActionResult> PutBlogPost(int id, BlogPostDto blogPostDto, CancellationToken cancellationToken)
@@ -64,15 +79,53 @@ public class BlogPostsController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        return Respond(await _posts.UpdateAsync(id, ToCommand(blogPostDto), CurrentCaller(), cancellationToken));
+        var command = ToCommand(blogPostDto) with { ExpectedVersion = ExpectedVersion() };
+
+        return Respond(await _posts.UpdateAsync(id, command, CurrentCaller(), cancellationToken));
     }
 
     [HttpDelete("{id}")]
     [Authorize]
     public async Task<IActionResult> DeleteBlogPost(int id, CancellationToken cancellationToken) =>
-        Respond(await _posts.DeleteAsync(id, CurrentCaller(), cancellationToken));
+        Respond(await _posts.DeleteAsync(id, CurrentCaller(), ExpectedVersion(), cancellationToken));
 
-    private static WritePostCommand ToCommand(BlogPostDto dto) => new(dto.Title, dto.Content, dto.Tags);
+    [HttpPost("{id}/claps")]
+    [Authorize]
+    public async Task<IActionResult> Clap(int id, ClapDto clap, CancellationToken cancellationToken) =>
+        Respond(await _claps.ClapAsync(id, clap.Count, CurrentCaller(), cancellationToken));
+
+    [HttpGet("{id}/claps")]
+    public async Task<IActionResult> GetClaps(int id, CancellationToken cancellationToken) =>
+        Respond(await _claps.TallyAsync(id, CurrentCaller(), cancellationToken));
+
+    [HttpGet("claps/audit")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> AuditClaps([FromQuery] int? postId, CancellationToken cancellationToken) =>
+        Ok(await _claps.AuditAsync(postId, cancellationToken));
+
+    private static WritePostCommand ToCommand(BlogPostDto dto) =>
+        new(dto.Title, dto.Content, dto.Tags, dto.PublishAt?.UtcDateTime);
+
+    private static string ETag(int version) => $"\"{version}\"";
+
+    // The version an If-Match header demands: null when it is absent or "*", and -1 when it holds
+    // something that is not one of our ETags, which can never match, so the write is refused with 412.
+    private int? ExpectedVersion()
+    {
+        var header = Request.Headers.IfMatch.ToString().Trim();
+
+        if (header.Length == 0 || header == "*")
+        {
+            return null;
+        }
+
+        if (header.StartsWith("W/", StringComparison.Ordinal))
+        {
+            header = header[2..];
+        }
+
+        return int.TryParse(header.Trim('"'), out var version) ? version : -1;
+    }
 
     private Caller CurrentCaller() =>
         new(User.FindFirstValue(ClaimTypes.NameIdentifier), User.IsInRole("Admin"));
@@ -100,20 +153,23 @@ public class BlogPostsController : ControllerBase
     private IActionResult Respond<T>(Result<T> result) => result.Status switch
     {
         ResultStatus.Ok => Ok(result.Value),
-        ResultStatus.NotFound => NotFound(),
-        ResultStatus.Forbidden => Forbid(),
-        ResultStatus.Unauthorized => Unauthorized(),
-        ResultStatus.Invalid => BadRequest(result.Error),
-        _ => StatusCode(StatusCodes.Status500InternalServerError)
+        _ => Failure(result.Status, result.Error)
     };
 
     private IActionResult Respond(Result result) => result.Status switch
     {
         ResultStatus.Ok => NoContent(),
+        _ => Failure(result.Status, result.Error)
+    };
+
+    private IActionResult Failure(ResultStatus status, string? error) => status switch
+    {
         ResultStatus.NotFound => NotFound(),
         ResultStatus.Forbidden => Forbid(),
         ResultStatus.Unauthorized => Unauthorized(),
-        ResultStatus.Invalid => BadRequest(result.Error),
+        ResultStatus.Invalid => BadRequest(error),
+        ResultStatus.Conflict => Conflict(error),
+        ResultStatus.PreconditionFailed => StatusCode(StatusCodes.Status412PreconditionFailed, error),
         _ => StatusCode(StatusCodes.Status500InternalServerError)
     };
 }

@@ -1,0 +1,9 @@
+# Replaces the root .dockerignore (which leaves tests/ out) for this Dockerfile: only what the
+# load generator needs goes into the build context.
+*
+!Directory.Packages.props
+!src/shared/Blog.Contracts/
+!tests/Blog.LoadTests/
+**/bin/
+**/obj/
+tests/Blog.LoadTests/reports/
