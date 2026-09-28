@@ -1,7 +1,10 @@
 using System.Data.Common;
+using System.Runtime.ExceptionServices;
 using ClickHouse.Client.ADO;
 using ClickHouse.Client.Copy;
 using ClickHouse.Client.Utility;
+using DbUp;
+using DbUp.ClickHouse;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Blog.Analytics.Core.Olap;
@@ -35,20 +38,38 @@ namespace Blog.Analytics.Infrastructure.Stores
 
         public bool IsConfigured => _options.Enabled;
 
-        public async Task EnsureSchemaAsync(CancellationToken cancellationToken = default)
+        // DbUp runs each script in Stores/ClickHouseMigrations once, in name order, and records it in a
+        // schemaversions table, so a restart skips what is already applied. ClickHouse has no DDL
+        // transactions and two replicas starting together may both run a script, hence IF NOT EXISTS
+        // in the scripts; a replica that trips over the other is retried by the initializer.
+        // PerformUpgrade blocks, so it runs off the caller's thread and startup does not wait on it.
+        public Task EnsureSchemaAsync(CancellationToken cancellationToken = default)
         {
-            using var connection = Connect();
-
-            foreach (var statement in SchemaStatements())
+            if (!_options.Enabled)
             {
-                using var command = connection.CreateCommand();
-
-                command.CommandText = statement;
-
-                await command.ExecuteNonQueryAsync(cancellationToken);
+                throw new InvalidOperationException("ConnectionStrings:ClickHouse is not configured.");
             }
 
-            _logger.LogInformation("ClickHouse schema is in place.");
+            return Task.Run(() =>
+            {
+                var result = DeployChanges.To
+                    .ClickHouseDatabase(_options.ConnectionString)
+                    .WithScriptsEmbeddedInAssembly(
+                        typeof(ClickHouseOlapStore).Assembly,
+                        name => name.StartsWith("ClickHouseMigrations.", StringComparison.Ordinal))
+                    .WithoutTransaction()
+                    .LogTo(_logger)
+                    .Build()
+                    .PerformUpgrade();
+
+                if (!result.Successful)
+                {
+                    ExceptionDispatchInfo.Throw(result.Error);
+                }
+
+                _logger.LogInformation(
+                    "ClickHouse schema is in place; {Count} new script(s) applied.", result.Scripts.Count());
+            }, cancellationToken);
         }
 
         public Task WriteViewsAsync(
@@ -252,25 +273,6 @@ namespace Blog.Analytics.Infrastructure.Stores
             }
 
             return new ClickHouseConnection(_options.ConnectionString);
-        }
-
-        private static IEnumerable<string> SchemaStatements()
-        {
-            using var stream = typeof(ClickHouseOlapStore).Assembly
-                .GetManifestResourceStream("Blog.Analytics.Infrastructure.Stores.ClickHouseSchema.sql")
-                ?? throw new InvalidOperationException("The ClickHouse schema resource is missing.");
-
-            using var reader = new StreamReader(stream);
-
-            var lines = reader.ReadToEnd()
-                .Split('\n')
-                .Where(line => !line.TrimStart().StartsWith("--", StringComparison.Ordinal));
-
-            return string.Join('\n', lines)
-                .Split(';')
-                .Select(statement => statement.Trim())
-                .Where(statement => statement.Length > 0)
-                .ToList();
         }
 
         private static Guid EventId(string value) => Guid.TryParse(value, out var id) ? id : Guid.Empty;

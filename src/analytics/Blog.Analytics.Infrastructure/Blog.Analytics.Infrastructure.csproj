@@ -15,6 +15,7 @@
   <ItemGroup>
     <PackageReference Include="ClickHouse.Client" />
     <PackageReference Include="Confluent.Kafka" />
+    <PackageReference Include="dbup-clickhouse" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
@@ -26,7 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Stores/ClickHouseSchema.sql" LogicalName="Blog.Analytics.Infrastructure.Stores.ClickHouseSchema.sql" />
+    <!-- DbUp runs these once each, in name order: add a new numbered script, never edit an applied one. -->
+    <EmbeddedResource Include="Stores/ClickHouseMigrations/*.sql" LogicalName="ClickHouseMigrations.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

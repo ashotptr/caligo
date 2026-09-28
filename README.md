@@ -110,6 +110,11 @@ GET /api/analytics/posts/{id}/funnel?days=7                 Admin, Writer
 The funnel lines up views, unique visitors, clappers and claps for one post,
 across both streams.
 
+The tables and views come from numbered scripts in
+`src/analytics/Blog.Analytics.Infrastructure/Stores/ClickHouseMigrations`. DbUp
+applies them at startup and records each one in `schemaversions`, so every
+script runs once. A schema change is a new script, never an edit to an old one.
+
 **RabbitMQ.** Three exchanges and five queues:
 
 ```
@@ -184,7 +189,7 @@ form.
 
 ## Tests
 
-123 tests run without Docker. The 55 integration tests start real PostgreSQL,
+123 tests run without Docker. The 56 integration tests start real PostgreSQL,
 Kafka, MongoDB, Redis and ClickHouse with Testcontainers and need it.
 
 ## Load tests

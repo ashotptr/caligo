@@ -38,6 +38,20 @@ public class ClickHouseOlapTests : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
+    // InitializeAsync has already applied the schema for this and every earlier test; the journal
+    // must still hold each embedded script exactly once.
+    [Fact]
+    public async Task ApplyingTheSchemaAgain_RunsNoScriptTwice()
+    {
+        await _store.EnsureSchemaAsync();
+
+        var scripts = typeof(ClickHouseOlapStore).Assembly.GetManifestResourceNames()
+            .Count(name => name.StartsWith("ClickHouseMigrations.", StringComparison.Ordinal));
+
+        Assert.True(scripts > 0);
+        Assert.Equal(scripts, await ScalarAsync("SELECT count() FROM schemaversions"));
+    }
+
     [Fact]
     public async Task WritingTheSameBatchTwice_StoresItOnce_InTheRawTableAndTheRollup()
     {
