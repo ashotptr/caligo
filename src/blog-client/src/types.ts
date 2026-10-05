@@ -4,6 +4,8 @@ export interface PagedResult<T> {
   hasMore: boolean;
 }
 
+export type PostStatus = 'published' | 'scheduled';
+
 export interface PostSummary {
   id: number;
   title: string;
@@ -11,6 +13,8 @@ export interface PostSummary {
   publishedDate: string;
   authorName: string;
   tags: string[];
+  status: PostStatus;
+  scheduledFor: string | null;
 }
 
 export interface PostDetail {
@@ -21,6 +25,65 @@ export interface PostDetail {
   authorName: string;
   authorId: string | null;
   tags: string[];
+  status: PostStatus;
+  scheduledFor: string | null;
+  version: number;
+}
+
+export interface ClapTally {
+  total: number;
+  clappers: number;
+  mine: number;
+}
+
+export interface ClapResult {
+  applied: number;
+  mine: number;
+  max: number;
+}
+
+export type SeriesBucket = 'minute' | 'hour' | 'day';
+
+export interface SeriesPoint {
+  bucketStart: string;
+  views: number;
+  uniqueVisitors: number;
+  claps: number;
+}
+
+export interface SeriesResponse {
+  postId: number;
+  bucket: SeriesBucket;
+  from: string;
+  to: string;
+  enabled: boolean;
+  points: SeriesPoint[];
+}
+
+export interface FunnelResponse {
+  postId: number;
+  days: number;
+  enabled: boolean;
+  views: number;
+  uniqueVisitors: number;
+  clappers: number;
+  claps: number;
+  clapperRate: number;
+}
+
+export interface WindowPost {
+  postId: number;
+  title: string;
+  views: number;
+  uniqueVisitors: number;
+  claps: number;
+}
+
+export interface TopWindowResponse {
+  enabled: boolean;
+  minutes: number;
+  by: 'views' | 'claps';
+  posts: WindowPost[];
 }
 
 export interface PostStats {

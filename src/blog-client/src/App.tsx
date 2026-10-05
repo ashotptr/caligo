@@ -5,6 +5,7 @@ import RequireRole from './components/RequireRole';
 import PostsListPage from './pages/PostsListPage';
 import PostDetailPage from './pages/PostDetailPage';
 import PostEditorPage from './pages/PostEditorPage';
+import PostStatsPage from './pages/PostStatsPage';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -52,6 +53,7 @@ const App = () => {
           <Route element={<RequireRole roles={['Admin', 'Writer']} />}>
             <Route path="/posts/new" element={<PostEditorPage />} />
             <Route path="/posts/:id/edit" element={<PostEditorPage />} />
+            <Route path="/posts/:id/stats" element={<PostStatsPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

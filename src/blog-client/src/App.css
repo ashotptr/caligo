@@ -502,3 +502,282 @@ button:disabled {
   margin-top: 2rem;
   padding-top: 1.2rem;
 }
+
+.notice {
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: #fff;
+  padding: 0.7rem 1rem;
+  margin: 1rem 0;
+  font-size: 0.92rem;
+}
+
+.notice.warning {
+  border-left-color: var(--danger);
+}
+
+.notice p {
+  margin: 0 0 0.4rem;
+}
+
+.notice p:last-child {
+  margin-bottom: 0;
+}
+
+.badge {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.05rem 0.55rem;
+  white-space: nowrap;
+}
+
+.badge-scheduled {
+  color: var(--accent);
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 1rem 0 0;
+}
+
+.tabs button {
+  background: none;
+  color: var(--ink-soft);
+  border: 1px solid var(--hairline);
+  padding: 0.25rem 0.8rem;
+  font-size: 0.82rem;
+}
+
+.tabs button:hover {
+  background: #fff;
+  color: var(--ink);
+}
+
+.tabs button[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.claps {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 2.5rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--hairline);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+
+.clap-button {
+  border-radius: 999px;
+  padding: 0.45rem 1.3rem;
+}
+
+.clap-button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.clap-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.claps .form-error {
+  margin: 0;
+}
+
+.schedule-field {
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: #fff;
+  padding: 0.6rem 0.9rem 0.8rem;
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.schedule-field legend {
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+  padding: 0 0.3rem;
+}
+
+.editor-form .schedule-field label.choice {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  color: var(--ink);
+}
+
+.editor-form .schedule-field input[type='datetime-local'] {
+  padding: 0.3rem 0.5rem;
+}
+
+.schedule-field .hint {
+  margin: 0;
+}
+
+.stats-page h1 {
+  margin: 0.75rem 0 0;
+  font-size: 1.6rem;
+  line-height: 1.3;
+}
+
+.stats-page h1 a {
+  color: var(--ink);
+}
+
+.stats-section {
+  margin-top: 2.25rem;
+}
+
+.stats-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.stats-section h2 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.stats-section-header .tabs {
+  margin: 0;
+}
+
+.series {
+  margin: 0.9rem 0 0;
+}
+
+.series-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+}
+
+.series-gridline {
+  stroke: var(--hairline);
+}
+
+.series-axis {
+  font-family: var(--mono);
+  font-size: 10px;
+  fill: var(--ink-soft);
+}
+
+.series-hit {
+  fill: transparent;
+}
+
+.series-bar {
+  fill: var(--accent);
+  opacity: 0.65;
+}
+
+.series-slot:hover .series-bar {
+  opacity: 1;
+}
+
+.series-slot:hover .series-hit {
+  fill: rgba(29, 78, 216, 0.06);
+}
+
+.series-line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.series-legend {
+  display: flex;
+  gap: 1.2rem;
+  margin-top: 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.legend-swatch {
+  display: inline-block;
+  margin-right: 0.35rem;
+}
+
+.legend-swatch.legend-views {
+  width: 0.7rem;
+  height: 0.7rem;
+  background: var(--accent);
+  opacity: 0.65;
+  vertical-align: -0.05rem;
+}
+
+.legend-swatch.legend-claps {
+  width: 0.9rem;
+  height: 2px;
+  background: var(--ink);
+  vertical-align: 0.2rem;
+}
+
+.funnel-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0.9rem 0 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.funnel-steps li {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr 4.5rem;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.funnel-label {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.funnel-track {
+  height: 0.8rem;
+  background: #efede8;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.funnel-bar {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  opacity: 0.7;
+}
+
+.funnel-value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.top-now-panel .link-button[aria-pressed='true'] {
+  color: var(--ink);
+  font-weight: 700;
+}

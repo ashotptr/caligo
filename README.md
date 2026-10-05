@@ -152,6 +152,7 @@ lookups a 150 ms deadline and the three ClickHouse queries 2 s.
 - gRPC unary, batch and server streaming, bridged to SSE for the browser
 - Tracing with the `traceparent` stored on the outbox row
 - Full-text search on a GIN index with weighted ranking, and keyset paging
+- React client with batched claps, post scheduling, an edit-conflict banner and a per-post stats page
 - NBomber load tests for view spikes, clap storms, fan-out, publish bursts and hot rows
 
 ## Configuration

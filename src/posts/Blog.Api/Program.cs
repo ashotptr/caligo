@@ -42,9 +42,11 @@ builder.Services.AddCors(options =>
 
     options.AddDefaultPolicy(policy =>
     {
+        // The editor sends a post's ETag back as If-Match; browsers hide it from other origins unless exposed.
         policy.WithOrigins(allowedOrigins.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .WithExposedHeaders("ETag");
     });
 });
 
