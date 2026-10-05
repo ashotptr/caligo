@@ -6,8 +6,6 @@ import type { TopWindowResponse, WindowPost } from '../types';
 const WINDOW_MINUTES = 60;
 const REFRESH_MS = 30_000;
 
-// The most read or most clapped posts of the last hour, from ClickHouse, exact to the minute.
-// Hidden when analytics storage isn't configured.
 const TopNowPanel = () => {
   const [by, setBy] = useState<'views' | 'claps'>('views');
   const [top, setTop] = useState<TopWindowResponse | null>(null);
@@ -39,7 +37,6 @@ const TopNowPanel = () => {
     return null;
   }
 
-  // Ranked by claps, posts that were read but not clapped come back with 0; they aren't "top".
   const score = (post: WindowPost) => (top.by === 'claps' ? post.claps : post.views);
   const ranked = top.posts.filter(post => score(post) > 0);
 

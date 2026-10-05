@@ -1,11 +1,5 @@
 namespace Blog.LoadTests;
 
-// Everything the load tests talk to. Defaults match deploy/compose/docker-compose.yml, so a local
-// run needs no configuration; each value can be overridden with the environment variable named.
-// The load-tests compose service sets them to the in-network names instead.
-//
-// 127.0.0.1 rather than localhost: on Windows localhost resolves to ::1 first, and WSL's relay
-// accepts IPv6 connections to published ports without forwarding them, so every client hangs.
 public sealed class LoadTestSettings
 {
     public string SiteUrl { get; } = Env("BLOG_URL", "http://127.0.0.1:8080");
@@ -26,7 +20,6 @@ public sealed class LoadTestSettings
     public string NotificationsDb { get; } = Env(
         "BLOG_NOTIFICATIONS_DB", "Host=127.0.0.1;Port=5432;Database=blognotifications;Username=postgres;Password=postgres");
 
-    // A scratch database the hot-row scenario creates for itself.
     public string LabDb { get; } = Env(
         "BLOG_LAB_DB", "Host=127.0.0.1;Port=5432;Database=bloglab;Username=postgres;Password=postgres;Maximum Pool Size=300");
 
@@ -41,7 +34,6 @@ public sealed class LoadTestSettings
         Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : fallback;
 }
 
-// "--rate 300 --seconds 30" style options after the scenario name.
 public sealed class CommandOptions
 {
     private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase);

@@ -85,9 +85,6 @@ namespace Blog.Posts.Infrastructure.Messaging
                 return 0;
             }
 
-            // All sends are handed to the producer before any is awaited, so librdkafka can pack the
-            // batch into a few produce requests instead of one round trip per row. Messages are
-            // enqueued in claim order and the producer is idempotent, so each partition keeps its order.
             await Task.WhenAll(batch.Select(message => SendAsync(message, cancellationToken)).ToList());
 
             await context.SaveChangesAsync(cancellationToken);

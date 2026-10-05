@@ -16,10 +16,6 @@ namespace Blog.Posts.Infrastructure.Claps
         public int RollupBatchSize { get; set; } = 5000;
     }
 
-    // Folds the clap queue into the per-post totals, the way a sportsbook settles a finished match:
-    // many small writes accepted cheaply at request time, applied in bulk afterwards. Every API
-    // replica runs this loop; SKIP LOCKED hands each one a disjoint batch, so they drain a spike in
-    // parallel without folding any delta twice.
     public class ClapRollupWorker : BackgroundService
     {
         private const int MaxAttempts = 5;
@@ -80,7 +76,6 @@ namespace Blog.Posts.Infrastructure.Claps
             }
         }
 
-        // Returns how many deltas were folded. Public so tests and load tests can drain the queue.
         public async Task<int> FoldBatchAsync(CancellationToken cancellationToken = default)
         {
             for (var attempt = 1; ; attempt++)
@@ -106,13 +101,6 @@ namespace Blog.Posts.Infrastructure.Claps
 
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-            // One statement, one transaction:
-            //  - claim the oldest deltas nobody else holds (SKIP LOCKED) and delete them;
-            //  - drop deltas whose post was deleted meanwhile;
-            //  - add each post's sum to its total. Input is sorted by post id, so two replicas
-            //    always lock totals rows in the same order and cannot deadlock each other.
-            // If a post is deleted between the EXISTS check and the insert, the foreign key rejects
-            // the statement, it rolls back as a whole, and the retry drops that post's deltas.
             var result = await context.Database.SqlQuery<FoldResult>($"""
                 WITH batch AS (
                     DELETE FROM clap_deltas

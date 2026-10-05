@@ -42,9 +42,6 @@ public class NotificationsRelayTests : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    // The fan-out for one post fails once, before it has claimed anything, and the next post on the
-    // same partition goes through. The relay used to move on to that next post, whose commit then
-    // covered the failed one's offset, so the first post was never announced to anyone.
     [Fact]
     public async Task AnEventWhoseFanOutFailed_IsRelayedAgain_NotSkippedByTheNextOne()
     {
@@ -124,8 +121,6 @@ public class NotificationsRelayTests : IAsyncLifetime
         }
     }
 
-    // Commits the group's offsets at the current end of the topic, so the relay reads only the
-    // events this test publishes and not every post the other tests have announced.
     private void StartGroupAtTheEnd(string group)
     {
         using var consumer = new ConsumerBuilder<Ignore, Ignore>(new ConsumerConfig
@@ -146,7 +141,6 @@ public class NotificationsRelayTests : IAsyncLifetime
         consumer.Close();
     }
 
-    // Both on partition 0, in order: the failed event's offset comes right before the next one.
     private async Task PublishToOnePartitionAsync(params PostPublishedEvent[] events)
     {
         using var producer = new ProducerBuilder<string, byte[]>(
@@ -219,7 +213,6 @@ public class NotificationsRelayTests : IAsyncLifetime
         return false;
     }
 
-    // Trips once, for one post; shared by every scope the relay creates.
     private sealed class ClaimFailure
     {
         private readonly int _postId;
@@ -233,7 +226,6 @@ public class NotificationsRelayTests : IAsyncLifetime
         public bool Trip(int postId) => postId == _postId && Interlocked.Exchange(ref _tripped, 1) == 0;
     }
 
-    // The database failing once, as the relay claims the first post's deliveries.
     private sealed class FailingOnceLedger : IDeliveryLedger
     {
         private readonly IDeliveryLedger _inner;

@@ -6,7 +6,6 @@ using System.Text.Json;
 
 namespace Blog.LoadTests;
 
-// The site as a client sees it: every request goes through nginx, like a browser's would.
 public sealed class BlogApi : IDisposable
 {
     private readonly LoadTestSettings _settings;
@@ -69,8 +68,6 @@ public sealed class BlogApi : IDisposable
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
 
-    // HS256 with the same key, issuer and audience as the API. Readers need no account row: claps
-    // key on the user id in the token, so thousands of distinct readers cost nothing to set up.
     public string MintToken(string userId, params string[] roles)
     {
         var now = DateTimeOffset.UtcNow;

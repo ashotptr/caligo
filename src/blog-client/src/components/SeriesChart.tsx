@@ -11,7 +11,6 @@ const STEP_MS: Record<SeriesBucket, number> = {
   day: 24 * 60 * 60 * 1000
 };
 
-// Guards the loop below against a range that would produce an unreadable number of bars.
 const MAX_BUCKETS = 400;
 
 interface Bucket {
@@ -21,8 +20,6 @@ interface Bucket {
   claps: number;
 }
 
-// ClickHouse returns only the buckets that had events; the chart shows the empty ones too.
-// Buckets start on UTC boundaries, like ClickHouse's toStartOfInterval on a UTC column.
 const fillBuckets = (points: SeriesPoint[], bucket: SeriesBucket, from: string, to: string): Bucket[] => {
   const step = STEP_MS[bucket];
   const byStart = new Map(points.map(point => [parseServerDate(point.bucketStart).getTime(), point]));
@@ -62,7 +59,6 @@ interface SeriesChartProps {
   to: string;
 }
 
-// Views as bars on the left scale, claps as a line on the right one. Hovering a bucket shows its numbers.
 const SeriesChart = ({ points, bucket, from, to }: SeriesChartProps) => {
   const buckets = fillBuckets(points, bucket, from, to);
 

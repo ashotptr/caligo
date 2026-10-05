@@ -15,7 +15,6 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
     [Migration("20250801115846_InitialPostgresMigration")]
     partial class InitialPostgresMigration
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

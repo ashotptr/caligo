@@ -3,9 +3,6 @@ using NpgsqlTypes;
 
 namespace Blog.LoadTests.Scenarios;
 
-// Thousands of posts scheduled for the same second, the top-of-the-hour burst. Measures how long
-// the scheduled publishers (one per API replica) take to publish all of them and how long the
-// outbox takes to deliver their post.published events, and checks each was announced exactly once.
 public static class ScheduledBurst
 {
     public static async Task<Summary> RunAsync(LoadTestSettings settings, CommandOptions options)
@@ -75,8 +72,6 @@ public static class ScheduledBurst
         return summary;
     }
 
-    // Inserted straight into the table: the burst being measured is the publishing, not 2,000 API
-    // calls to create the posts.
     private static async Task SchedulePostsAsync(LoadTestSettings settings, string run, int count, DateTime due)
     {
         var authorId = await AdminIdAsync(settings);

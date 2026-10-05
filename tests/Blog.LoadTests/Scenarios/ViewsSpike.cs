@@ -3,17 +3,12 @@ using NBomber.Http.CSharp;
 
 namespace Blog.LoadTests.Scenarios;
 
-// A new post goes viral: its cache entry starts cold and a spike of reads arrives at once.
-// Measures request latency, how many of those reads reached Postgres (single-flight should hold it
-// to about one per API replica), and how long until every counted view is queryable in ClickHouse.
 public static class ViewsSpike
 {
-    // The post-detail query EF generates; nothing else selects "Version" by id during this run.
     private const string DetailQuery = "%b.\"Version\"%FROM \"BlogPosts\" AS b%WHERE b.\"Id\" = $1%";
 
     public static async Task<Summary> RunAsync(LoadTestSettings settings, CommandOptions options)
     {
-        // A spike a laptop running the whole stack absorbs without errors; --rate for a bigger machine.
         var rate = options.Int("rate", 100);
         var seconds = options.Int("seconds", 30);
 
@@ -28,7 +23,6 @@ public static class ViewsSpike
 
         var scenario = Scenario.Create("views_spike", async context =>
         {
-            // Distinct user agents give distinct visitor hashes, so ClickHouse sees many readers.
             var request = Http.CreateRequest("GET", $"/api/BlogPosts/{postId}")
                 .WithHeader("User-Agent", $"blog-loadtest/{context.InvocationNumber % 5000}");
 
@@ -41,8 +35,6 @@ public static class ViewsSpike
 
         var stats = Runner.Run(settings, scenario);
 
-        // A request the client gave up on may still have been served, and its view recorded, so the
-        // stored count can land anywhere from the successful responses up to the requests sent.
         var counted = stats.Ok.Request.Count;
         var sent = Runner.Sent(stats);
 

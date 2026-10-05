@@ -4,9 +4,6 @@ using Xunit;
 
 namespace Blog.IntegrationTests.Concurrency;
 
-// What each isolation level does and does not allow on PostgreSQL, one anomaly per test. Every
-// interleaving is driven step by step on two connections. When a step must block, the test waits
-// until pg_stat_activity shows that backend waiting on a lock, instead of sleeping and hoping.
 [Collection(InfrastructureCollection.Name)]
 public class PostgresIsolationTests : IAsyncLifetime
 {
@@ -53,7 +50,6 @@ public class PostgresIsolationTests : IAsyncLifetime
         await using var write = await writer.BeginTransactionAsync();
         await ExecAsync(writer, write, "UPDATE accounts SET balance = 0 WHERE id = 1");
 
-        // PostgreSQL runs READ UNCOMMITTED as READ COMMITTED.
         await using var read = await reader.BeginTransactionAsync(IsolationLevel.ReadUncommitted);
 
         Assert.Equal(100, await ScalarAsync<int>(reader, read, "SELECT balance FROM accounts WHERE id = 1"));
@@ -76,8 +72,6 @@ public class PostgresIsolationTests : IAsyncLifetime
         Assert.Equal(secondRead, await ScalarAsync<int>(reader, read, "SELECT balance FROM accounts WHERE id = 1"));
     }
 
-    // PostgreSQL's REPEATABLE READ is snapshot isolation, so it also rules out the phantoms the SQL
-    // standard still permits at that level.
     [Theory]
     [InlineData(IsolationLevel.ReadCommitted, 1)]
     [InlineData(IsolationLevel.RepeatableRead, 0)]
@@ -115,7 +109,6 @@ public class PostgresIsolationTests : IAsyncLifetime
         await ExecAsync(second, two, $"UPDATE accounts SET balance = {seenByTwo - 20} WHERE id = 1");
         await two.CommitAsync();
 
-        // 100 - 10 - 20 should be 70; the first withdrawal vanished.
         Assert.Equal(80, await BalanceAsync());
     }
 
@@ -152,7 +145,6 @@ public class PostgresIsolationTests : IAsyncLifetime
 
         await ExecAsync(first, one, "UPDATE accounts SET balance = balance - 10 WHERE id = 1");
 
-        // Waits for the first transaction's row lock, then re-reads the committed row before applying.
         var blocked = ExecAsync(second, two, "UPDATE accounts SET balance = balance - 20 WHERE id = 1");
 
         await WaitUntilBlockedAsync(second.ProcessID);
@@ -191,8 +183,6 @@ public class PostgresIsolationTests : IAsyncLifetime
         Assert.Equal(70, await BalanceAsync());
     }
 
-    // The scheduling quota: count an author's scheduled posts, insert only if under the limit. Two
-    // such transactions read the same count and write rows the other's count should have included.
     [Fact]
     public async Task CountThenInsert_AtRepeatableRead_OverfillsTheQuota()
     {
@@ -214,8 +204,6 @@ public class PostgresIsolationTests : IAsyncLifetime
         Assert.Equal(1, await ScheduledCountAsync());
     }
 
-    // The clap audit reads totals, then pending. A rollup moving 40 claps from pending to totals
-    // between the two reads makes a READ COMMITTED audit see 60 + 0; one snapshot sees 100 either way.
     [Theory]
     [InlineData(IsolationLevel.ReadCommitted, 60)]
     [InlineData(IsolationLevel.RepeatableRead, 100)]

@@ -21,7 +21,6 @@ namespace Blog.Posts.Infrastructure.Messaging
 
         public TimeSpan Deadline { get; set; } = TimeSpan.FromMilliseconds(150);
 
-        // Rollup queries scan more than a single-post lookup, so they get their own budget.
         public TimeSpan OlapDeadline { get; set; } = TimeSpan.FromSeconds(2);
     }
 

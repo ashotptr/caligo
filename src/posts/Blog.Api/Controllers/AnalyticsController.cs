@@ -103,7 +103,6 @@ public class AnalyticsController : ControllerBase
         });
     }
 
-    // Views, unique visitors and claps per minute, hour or day, from the ClickHouse rollups.
     [HttpGet("posts/{id}/series")]
     public async Task<IActionResult> Series(
         int id,
@@ -139,7 +138,6 @@ public class AnalyticsController : ControllerBase
         });
     }
 
-    // Top posts over the last N minutes, exact to the minute.
     [HttpGet("top/window")]
     [Authorize(Roles = "Admin,Writer")]
     public async Task<IActionResult> TopInWindow(
@@ -181,7 +179,6 @@ public class AnalyticsController : ControllerBase
         });
     }
 
-    // Views -> unique visitors -> clappers -> claps for one post, joining the two event streams.
     [HttpGet("posts/{id}/funnel")]
     [Authorize(Roles = "Admin,Writer")]
     public async Task<IActionResult> Funnel(int id, [FromQuery] int days = 7, CancellationToken cancellationToken = default)

@@ -16,15 +16,6 @@ namespace Blog.Posts.Infrastructure.Claps
         public override async Task<ClapOutcome?> ClapAsync(
             int postId, string userId, int count, CancellationToken cancellationToken = default)
         {
-            // One statement at READ COMMITTED, no read-then-write:
-            //  - ON CONFLICT DO UPDATE locks the reader's row and always works on its latest committed
-            //    version, so two racing requests from one reader are applied one after the other.
-            //  - The right-hand side of SET reads the row as it was before this update, so
-            //    LastApplied is exactly what this request added after the cap, and never more.
-            //  - The WHERE makes a capped reader a no-op instead of an update.
-            //  - The accepted delta is queued in the same statement, so the count and the queue can
-            //    never disagree. Nothing touches the post's total here: that row would be the hot
-            //    spot of a viral post, so ClapRollupWorker folds the queue into it in batches.
             List<AppliedRow> rows;
 
             try
@@ -71,11 +62,6 @@ namespace Blog.Posts.Infrastructure.Claps
 
         public override async Task<ClapAudit> AuditAsync(int? postId, CancellationToken cancellationToken = default)
         {
-            // The audit is three queries (per-reader sums, rolled-up totals, pending deltas) that must
-            // describe one moment. At READ COMMITTED each query takes its own snapshot: a rollup that
-            // commits between the second and third moves claps out of the queue after the totals were
-            // read, and the audit reports a mismatch that never existed. REPEATABLE READ runs all three
-            // on one snapshot without blocking writers. READ ONLY lets Postgres skip write bookkeeping.
             await using var transaction = await Context.Database.BeginTransactionAsync(
                 IsolationLevel.RepeatableRead, cancellationToken);
 

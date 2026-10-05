@@ -5,10 +5,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Blog.Posts.Infrastructure.Persistence.Migrations
 {
-    /// <inheritdoc />
     public partial class AddTransactionalOutbox : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -39,7 +37,6 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
                 filter: "\"ProcessedAt\" IS NULL");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

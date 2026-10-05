@@ -31,10 +31,6 @@ namespace Blog.Posts.Infrastructure.Persistence
 
             if (cursor is { } from)
             {
-                // On PostgreSQL the cursor is a row comparison, (PublishedDate, Id) < (@date, @id),
-                // which the btree index takes as its start key: a page deep in the feed begins reading
-                // at the cursor. The equivalent OR below is only a filter there, so every newer row is
-                // read and thrown away first. SQLite gets the portable form.
                 query = _context.Database.IsNpgsql()
                     ? query.Where(p => EF.Functions.LessThan(
                         ValueTuple.Create(p.PublishedDate, p.Id),
@@ -127,11 +123,6 @@ namespace Blog.Posts.Infrastructure.Persistence
         public async Task<bool> TryAddScheduledAsync(
             BlogPost post, int maxScheduledPerAuthor, CancellationToken cancellationToken = default)
         {
-            // "Count this author's scheduled posts, then insert one more" reads a set of rows and
-            // writes a row that set would include. Under READ COMMITTED or REPEATABLE READ two such
-            // transactions both count N-1, both insert, and the author ends up over the quota (write
-            // skew). SERIALIZABLE sees the read/write dependency cycle and aborts one with 40001; the
-            // retry then counts the other's row. Scheduling is rare, so the retries cost almost nothing.
             for (var attempt = 1; ; attempt++)
             {
                 try
@@ -181,8 +172,6 @@ namespace Blog.Posts.Infrastructure.Persistence
                     return await _context.SaveChangesAsync(cancellationToken);
                 }
 
-                // A caller that already opened a transaction (the scheduled publisher claims rows
-                // under one) gets the post and its outbox rows written inside it.
                 if (_context.Database.CurrentTransaction is not null)
                 {
                     return await SaveWithEventsAsync(sources, cancellationToken);

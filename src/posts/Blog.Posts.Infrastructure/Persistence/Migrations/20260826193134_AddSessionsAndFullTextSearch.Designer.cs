@@ -17,7 +17,6 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
     [Migration("20260826193134_AddSessionsAndFullTextSearch")]
     partial class AddSessionsAndFullTextSearch
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

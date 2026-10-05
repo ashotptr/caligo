@@ -33,17 +33,8 @@ namespace Blog.Analytics.Infrastructure.Messaging
         public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromSeconds(30);
     }
 
-    // The id is built from the topic, partition and offset range the batch covers, so the same
-    // messages always produce the same id and a store can use it to recognise a retried write.
     public sealed record ConsumedBatch<T>(IReadOnlyList<T> Items, string Id);
 
-    // Consumes a topic in micro-batches and commits offsets only after the batch is stored.
-    //
-    // A batch that fails to store is retried as the same batch, same items and same id, until it
-    // lands. Consumption is paused meanwhile, so a failing store gets backpressure instead of a
-    // growing backlog in memory, and the loop keeps polling so the group does not evict it. If the
-    // partitions are revoked while retrying, the batch is dropped: its offsets were never committed,
-    // so the new owner reads those messages again.
     public abstract class BatchConsumer<T> : BackgroundService where T : class
     {
         private readonly IServiceScopeFactory _scopes;
@@ -69,7 +60,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
 
         protected virtual bool IsEnabled => Options.Enabled;
 
-        // Returns null for a message that should be skipped (unreadable or not interesting).
         protected abstract T? Parse(ConsumeResult<string, byte[]> result);
 
         protected abstract Task<bool> HandleAsync(
@@ -107,7 +97,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
                 AllowAutoCreateTopics = false
             };
 
-            // Rebalance callbacks run inside Consume, on this thread, so they can touch the batch.
             using var consumer = new ConsumerBuilder<string, byte[]>(config)
                 .SetErrorHandler((_, error) => _logger.LogWarning("Kafka error in {Group}: {Reason}", GroupId, error.Reason))
                 .SetPartitionsAssignedHandler((_, partitions) =>
@@ -203,7 +192,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
             }
         }
 
-        // Returns true once the batch is stored (commit its offsets), false if it was abandoned.
         private bool StoreUntilDone(IConsumer<string, byte[]> consumer, CancellationToken stoppingToken)
         {
             var batch = new ConsumedBatch<T>(_batch.ToList(), BatchId());
@@ -232,9 +220,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
                     {
                         stoppingToken.ThrowIfCancellationRequested();
 
-                        // Paused partitions deliver nothing; polling keeps the membership alive and
-                        // runs rebalance callbacks. A message can only arrive from a partition
-                        // assigned after a rebalance, which also emptied the batch: put it back.
                         ConsumeResult<string, byte[]>? arrived;
 
                         try
@@ -308,10 +293,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
             }
         }
 
-        // A failed commit is transient (the group coordinator loading or moving). The next batch's
-        // commit covers these offsets too; if a rebalance comes first, the new owner reads those
-        // messages again, the same at-least-once window as a crash between storing and committing.
-        // Letting the exception escape would stop the whole host.
         private void Commit(IConsumer<string, byte[]> consumer)
         {
             try

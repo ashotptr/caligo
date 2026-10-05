@@ -36,8 +36,6 @@ public record WindowEntry(int PostId, long Views, long UniqueVisitors, long Clap
 
 public record EngagementFunnel(int PostId, long Views, long UniqueVisitors, long Clappers, long Claps);
 
-// Append-only writes into the analytical store. The batch id identifies one consumed Kafka batch;
-// writing the same id twice must store the rows once.
 public interface IOlapSink
 {
     bool IsConfigured { get; }

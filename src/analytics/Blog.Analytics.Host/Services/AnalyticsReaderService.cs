@@ -149,7 +149,6 @@ public class AnalyticsReaderService : AnalyticsReader.AnalyticsReaderBase
         var to = request.To?.ToDateTime() ?? DateTime.UtcNow;
         var from = request.From?.ToDateTime() ?? to.AddDays(-1);
 
-        // Bound the number of buckets a single call can ask for.
         var longest = bucket switch
         {
             CoreBucket.Minute => MaxMinuteSeries,

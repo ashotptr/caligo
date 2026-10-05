@@ -4,7 +4,6 @@ using Blog.Posts.Domain.Posts;
 
 namespace Blog.Posts.Infrastructure.Persistence
 {
-    // One row per reader per post, capped at ClapRules.MaxPerReader.
     public class PostClap
     {
         public int PostId { get; set; }
@@ -18,7 +17,6 @@ namespace Blog.Posts.Infrastructure.Persistence
         public DateTime UpdatedAt { get; set; }
     }
 
-    // Append-only queue of accepted claps, folded into post_clap_totals in batches by ClapRollupWorker.
     public class ClapDelta
     {
         public long Id { get; set; }
@@ -81,8 +79,6 @@ namespace Blog.Posts.Infrastructure.Persistence
 
             if (_isNpgsql)
             {
-                // A queue table churns: every row is inserted once and deleted once. Vacuum it
-                // after a few thousand dead rows instead of after 20% of the table.
                 delta.HasStorageParameter("autovacuum_vacuum_scale_factor", 0.0);
                 delta.HasStorageParameter("autovacuum_vacuum_threshold", 5000);
             }
@@ -101,8 +97,6 @@ namespace Blog.Posts.Infrastructure.Persistence
 
             if (_isNpgsql)
             {
-                // The counter lives in its own narrow table rather than on BlogPosts, and leaves free
-                // space on every page so the update can be a HOT update (no index maintenance).
                 total.HasStorageParameter("fillfactor", 70);
             }
         }

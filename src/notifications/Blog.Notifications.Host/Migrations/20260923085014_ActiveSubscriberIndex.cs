@@ -4,10 +4,8 @@
 
 namespace Blog.Notifications.Host.Migrations
 {
-    /// <inheritdoc />
     public partial class ActiveSubscriberIndex : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropIndex(
@@ -21,7 +19,6 @@ namespace Blog.Notifications.Host.Migrations
                 filter: "\"IsActive\"");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropIndex(

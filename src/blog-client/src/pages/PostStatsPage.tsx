@@ -13,8 +13,6 @@ const RANGES: { bucket: SeriesBucket; label: string }[] = [
 
 const FUNNEL_DAYS = [7, 30];
 
-// Views, visitors and claps for one post, from the ClickHouse rollups. The title comes with the link
-// that led here: fetching the post for it would record a view and skew the numbers on this page.
 const PostStatsPage = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();

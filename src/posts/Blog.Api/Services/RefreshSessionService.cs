@@ -100,10 +100,6 @@ namespace Blog.Api.Services
 
             await _context.SaveChangesAsync(cancellationToken);
 
-            // Compare-and-set. The check above ran on a snapshot that a concurrent refresh with the
-            // same token may already have acted on. This UPDATE only matches while the old session is
-            // still unrotated; under concurrency the second one waits on the row lock, re-checks the
-            // condition against the committed row, and matches nothing. Exactly one rotation wins.
             var rotated = await _context.UserSessions
                 .Where(s => s.Id == session.Id && s.ReplacedBySessionId == null && s.RevokedAt == null)
                 .ExecuteUpdateAsync(
@@ -125,9 +121,6 @@ namespace Blog.Api.Services
             return new RefreshResult(RefreshOutcome.Success, user, token);
         }
 
-        // A refresh token is good for one rotation. A second use, whether it comes long after the
-        // first or races it, looks the same as a stolen token being replayed, so the whole chain
-        // is revoked.
         private async Task<RefreshResult> ReplayDetectedAsync(string userId, CancellationToken cancellationToken)
         {
             await RevokeAllAsync(userId, cancellationToken);

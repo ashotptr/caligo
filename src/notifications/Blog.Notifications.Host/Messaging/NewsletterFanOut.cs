@@ -5,10 +5,6 @@ namespace Blog.Notifications.Host.Messaging;
 
 public record FanOutResult(int Claimed, int Queued);
 
-// Turns one post.published event into one email command per active subscriber. A popular author
-// publishing is the spike: the audience is claimed chunk by chunk, each chunk a single set-based
-// insert, so memory and transaction size stay flat however long the list grows, and replaying the
-// event creates nothing twice.
 public class NewsletterFanOut
 {
     private readonly IDeliveryLedger _ledger;
@@ -44,8 +40,6 @@ public class NewsletterFanOut
                 }
             }
 
-            // Only what actually reached the broker becomes Queued; the rest stays Pending and the
-            // sweeper sends it once the broker is back.
             await _ledger.MarkQueuedAsync(published, cancellationToken);
 
             claimed += chunk.Claimed.Count;

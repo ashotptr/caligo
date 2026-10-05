@@ -3,9 +3,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Blog.Analytics.Infrastructure.Stores
 {
-    // Creates the ClickHouse tables and materialized views, retrying until the server answers. The
-    // OLAP consumers do not wait for it: an insert that fails because a table is missing is simply
-    // retried by the consumer until this has run.
     public class ClickHouseSchemaInitializer : BackgroundService
     {
         private readonly ClickHouseOlapStore _store;

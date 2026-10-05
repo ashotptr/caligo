@@ -6,10 +6,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Blog.Posts.Infrastructure.Persistence.Migrations
 {
-    /// <inheritdoc />
     public partial class SchedulingClapsAndConcurrency : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropIndex(
@@ -119,7 +117,6 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
                 filter: "\"Status\" = 1");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

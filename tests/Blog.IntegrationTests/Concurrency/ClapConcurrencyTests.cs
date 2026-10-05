@@ -84,7 +84,6 @@ public class ClapConcurrencyTests : IAsyncLifetime
 
         var total = await context.PostClapTotals.SingleAsync(t => t.PostId == postId);
 
-        // Four requests of 20 per reader, capped at 50.
         Assert.Equal(60 * 50, total.Claps);
         Assert.Equal(60, total.Clappers);
         Assert.False(await context.ClapDeltas.AnyAsync(d => d.PostId == postId));

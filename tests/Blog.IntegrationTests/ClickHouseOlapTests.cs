@@ -38,8 +38,6 @@ public class ClickHouseOlapTests : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    // InitializeAsync has already applied the schema for this and every earlier test; the journal
-    // must still hold each embedded script exactly once.
     [Fact]
     public async Task ApplyingTheSchemaAgain_RunsNoScriptTwice()
     {

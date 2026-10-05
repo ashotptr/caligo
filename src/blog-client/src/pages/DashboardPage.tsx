@@ -13,7 +13,6 @@ const DashboardPage = () => {
   const { user, hasRole } = useAuth();
   const isAdmin = hasRole('Admin');
 
-  // Admins see the public feed by default; "My posts" is the only list that includes scheduled posts.
   const [tab, setTab] = useState<Tab>(isAdmin ? 'all' : 'mine');
   const [posts, setPosts] = useState<PostSummary[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -21,7 +20,6 @@ const DashboardPage = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Switching tabs quickly must not let the slower, older response replace the newer list.
   const request = useRef(0);
 
   const scope = useCallback(() => (tab === 'all' ? {} : { mine: true }), [tab]);

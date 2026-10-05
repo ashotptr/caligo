@@ -3,7 +3,6 @@ using NBomber.Contracts.Stats;
 
 namespace Blog.LoadTests;
 
-// The numbers that matter for one scenario, printed and saved as Markdown next to NBomber's report.
 public sealed class Summary
 {
     private readonly List<string> _lines = new();

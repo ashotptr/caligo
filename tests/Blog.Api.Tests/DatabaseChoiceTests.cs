@@ -9,8 +9,6 @@ namespace Blog.Api.Tests;
 
 public class DatabaseChoiceTests
 {
-    // Every DbContext must use the provider the process chose at startup. When each scope made its
-    // own choice, a Postgres probe that timed out under load put that one request on SQLite.
     [Fact]
     public void EveryScope_UsesTheProviderChosenForTheProcess()
     {
@@ -27,7 +25,6 @@ public class DatabaseChoiceTests
         services.AddSingleton<IConfiguration>(configuration);
         services.AddPostsInfrastructure(isDevelopment: false);
 
-        // What startup would have decided had the probe failed; the configuration alone says Postgres.
         services.AddSingleton(new DependencyInjection.DatabaseChoice(
             DatabaseProvider.Sqlite, "Data Source=:memory:", FellBackToSqlite: true));
 

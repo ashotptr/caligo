@@ -14,8 +14,6 @@ namespace Blog.IntegrationTests;
 
 public class InfrastructureFixture : IAsyncLifetime
 {
-    // Several test hosts, each with its own connection pool and background workers, share this
-    // server while the concurrency tests open hundreds of connections at once.
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
         .WithImage("postgres:16-alpine")
         .WithDatabase("blogdb")
@@ -42,7 +40,6 @@ public class InfrastructureFixture : IAsyncLifetime
 
     public string PostgresConnectionString => _postgres.GetConnectionString();
 
-    // Same server, the notifications service's own database (EF creates it on first migrate).
     public string NotificationsConnectionString => new Npgsql.NpgsqlConnectionStringBuilder(PostgresConnectionString)
     {
         Database = "blognotifications"

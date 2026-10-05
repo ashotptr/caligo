@@ -16,7 +16,6 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
     [Migration("20250802093000_AddTagsToBlogPosts")]
     partial class AddTagsToBlogPosts
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

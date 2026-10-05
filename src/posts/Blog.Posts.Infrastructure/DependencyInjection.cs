@@ -25,9 +25,6 @@ namespace Blog.Posts.Infrastructure
     {
         public static IServiceCollection AddPostsInfrastructure(this IServiceCollection services, bool isDevelopment)
         {
-            // The provider is chosen once per process. The options callback below runs for every
-            // scope, so resolving the choice there probed Postgres on every request, and a probe that
-            // timed out under load quietly put that one request on the SQLite fallback.
             services.AddSingleton(provider => ResolveDatabase(
                 provider.GetRequiredService<IConfiguration>(), isDevelopment));
 
@@ -84,7 +81,6 @@ namespace Blog.Posts.Infrastructure
             services.AddScoped<PostService>();
             services.AddScoped<ClapService>();
 
-            // Registered as singletons too, so tests and load tests can run a pass on demand.
             services.AddSingleton<ScheduledPostPublisher>();
             services.AddHostedService(provider => provider.GetRequiredService<ScheduledPostPublisher>());
 
@@ -114,8 +110,6 @@ namespace Blog.Posts.Infrastructure
 
         private static void AddCaching(IServiceCollection services)
         {
-            // One Redis connection shared by the cache entries and the generation counters. It never
-            // aborts on a failed connect, so a Redis outage degrades to uncached reads, not a crash.
             services.AddSingleton(provider =>
             {
                 var redis = provider.GetRequiredService<IConfiguration>().GetConnectionString("Redis");

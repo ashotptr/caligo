@@ -84,8 +84,6 @@ public class RabbitCommandQueue : ICommandQueue, IDisposable
         return Task.CompletedTask;
     }
 
-    // Returns false when nothing was handed to the broker, so the caller leaves the delivery Pending
-    // for the sweeper instead of marking it Queued with no message behind it.
     private bool Publish(string exchange, string routingKey, SendEmailCommand command, string? error = null)
     {
         if (!IsConfigured)

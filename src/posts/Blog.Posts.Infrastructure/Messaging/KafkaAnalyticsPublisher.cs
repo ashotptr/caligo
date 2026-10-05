@@ -37,8 +37,6 @@ namespace Blog.Posts.Infrastructure.Messaging
                 Activity.Current?.Id));
         }
 
-        // Fire-and-forget like views: Postgres holds the authoritative clap counts, this stream only
-        // feeds analytics.
         public void PublishPostClapped(Application.Abstractions.PostClappedEvent clapped)
         {
             var integrationEvent = new Contracts.Events.PostClappedEvent

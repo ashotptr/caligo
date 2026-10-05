@@ -94,8 +94,6 @@ namespace Blog.Analytics.Infrastructure.Messaging
         }
     }
 
-    // A third group on the view topic with its own offsets: ClickHouse falling behind, or being down,
-    // never slows the Mongo or Redis writers.
     public class OlapViewConsumer : ViewConsumer
     {
         private readonly IOlapSink _sink;

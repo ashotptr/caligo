@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-// The API answers 400, 409 and 412 with the reason as a plain string; show it when there is one.
 export const apiError = (err: unknown, fallback: string): string => {
   if (!axios.isAxiosError(err) || !err.response) {
     return fallback;
@@ -27,6 +26,5 @@ export const apiError = (err: unknown, fallback: string): string => {
   }
 };
 
-// 412: the If-Match version is stale. 409: another write won the race while this one ran.
 export const isEditConflict = (err: unknown): boolean =>
   axios.isAxiosError(err) && (err.response?.status === 409 || err.response?.status === 412);

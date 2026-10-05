@@ -43,14 +43,11 @@ namespace Blog.Posts.Infrastructure.Persistence
                 .HasForeignKey(p => p.AuthorId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // "My posts" pages by author, newest first, scheduled posts included.
             post.HasIndex(p => new { p.AuthorId, p.PublishedDate, p.Id })
                 .HasDatabaseName("IX_BlogPosts_Author_PublishedDate_Id");
 
             if (IsNpgsql)
             {
-                // The public feed only ever reads published posts, so its keyset index leaves the
-                // scheduled ones out, and the scheduler's index holds nothing but the scheduled ones.
                 post.HasIndex(p => new { p.PublishedDate, p.Id })
                     .HasDatabaseName("IX_BlogPosts_Published_PublishedDate_Id")
                     .HasFilter("\"Status\" = 0");

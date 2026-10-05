@@ -5,10 +5,8 @@ import { apiError } from '../api/errors';
 import { useAuth } from '../contexts/AuthContext';
 import type { ClapResult, ClapTally } from '../types';
 
-// The same cap the API enforces per reader and post.
 const MAX_CLAPS = 50;
 
-// Clicks closer together than this go out as one request.
 const SEND_AFTER_MS = 600;
 
 interface ClapButtonProps {
@@ -16,8 +14,6 @@ interface ClapButtonProps {
   authorId: string | null;
 }
 
-// Medium-style claps. Each click counts on screen at once; a burst of clicks is sent as one request,
-// and the server's answer corrects the numbers if some claps went past the cap.
 const ClapButton = ({ postId, authorId }: ClapButtonProps) => {
   const { user, isAuthenticated } = useAuth();
   const [tally, setTally] = useState<ClapTally | null>(null);
@@ -58,7 +54,6 @@ const ClapButton = ({ postId, authorId }: ClapButtonProps) => {
 
       inFlight.current -= count;
 
-      // Claps past the cap (another tab may have clapped too) are not applied: take them back.
       const refused = count - response.data.applied;
 
       setTally(current => current && {
@@ -74,7 +69,6 @@ const ClapButton = ({ postId, authorId }: ClapButtonProps) => {
     }
   }, [postId]);
 
-  // Leaving the page sends whatever is still waiting.
   useEffect(() => () => {
     window.clearTimeout(timer.current);
     void send();

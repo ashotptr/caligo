@@ -16,7 +16,6 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
     [Migration("20260827062609_AddTransactionalOutbox")]
     partial class AddTransactionalOutbox
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

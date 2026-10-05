@@ -2,8 +2,6 @@ using Blog.Posts.Application.Abstractions;
 
 namespace Blog.Posts.UnitTests;
 
-// In-memory stand-in for the distributed cache with the same contract: entries keyed by string,
-// a generation per scope, and loaders that only run on a miss.
 internal sealed class FakePostCache : IPostCache
 {
     private readonly Dictionary<string, object> _entries = new();

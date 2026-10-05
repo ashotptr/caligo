@@ -38,11 +38,6 @@ namespace Blog.Analytics.Infrastructure.Stores
 
         public bool IsConfigured => _options.Enabled;
 
-        // DbUp runs each script in Stores/ClickHouseMigrations once, in name order, and records it in a
-        // schemaversions table, so a restart skips what is already applied. ClickHouse has no DDL
-        // transactions and two replicas starting together may both run a script, hence IF NOT EXISTS
-        // in the scripts; a replica that trips over the other is retried by the initializer.
-        // PerformUpgrade blocks, so it runs off the caller's thread and startup does not wait on it.
         public Task EnsureSchemaAsync(CancellationToken cancellationToken = default)
         {
             if (!_options.Enabled)
@@ -107,7 +102,6 @@ namespace Blog.Analytics.Infrastructure.Stores
                 _ => "DAY"
             };
 
-            // Both rollups are bucketed the same way and stacked; the outer query lines them up.
             var sql = $$"""
                 SELECT bucket, sum(v) AS views, max(u) AS visitors, sum(c) AS claps
                 FROM
@@ -149,8 +143,6 @@ namespace Blog.Analytics.Infrastructure.Stores
         {
             var order = rankBy == RankBy.Claps ? "claps" : "views";
 
-            // Minute-grained rollups make "the last 15 minutes" an exact window, where Redis only
-            // keeps whole hours.
             var sql = $$"""
                 SELECT post_id, sum(v) AS views, max(u) AS visitors, sum(c) AS claps
                 FROM
@@ -187,8 +179,6 @@ namespace Blog.Analytics.Infrastructure.Stores
 
         public async Task<EngagementFunnel> FunnelAsync(int postId, int days, CancellationToken cancellationToken = default)
         {
-            // Views, readers and clappers come from two separate streams; lining them up per post is
-            // exactly the kind of cross-stream question an OLAP store answers from rollups.
             const string sql = """
                 SELECT
                     (SELECT sum(views) FROM post_views_1m WHERE post_id = {postId:Int32} AND minute >= {since:DateTime}),
@@ -223,10 +213,6 @@ namespace Blog.Analytics.Infrastructure.Stores
                 return;
             }
 
-            // The whole batch is one INSERT, which ClickHouse stores as one block, and the token
-            // names that block. If the consumer writes the same Kafka batch again (the first attempt
-            // timed out but actually landed), ClickHouse recognises the token and drops the copy, so
-            // neither the raw table nor the rollups count it twice.
             using var connection = Connect();
 
             connection.CustomSettings["insert_deduplication_token"] = batchId;

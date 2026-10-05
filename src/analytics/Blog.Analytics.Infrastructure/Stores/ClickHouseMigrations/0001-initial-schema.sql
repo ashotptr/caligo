@@ -1,12 +1,3 @@
--- Raw events. ReplacingMergeTree folds rows with the same sorting key (event_id is part of it)
--- during merges, so a replay after a crash converges to one row per event.
---
--- Retries are handled at insert time instead. Every batch is inserted with an
--- insert_deduplication_token, and non_replicated_deduplication_window makes this non-replicated
--- table remember recent tokens, so a batch written twice is stored once. The deduplicated block is
--- still pushed through the materialized views, so each rollup table keeps its own window too; there
--- the token is derived from the batch's token, which drops the repeat but never two different
--- batches that happen to aggregate to the same rows.
 CREATE TABLE IF NOT EXISTS post_views
 (
     event_id      UUID,
@@ -22,8 +13,6 @@ ORDER BY (post_id, viewed_at, event_id)
 TTL toDateTime(viewed_at) + INTERVAL 180 DAY
 SETTINGS non_replicated_deduplication_window = 1000;
 
--- Per-post, per-minute rollup, filled at insert time. Readers merge a few thousand rows instead of
--- scanning raw events; uniq keeps an approximate distinct count that can be merged across minutes.
 CREATE TABLE IF NOT EXISTS post_views_1m
 (
     post_id  Int32,

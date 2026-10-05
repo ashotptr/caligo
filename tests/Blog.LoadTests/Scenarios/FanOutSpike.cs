@@ -7,13 +7,8 @@ using Blog.Contracts;
 
 namespace Blog.LoadTests.Scenarios;
 
-// A post published to a large audience. Times the newsletter fan-out from publish until every
-// active subscriber has a delivery claimed and queued, then replays the same post.published event
-// and checks that the replay creates nothing. Removes its synthetic subscribers afterwards, so
-// later posts do not fan out to them.
 public static class FanOutSpike
 {
-    // The notifications service's default group for the lifecycle topic.
     private const string RelayGroup = "notifications-relay";
 
     public static async Task<Summary> RunAsync(LoadTestSettings settings, CommandOptions options)
@@ -22,9 +17,6 @@ public static class FanOutSpike
 
         var summary = new Summary("fanout-spike");
 
-        // The relay announces one post at a time. Seeding the audience while it still has posts to
-        // announce (scheduled-burst leaves it 2,000) sends every one of them to the whole audience:
-        // one run queued two million emails that way.
         if (!await RelayCaughtUpAsync(settings, TimeSpan.FromMinutes(5)))
         {
             summary.Check("the relay had announced every earlier post before the audience was seeded", false,
@@ -111,7 +103,6 @@ public static class FanOutSpike
                 new ConsumerGroupTopicPartitions(RelayGroup, partitions)
             })).Single().Partitions;
 
-            // A partition the group never committed on counts from its start.
             var lag = committed.Sum(partition =>
                 watermarks.QueryWatermarkOffsets(partition.TopicPartition, TimeSpan.FromSeconds(10)).High.Value
                 - Math.Max(partition.Offset.Value, 0));
@@ -154,8 +145,6 @@ public static class FanOutSpike
             DELETE FROM subscribers WHERE "Email" LIKE 'loadtest-%';
             """);
 
-    // Sends the post.published event again, byte for byte as the outbox stored it, the way a
-    // redelivery after a consumer crash would look.
     private static async Task ReplayPublishedEventAsync(LoadTestSettings settings, int postId)
     {
         await using var connection = new NpgsqlConnection(settings.PostsDb);
@@ -180,7 +169,6 @@ public static class FanOutSpike
             {
                 BootstrapServers = settings.Kafka,
 
-                // The broker advertises localhost to host clients; see LoadTestSettings on why not ::1.
                 BrokerAddressFamily = BrokerAddressFamily.V4
             }).Build();
 

@@ -8,7 +8,6 @@ data:
   Kafka__BootstrapServers: "kafka:9092"
   Notifications__KafkaBootstrapServers: "kafka:9092"
   Analytics__Address: "http://blog-analytics:8080"
-  # Requests reach the API through the ingress controller; trust X-Forwarded-For from pod IPs.
   ForwardedHeaders__KnownNetworks__0: "10.0.0.0/8"
   Jwt__Issuer: "blog-api"
   Jwt__Audience: "blog-client"

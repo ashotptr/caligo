@@ -82,8 +82,6 @@ namespace Blog.Posts.Infrastructure.Publishing
             }
         }
 
-        // Publishes one batch of due posts and returns how many were claimed. Public so tests can
-        // run passes deterministically.
         public async Task<int> PublishDueAsync(CancellationToken cancellationToken = default)
         {
             using var scope = _scopes.CreateScope();
@@ -104,8 +102,6 @@ namespace Blog.Posts.Infrastructure.Publishing
 
             var published = due.Count(post => post.PublishDue(now));
 
-            // The status flip and each post.published outbox row commit in this one transaction, so
-            // a post is announced exactly when, and exactly once, it goes live.
             await repository.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
@@ -122,10 +118,6 @@ namespace Blog.Posts.Infrastructure.Publishing
         {
             if (context.Database.IsNpgsql())
             {
-                // Every API replica runs this loop. The row locks keep a claimed post away from the
-                // others until this transaction commits, and SKIP LOCKED sends them to the next
-                // unclaimed rows instead of queueing behind these, so a burst of posts due at the
-                // same second is split between replicas.
                 return await context.BlogPosts
                     .FromSqlRaw(
                         """

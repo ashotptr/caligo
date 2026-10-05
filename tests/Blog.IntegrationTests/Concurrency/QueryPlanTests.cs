@@ -12,9 +12,6 @@ using Xunit;
 
 namespace Blog.IntegrationTests.Concurrency;
 
-// Plan tests: seed a realistic amount of data, ANALYZE, and assert that each hot query is planned on
-// the index it was designed for. They fail if a migration drops or reshapes an index, or a query is
-// rewritten into a shape the planner can no longer serve from it.
 [Collection(InfrastructureCollection.Name)]
 public class QueryPlanTests : IAsyncLifetime
 {
@@ -85,7 +82,6 @@ public class QueryPlanTests : IAsyncLifetime
             LIMIT 21
             """, analyze: true);
 
-        // The row comparison is the index's start key: 21 rows read, none thrown away.
         Assert.Contains("IX_BlogPosts_Published_PublishedDate_Id", IndexesUsed(plan));
         Assert.True(RowsScanned(plan) <= 21, $"{RowsScanned(plan)} rows were scanned for a 21-row page");
     }
@@ -317,7 +313,6 @@ public class QueryPlanTests : IAsyncLifetime
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
 
-        // Executing FOR UPDATE inside EXPLAIN ANALYZE would take locks; the plain EXPLAIN never runs it.
         await using var command = new NpgsqlCommand(
             $"EXPLAIN ({(analyze ? "ANALYZE, " : string.Empty)}FORMAT JSON) {sql}", connection);
 
@@ -335,7 +330,6 @@ public class QueryPlanTests : IAsyncLifetime
     private static IReadOnlyList<string> NodeTypes(JsonElement plan) =>
         Nodes(plan).Select(node => node.GetProperty("Node Type").GetString()!).ToList();
 
-    // Rows the scan nodes touched: what they returned plus what their filters discarded.
     private static long RowsScanned(JsonElement plan) =>
         Nodes(plan)
             .Where(node => node.GetProperty("Node Type").GetString()!.Contains("Scan", StringComparison.Ordinal)
@@ -367,8 +361,6 @@ public class QueryPlanTests : IAsyncLifetime
         await command.ExecuteNonQueryAsync();
     }
 
-    // Seeding bulk-loads tens of thousands of rows, which also builds the tsvector and GIN indexes;
-    // that takes longer than the default 30-second command timeout on a busy machine.
     private static string WithDatabase(string connectionString, string database) =>
         new NpgsqlConnectionStringBuilder(connectionString) { Database = database, CommandTimeout = 300 }.ConnectionString;
 }

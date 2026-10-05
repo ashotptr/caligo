@@ -67,9 +67,6 @@ public class BlogPostsController : ControllerBase
             : Respond(result);
     }
 
-    // If-Match makes the write conditional: a client that sends the ETag it read gets 412 instead of
-    // silently overwriting a newer version. Without the header, a concurrent change between this
-    // request's read and write still fails with 409 rather than being lost.
     [HttpPut("{id}")]
     [Authorize]
     public async Task<IActionResult> PutBlogPost(int id, BlogPostDto blogPostDto, CancellationToken cancellationToken)
@@ -108,8 +105,6 @@ public class BlogPostsController : ControllerBase
 
     private static string ETag(int version) => $"\"{version}\"";
 
-    // The version an If-Match header demands: null when it is absent or "*", and -1 when it holds
-    // something that is not one of our ETags, which can never match, so the write is refused with 412.
     private int? ExpectedVersion()
     {
         var header = Request.Headers.IfMatch.ToString().Trim();

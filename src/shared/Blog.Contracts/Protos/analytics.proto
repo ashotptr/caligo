@@ -15,7 +15,6 @@ service AnalyticsReader {
 
   rpc StreamTrending (StreamTrendingRequest) returns (stream TrendingSnapshot);
 
-  // Served from the ClickHouse rollups. FAILED_PRECONDITION when ClickHouse is not configured.
   rpc GetViewSeries (GetViewSeriesRequest) returns (ViewSeries);
 
   rpc GetTopInWindow (GetTopInWindowRequest) returns (TopInWindow);

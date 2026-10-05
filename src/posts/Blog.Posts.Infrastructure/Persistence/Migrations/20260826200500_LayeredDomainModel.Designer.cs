@@ -16,7 +16,6 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
     [Migration("20260826200500_LayeredDomainModel")]
     partial class LayeredDomainModel
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

@@ -18,9 +18,6 @@ public class EfSubscriberStore : ISubscriberStore
     {
         var normalized = email.Trim().ToLowerInvariant();
 
-        // An upsert, not "look up, then insert": two requests subscribing the same address at once
-        // both succeed, one inserting and the other reactivating, instead of the loser tripping the
-        // unique index and answering 500.
         var rows = await _context.Subscribers
             .FromSql($"""
                 INSERT INTO subscribers
@@ -74,8 +71,6 @@ public class EfDeliveryLedger : IDeliveryLedger
         Guid eventId, int postId, string postTitle, Guid after, int chunkSize,
         CancellationToken cancellationToken = default)
     {
-        // Walk the active subscribers by id (keyset, served by the partial index on active ids), so
-        // a big list is claimed in bounded pieces instead of being loaded into memory at once.
         var chunk = await _context.Subscribers
             .FromSql($"""
                 SELECT * FROM subscribers
@@ -93,10 +88,6 @@ public class EfDeliveryLedger : IDeliveryLedger
 
         var subscriberIds = chunk.Select(s => s.Id).ToArray();
 
-        // One set-based statement per chunk. The unique (EventId, SubscriberId) index decides who
-        // owns each delivery: a replayed event, or a second relay racing this one, gets DO NOTHING
-        // for rows that already exist, and only the rows this statement created come back. Nothing
-        // is read first, so nothing can be dropped between the read and the write.
         var claimed = await _context.Database
             .SqlQuery<ClaimedRow>($"""
                 INSERT INTO notification_deliveries
@@ -143,8 +134,6 @@ public class EfDeliveryLedger : IDeliveryLedger
             .ExecuteUpdateAsync(d => d.SetProperty(x => x.Status, DeliveryStatus.Queued), cancellationToken);
     }
 
-    // Transitions below only move a delivery out of Pending or Queued. Sent and Failed are final,
-    // so a duplicate or late message cannot drag a sent email back to Failed.
     public async Task MarkSentAsync(Guid deliveryId, CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
@@ -197,9 +186,6 @@ public class EfDeliveryLedger : IDeliveryLedger
     public async Task<bool> RunExclusiveAsync(
         string lockName, Func<Task> work, CancellationToken cancellationToken = default)
     {
-        // A transaction-scoped advisory lock: Postgres releases it at commit or rollback, so it can't
-        // outlive a crashed sweep or leak to the next user of a pooled connection, which a
-        // session-level lock can. The try- variant returns at once instead of queueing replicas.
         await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
 
         var acquired = await _context.Database

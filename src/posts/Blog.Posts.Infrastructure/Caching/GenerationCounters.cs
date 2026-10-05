@@ -3,9 +3,6 @@ using StackExchange.Redis;
 
 namespace Blog.Posts.Infrastructure.Caching
 {
-    // A generation per cache scope (all list pages, or one post). Cache keys embed the generation, so
-    // bumping it retires every entry in the scope, and a slow reader that loaded before the bump
-    // writes its stale copy under the old generation, where nobody looks any more.
     public interface IGenerationCounters
     {
         Task<long> CurrentAsync(string scope);
@@ -13,8 +10,6 @@ namespace Blog.Posts.Infrastructure.Caching
         Task BumpAsync(string scope);
     }
 
-    // INCR is atomic and readers never create the key, so there is no get-then-set window in which
-    // two replicas settle on different generations.
     public class RedisGenerationCounters : IGenerationCounters
     {
         private readonly IConnectionMultiplexer _redis;

@@ -13,7 +13,6 @@ public static class Program
         ["fanout-spike"] = FanOutSpike.RunAsync
     };
 
-    // dotnet run -c Release --project tests/Blog.LoadTests -- <scenario|all> [--rate 300 --seconds 30 ...]
     public static async Task<int> Main(string[] args)
     {
         var name = args.FirstOrDefault();

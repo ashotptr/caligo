@@ -92,8 +92,6 @@ public class SchedulingConcurrencyTests : IAsyncLifetime
         Assert.Equal(300, announcements.Count);
         Assert.All(announcements, count => Assert.Equal(1, count));
 
-        // The background publisher of the test host competes too, so the three explicit loops need
-        // not have claimed every post between them; together they never claimed one twice.
         Assert.True(claimed.Sum() <= 300);
     }
 

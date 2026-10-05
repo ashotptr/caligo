@@ -40,8 +40,6 @@ public static class Db
         return value is null or DBNull ? 0 : Convert.ToInt64(value);
     }
 
-    // How many times statements matching the pattern have run, per pg_stat_statements. Null when
-    // the extension is not loaded (the load-test compose override loads it).
     public static async Task<long?> StatementCallsAsync(string connectionString, string likePattern)
     {
         try
@@ -102,8 +100,6 @@ public static class Db
         }
     }
 
-    // For polling loops: null when the probe itself failed, so the loop asks again instead of the
-    // whole run dying because a database was too busy to answer one of its questions in time.
     public static async Task<long?> TryScalarAsync(string connectionString, string sql)
     {
         try
@@ -118,8 +114,6 @@ public static class Db
         }
     }
 
-    // Polls until the condition holds; returns how long that took, or null on timeout. A probe
-    // that fails counts as "not yet".
     public static async Task<TimeSpan?> WaitUntilAsync(Func<Task<bool>> condition, TimeSpan timeout)
     {
         var started = DateTime.UtcNow;
@@ -144,8 +138,6 @@ public static class Db
         return null;
     }
 
-    // Connection and timeout failures, not errors the server reported about the statement itself.
-    // The probes pass no cancellation token, so a TaskCanceledException is an HttpClient timeout.
     private static bool IsTransient(Exception ex) =>
         ex is TimeoutException or TaskCanceledException or HttpRequestException or IOException or KafkaException
         || (ex is NpgsqlException && ex is not PostgresException);

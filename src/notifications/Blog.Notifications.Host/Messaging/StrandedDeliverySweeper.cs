@@ -63,8 +63,6 @@ public class StrandedDeliverySweeper : BackgroundService
 
         var ledger = scope.ServiceProvider.GetRequiredService<IDeliveryLedger>();
 
-        // Every replica runs this loop. Without the lock each one would read the same stranded rows
-        // and enqueue them, and every subscriber would get one email per replica.
         var swept = await ledger.RunExclusiveAsync(
             SweepLock, () => RequeueStrandedAsync(ledger, cancellationToken), cancellationToken);
 

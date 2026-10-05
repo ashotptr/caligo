@@ -99,8 +99,6 @@ public class PostLifecycleRelay : BackgroundService
 
                 if (!Handle(result, stoppingToken))
                 {
-                    // Read the same message again after a pause. Moving on would let the next
-                    // commit cover this offset, and the post would never be announced.
                     Thread.Sleep(TimeSpan.FromSeconds(5));
 
                     Rewind(consumer, result.TopicPartitionOffset);
@@ -114,9 +112,6 @@ public class PostLifecycleRelay : BackgroundService
                 }
                 catch (KafkaException ex)
                 {
-                    // Transient, such as the group coordinator loading or moving. The fan-out is
-                    // idempotent, so an offset that never gets committed only means the message is
-                    // relayed again. Letting this escape stopped the whole service.
                     _logger.LogWarning(ex, "Committing {Offset} failed; carrying on.", result.TopicPartitionOffset);
                 }
             }
@@ -207,7 +202,6 @@ public class PostLifecycleRelay : BackgroundService
         }
         catch (KafkaException ex)
         {
-            // The partition went to another member, which resumes from the last commit, before this message.
             _logger.LogWarning(ex, "Could not rewind to {Offset}; its new owner will read it.", failed);
         }
     }

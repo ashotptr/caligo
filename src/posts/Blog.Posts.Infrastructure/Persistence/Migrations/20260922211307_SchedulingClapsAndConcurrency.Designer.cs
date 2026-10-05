@@ -16,7 +16,6 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
     [Migration("20260922211307_SchedulingClapsAndConcurrency")]
     partial class SchedulingClapsAndConcurrency
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

@@ -13,8 +13,6 @@ public readonly record struct Caller(string? UserId, bool IsAdministrator)
     public bool CanManage(string? authorId) => IsAdministrator || (UserId is not null && UserId == authorId);
 }
 
-// PublishAt in the future schedules the post; null or a time already passed publishes it now.
-// ExpectedVersion comes from If-Match: when set, the write only happens if the post is still at that version.
 public record WritePostCommand(
     string Title,
     string Content,
@@ -69,7 +67,6 @@ public class PostService
 
         if (mineOnly)
         {
-            // An author's own list includes scheduled posts and is seen by nobody else, so it is not cached.
             return Result<PagedResult<PostSummaryDto>>.Ok(
                 await _posts.GetPageAsync(from, limit, caller.UserId, cancellationToken));
         }
@@ -89,8 +86,6 @@ public class PostService
     public async Task<Result<PostDetailDto>> GetAsync(
         int id, ViewContext view, Caller caller, CancellationToken cancellationToken = default)
     {
-        // Concurrent misses on the same post share one database read, and only published posts are
-        // cached, so a scheduled post can never be served to a stranger from the cache.
         var generation = await _cache.GetGenerationAsync(PostScope(id), cancellationToken);
 
         var post = await _cache.GetOrLoadAsync(

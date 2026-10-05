@@ -21,7 +21,6 @@ spec:
         topic: blog.post.viewed.v1
         lagThreshold: "1000"
         offsetResetPolicy: earliest
-    # The ClickHouse writer is a separate group with its own lag; scale on whichever is further behind.
     - type: kafka
       metadata:
         bootstrapServers: kafka:9092

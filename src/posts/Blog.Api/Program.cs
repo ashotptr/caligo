@@ -42,7 +42,6 @@ builder.Services.AddCors(options =>
 
     options.AddDefaultPolicy(policy =>
     {
-        // The editor sends a post's ETag back as If-Match; browsers hide it from other origins unless exposed.
         policy.WithOrigins(allowedOrigins.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
               .AllowAnyHeader()
               .AllowAnyMethod()
@@ -50,10 +49,6 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Behind nginx or the ingress every request comes from the proxy's address. Trusting
-// X-Forwarded-For from the proxy networks listed here gives the per-client rate limit and the
-// visitor hash the real client address. Nothing is trusted beyond the loopback default unless
-// networks are configured.
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;

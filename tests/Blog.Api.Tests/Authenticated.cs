@@ -9,8 +9,6 @@ namespace Blog.Api.Tests;
 
 internal static class Authenticated
 {
-    // Creates a real user (posts reference their author) and a client carrying a token the API
-    // itself issued for them.
     public static async Task<(HttpClient Client, string UserId)> ClientAsync(
         SqliteApiFactory factory, params string[] roles)
     {

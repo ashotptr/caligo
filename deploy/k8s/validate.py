@@ -1,16 +1,4 @@
 #!/usr/bin/env python3
-"""
-Cross-resource validation for the Kubernetes manifests.
-
-`kustomize build` proves the YAML parses and `kubectl --dry-run` proves each object matches its
-schema, but neither catches the mistakes these manifests actually make: a probe pointing at a
-port the container does not declare, a Service selecting labels no pod carries, an envFrom
-naming a Secret that only exists in one overlay, an autoscaler targeting a Deployment that was
-renamed. Those all build cleanly and fail at runtime.
-
-Run:  python deploy/k8s/validate.py
-"""
-
 import subprocess
 import sys
 from pathlib import Path

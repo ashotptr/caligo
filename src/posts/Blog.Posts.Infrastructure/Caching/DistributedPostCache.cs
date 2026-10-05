@@ -38,8 +38,6 @@ namespace Blog.Posts.Infrastructure.Caching
                 return cached;
             }
 
-            // On a hot key the entry expires for everyone at once; without this every request that
-            // misses would run the same query. Now one does, per replica, and the rest wait for it.
             return await _flights.RunAsync(
                 key,
                 async () =>
@@ -73,8 +71,6 @@ namespace Blog.Posts.Infrastructure.Caching
             {
                 _logger.LogWarning(ex, "Cache generation read failed for {Scope}; serving uncached.", scope);
 
-                // A generation no writer will ever produce, so this request neither reads nor
-                // pollutes a real entry.
                 return -Random.Shared.NextInt64(1, long.MaxValue);
             }
         }
@@ -122,7 +118,6 @@ namespace Blog.Posts.Infrastructure.Caching
             }
         }
 
-        // Entries written together would otherwise all expire together and stampede together.
         private static TimeSpan Jitter(TimeSpan ttl) =>
             TimeSpan.FromTicks((long)(ttl.Ticks * (0.9 + Random.Shared.NextDouble() * 0.2)));
     }

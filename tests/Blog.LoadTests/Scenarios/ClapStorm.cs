@@ -4,18 +4,12 @@ using NBomber.Http.CSharp;
 
 namespace Blog.LoadTests.Scenarios;
 
-// Hundreds of readers clap one viral post at once, many until they hit the cap, which must hold,
-// the rollup must fold every accepted clap exactly once, and the audit must find nothing wrong.
-// Run it against one and three API replicas to see the rollup drain the backlog in parallel.
 public static class ClapStorm
 {
     public static async Task<Summary> RunAsync(LoadTestSettings settings, CommandOptions options)
     {
-        // As in views-spike: a laptop running the whole stack takes this without errors.
         var rate = options.Int("rate", 100);
         var seconds = options.Int("seconds", 30);
-        // Few enough readers that many come back often enough to hit the cap: at the defaults each
-        // makes about six requests of 1-10 claps, so the cap check has something to catch.
         var readerCount = options.Int("readers", 500);
 
         var summary = new Summary("clap-storm");

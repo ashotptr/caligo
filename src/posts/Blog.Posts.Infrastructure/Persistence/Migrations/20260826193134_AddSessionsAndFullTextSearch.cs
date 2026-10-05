@@ -6,10 +6,8 @@ using NpgsqlTypes;
 
 namespace Blog.Posts.Infrastructure.Persistence.Migrations
 {
-    /// <inheritdoc />
     public partial class AddSessionsAndFullTextSearch : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
@@ -82,7 +80,6 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
                 columns: new[] { "UserId", "ExpiresAt" });
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

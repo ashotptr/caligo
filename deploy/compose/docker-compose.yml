@@ -128,8 +128,6 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       Otlp__Endpoint: "http://aspire-dashboard:18889"
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=blogdb;Username=postgres;Password=postgres"
-      # Postgres is always part of this stack. With the Development fallback on, a slow start put the
-      # API on SQLite, which it cannot even create inside the container; startup retries cover it instead.
       Database__FallbackToSqlite: "false"
       ConnectionStrings__Redis: "redis:6379"
       Kafka__BootstrapServers: "kafka:29092"
@@ -141,7 +139,6 @@ services:
       Cors__AllowedOrigins: "http://localhost:8080,http://localhost:5173"
       AdminUser__Email: "admin@localhost.dev"
       AdminUser__Password: "AdminDev04!"
-      # Requests arrive through nginx on the compose network; trust its X-Forwarded-For.
       ForwardedHeaders__KnownNetworks__0: "172.16.0.0/12"
       ForwardedHeaders__KnownNetworks__1: "192.168.0.0/16"
       ForwardedHeaders__KnownNetworks__2: "10.0.0.0/8"

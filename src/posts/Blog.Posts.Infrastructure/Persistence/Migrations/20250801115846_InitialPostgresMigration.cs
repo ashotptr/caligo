@@ -6,10 +6,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Blog.Posts.Infrastructure.Persistence.Migrations
 {
-    /// <inheritdoc />
     public partial class InitialPostgresMigration : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -223,7 +221,6 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
                 column: "AuthorId");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

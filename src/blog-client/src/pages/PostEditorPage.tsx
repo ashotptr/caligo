@@ -9,7 +9,6 @@ import type { PostDetail, PostStatus } from '../types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// The API refuses dates further ahead than this.
 const MAX_SCHEDULE_DAYS = 365;
 
 const PostEditorPage = () => {
@@ -63,7 +62,6 @@ const PostEditorPage = () => {
     fetchPost();
   }, [isEditing, load]);
 
-  // A published post has no schedule to set; a new or still-scheduled one does.
   const canSchedule = !isEditing || status === 'scheduled';
 
   const chooseSchedule = () => {
@@ -101,7 +99,6 @@ const PostEditorPage = () => {
 
       schedule = fromLocalInput(publishAt);
     } else if (status === 'scheduled') {
-      // Moving the time to now makes it due; the background publisher puts it live within a second.
       schedule = new Date().toISOString();
     }
 

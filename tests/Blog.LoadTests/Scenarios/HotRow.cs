@@ -4,9 +4,6 @@ using Npgsql;
 
 namespace Blog.LoadTests.Scenarios;
 
-// One counter row, many concurrent writers each adding 1: the hot-row problem of a viral post's
-// clap total. Every way of writing it runs under the same load against a scratch database, then
-// the final value is compared with the number of increments that reported success.
 public static class HotRow
 {
     private const int Shards = 16;
@@ -20,7 +17,6 @@ public static class HotRow
 
     private static readonly Strategy[] Strategies =
     {
-        // Read, then write what was read plus one. Two writers read the same value: one increment is lost.
         new("naive read-modify-write", async (source, _) =>
         {
             await using var connection = await source.OpenConnectionAsync();
@@ -32,7 +28,6 @@ public static class HotRow
             await transaction.CommitAsync();
         }),
 
-        // The increment happens inside the UPDATE, on the row it locked. Nothing to lose, nothing to retry.
         new("atomic UPDATE", async (source, _) =>
         {
             await using var command = source.CreateCommand("UPDATE counters SET value = value + 1 WHERE id = 1");
@@ -40,7 +35,6 @@ public static class HotRow
             await command.ExecuteNonQueryAsync();
         }),
 
-        // Lock first, then read: writers queue on the row and each reads the previous one's result.
         new("SELECT ... FOR UPDATE", async (source, _) =>
         {
             await using var connection = await source.OpenConnectionAsync();
@@ -52,7 +46,6 @@ public static class HotRow
             await transaction.CommitAsync();
         }),
 
-        // Compare-and-set on a version column; a writer that lost the race reads again and retries.
         new("optimistic version + retry", async (source, counters) =>
         {
             while (true)
@@ -83,7 +76,6 @@ public static class HotRow
             }
         }),
 
-        // Read-modify-write under SERIALIZABLE: PostgreSQL aborts the loser with 40001 and it retries.
         new("SERIALIZABLE + retry", async (source, counters) =>
         {
             for (var attempt = 1; ; attempt++)
@@ -109,7 +101,6 @@ public static class HotRow
             }
         }),
 
-        // Sixteen rows instead of one: each writer picks one at random, a read sums them.
         new($"sharded counter ({Shards} rows)", async (source, _) =>
         {
             await using var command = source.CreateCommand(
@@ -120,7 +111,6 @@ public static class HotRow
             await command.ExecuteNonQueryAsync();
         }),
 
-        // What claps do: the request only appends a delta; a background fold adds them up in batches.
         new("append + batch rollup", async (source, _) =>
         {
             await using var command = source.CreateCommand("INSERT INTO counter_deltas (delta) VALUES (1)");
@@ -206,8 +196,6 @@ public static class HotRow
         return summary;
     }
 
-    // Opens every connection the writers will hold before anything is timed; otherwise the first
-    // strategy pays for connection setup that the ones after it get for free from the pool.
     private static async Task WarmPoolAsync(NpgsqlDataSource source, int connections)
     {
         var opened = await Task.WhenAll(Enumerable.Range(0, connections).Select(_ => source.OpenConnectionAsync().AsTask()));
@@ -235,7 +223,6 @@ public static class HotRow
         }
     }
 
-    // The same claim-delete-add statement ClapRollupWorker runs, on the scratch tables.
     private static async Task<long> FoldAsync(NpgsqlDataSource source)
     {
         await using var command = source.CreateCommand("""
@@ -262,7 +249,6 @@ public static class HotRow
         return Convert.ToInt64(await command.ExecuteScalarAsync());
     }
 
-    // TRUNCATE gives every strategy a fresh heap, so none pays for the dead rows of the one before.
     private static async Task ResetAsync(NpgsqlDataSource source)
     {
         await using var command = source.CreateCommand($"""

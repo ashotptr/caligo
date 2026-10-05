@@ -27,7 +27,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- DbUp runs these once each, in name order: add a new numbered script, never edit an applied one. -->
     <EmbeddedResource Include="Stores/ClickHouseMigrations/*.sql" LogicalName="ClickHouseMigrations.%(Filename)%(Extension)" />
   </ItemGroup>
 

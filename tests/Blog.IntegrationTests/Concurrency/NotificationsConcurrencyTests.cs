@@ -149,7 +149,6 @@ public class NotificationsConcurrencyTests : IAsyncLifetime
         await using var connection = new NpgsqlConnection(_infrastructure.NotificationsConnectionString);
         await connection.OpenAsync();
 
-        // Earlier tests may have left subscribers behind; this one needs to know the whole audience.
         await using (var clear = new NpgsqlCommand("DELETE FROM notification_deliveries; DELETE FROM subscribers", connection))
         {
             await clear.ExecuteNonQueryAsync();

@@ -35,8 +35,6 @@ public class BlogPost
 
     public DateTime? ScheduledFor { get; private set; }
 
-    // Optimistic concurrency token: every change bumps it, and the UPDATE only matches the row
-    // if nobody else bumped it since this copy was loaded.
     public int Version { get; private set; }
 
     public bool IsPublished => Status == PostStatus.Published;
@@ -60,7 +58,6 @@ public class BlogPost
         return post;
     }
 
-    // Nothing is announced until the post actually goes live, so a scheduled post raises no event.
     public static BlogPost Schedule(string title, string content, IEnumerable<string>? tags, string? authorId, DateTime publishAt) =>
         new()
         {
@@ -100,7 +97,6 @@ public class BlogPost
         Version++;
     }
 
-    // Returns false when the post is not due, so a publisher that claimed it can skip it safely.
     public bool PublishDue(DateTime now)
     {
         if (IsPublished || ScheduledFor > now)

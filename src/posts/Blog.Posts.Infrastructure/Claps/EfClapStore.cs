@@ -5,9 +5,6 @@ using Blog.Posts.Infrastructure.Persistence;
 
 namespace Blog.Posts.Infrastructure.Claps
 {
-    // Portable implementation for SQLite (the development fallback and the API tests). SQLite admits
-    // one writer at a time, so a read-modify-write inside a transaction is safe there, and claps are
-    // applied to the totals directly. PostgresClapStore replaces the write path and the audit.
     public class EfClapStore : IClapStore
     {
         public EfClapStore(ApplicationDbContext context, TimeProvider time)
@@ -73,8 +70,6 @@ namespace Blog.Posts.Infrastructure.Claps
             return new ClapOutcome(applied, before + applied, before == 0);
         }
 
-        // Totals are read from the rolled-up table, so on Postgres they trail the per-reader counts by
-        // at most one rollup interval.
         public async Task<ClapTally> TallyAsync(int postId, string? userId, CancellationToken cancellationToken = default)
         {
             var total = await Context.PostClapTotals

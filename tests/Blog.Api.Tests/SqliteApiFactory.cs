@@ -41,8 +41,6 @@ public class SqliteApiFactory : WebApplicationFactory<Program>
                 ["AdminUser:Email"] = "",
                 ["AdminUser:Password"] = "",
 
-                // Every request shares one in-memory SQLite connection, which must not also be used
-                // by a background loop; tests publish due posts explicitly instead.
                 ["Posts:SchedulerInterval"] = "00:00:00"
             });
         });

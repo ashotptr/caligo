@@ -28,7 +28,6 @@ public class NotificationsDbContext : DbContext
         subscriber.HasIndex(s => s.Email).IsUnique();
         subscriber.HasIndex(s => s.UnsubscribeToken).IsUnique();
 
-        // The fan-out walks active subscribers in id order; this index holds only those, in that order.
         subscriber.HasIndex(s => s.Id)
             .HasDatabaseName("IX_subscribers_active_id")
             .HasFilter("\"IsActive\"");

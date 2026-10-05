@@ -38,7 +38,6 @@ public interface IViewStatsClient
     IAsyncEnumerable<IReadOnlyList<TrendingPost>> StreamTrendingAsync(
         int windowHours, int limit, CancellationToken cancellationToken = default);
 
-    // The OLAP queries below return null when analytics or its ClickHouse store is unavailable.
     Task<IReadOnlyList<SeriesPoint>?> GetSeriesAsync(
         int postId, DateTime from, DateTime to, SeriesGranularity granularity,
         CancellationToken cancellationToken = default);

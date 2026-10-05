@@ -1,5 +1,3 @@
-# The load generator as a container on the compose network, so a run measures the stack and not
-# the host's port forwarding. Built from the repository root; see docker-compose.loadtest.yml.
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 

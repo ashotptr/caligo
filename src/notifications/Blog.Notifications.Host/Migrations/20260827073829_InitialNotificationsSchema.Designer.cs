@@ -15,7 +15,6 @@ namespace Blog.Notifications.Host.Migrations
     [Migration("20260827073829_InitialNotificationsSchema")]
     partial class InitialNotificationsSchema
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
