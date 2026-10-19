@@ -12,6 +12,11 @@ const PostCard = ({ post, views }: { post: PostSummary; views?: number }) => (
         <span className="post-views"> · {views.toLocaleString()} view{views === 1 ? '' : 's'}</span>
       )}
     </p>
+    {post.contentId !== null && (
+      <p className="review-of">
+        Review of <Link to={`/catalog/${post.contentId}`}>{post.contentTitle ?? 'a title in the catalog'}</Link>
+      </p>
+    )}
     <p className="post-excerpt">{post.excerpt}</p>
     {post.tags.length > 0 && (
       <p className="post-tags">

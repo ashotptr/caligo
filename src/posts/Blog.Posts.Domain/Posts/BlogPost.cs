@@ -37,6 +37,8 @@ public class BlogPost
 
     public int Version { get; private set; }
 
+    public int? ContentId { get; private set; }
+
     public bool IsPublished => Status == PostStatus.Published;
 
     public bool HasPendingEvents => _eventFactories.Count > 0;
@@ -53,7 +55,7 @@ public class BlogPost
             _tags = PostTags.Normalize(tags).ToList()
         };
 
-        post._eventFactories.Add(static p => new PostPublished(p.Id, p.Title, p.AuthorId, p.Tags));
+        post._eventFactories.Add(static p => new PostPublished(p.Id, p.Title, p.AuthorId, p.Tags) { ContentId = p.ContentId });
 
         return post;
     }
@@ -84,6 +86,16 @@ public class BlogPost
         }
     }
 
+    public void LinkToContent(int? contentId)
+    {
+        if (contentId is <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(contentId), "A content id must be positive.");
+        }
+
+        ContentId = contentId;
+    }
+
     public void Reschedule(DateTime publishAt)
     {
         if (IsPublished)
@@ -109,7 +121,7 @@ public class BlogPost
 
         Version++;
 
-        _eventFactories.Add(static p => new PostPublished(p.Id, p.Title, p.AuthorId, p.Tags));
+        _eventFactories.Add(static p => new PostPublished(p.Id, p.Title, p.AuthorId, p.Tags) { ContentId = p.ContentId });
 
         return true;
     }

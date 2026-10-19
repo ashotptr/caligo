@@ -7,6 +7,7 @@ obj/
 node_modules/
 dist/
 build/
+media/
 
 .env
 .env.local
@@ -20,6 +21,7 @@ appsettings.Production.json
 
 *.sql
 !src/analytics/Blog.Analytics.Infrastructure/Stores/ClickHouseMigrations/*.sql
+!src/streamingservice/**/*.sql
 
 reports/
 

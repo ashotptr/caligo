@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import PostCard from '../components/PostCard';
 import type { PagedResult, PostStats, PostStatsResponse, PostSummary } from '../types';
@@ -7,8 +8,8 @@ import SubscribeForm from '../components/SubscribeForm';
 const PostsListPage = () => {
   const [posts, setPosts] = useState<PostSummary[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
-  const [activeQuery, setActiveQuery] = useState('');
+  const [params] = useSearchParams();
+  const activeQuery = (params.get('q') ?? '').trim();
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,34 +83,15 @@ const PostsListPage = () => {
       .catch(() => undefined);
   }, [posts]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setActiveQuery(query.trim());
-  };
-
   return (
     <div>
-      <form onSubmit={handleSearch} className="search-bar">
-        <input
-          type="search"
-          placeholder="Search posts…"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-        />
-        <button type="submit">Search</button>
-        {activeQuery && (
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => {
-              setQuery('');
-              setActiveQuery('');
-            }}
-          >
-            Clear
-          </button>
-        )}
-      </form>
+      <h1>{activeQuery ? 'Search' : 'Posts'}</h1>
+
+      {activeQuery && (
+        <p className="search-summary">
+          Posts matching “{activeQuery}” · <Link to="/">Clear</Link>
+        </p>
+      )}
 
       {loading && <p className="status-line">Loading posts…</p>}
       {error && <p className="form-error">{error}</p>}

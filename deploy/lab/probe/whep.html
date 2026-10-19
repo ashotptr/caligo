@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WHEP probe</title>
+</head>
+<body>
+<p id="status">starting</p>
+<script type="module">
+const query = new URLSearchParams(location.search);
+const endpoint = query.get('url');
+const seconds = Number(query.get('seconds') ?? 20);
+const status = document.getElementById('status');
+const started = Date.now();
+const report = { endpoint, startedAt: started, beeps: [], samples: [] };
+
+const wallOf = (context, frame) => {
+  const stamp = context.getOutputTimestamp();
+  const contextSeconds = frame / context.sampleRate;
+
+  return performance.timeOrigin + stamp.performanceTime + (contextSeconds - stamp.contextTime) * 1000;
+};
+
+const statsOf = async connection => {
+  const stats = await connection.getStats();
+  let audio = null;
+
+  stats.forEach(entry => {
+    if (entry.type === 'inbound-rtp' && entry.kind === 'audio') {
+      audio = entry;
+    }
+  });
+
+  return audio;
+};
+
+const gathered = connection => new Promise(resolve => {
+  if (connection.iceGatheringState === 'complete') {
+    resolve();
+
+    return;
+  }
+
+  connection.addEventListener('icegatheringstatechange', () => {
+    if (connection.iceGatheringState === 'complete') {
+      resolve();
+    }
+  });
+
+  setTimeout(resolve, 2000);
+});
+
+try {
+  const context = new AudioContext({ sampleRate: 48000 });
+
+  await context.audioWorklet.addModule('beeps.js');
+
+  const connection = new RTCPeerConnection();
+  const tracks = new Promise(resolve => connection.addEventListener('track', event => resolve(event.streams[0] ?? new MediaStream([event.track]))));
+
+  connection.addTransceiver('audio', { direction: 'recvonly' });
+  connection.addEventListener('connectionstatechange', () => {
+    if (connection.connectionState === 'connected' && report.connectMs === undefined) {
+      report.connectMs = Date.now() - started;
+    }
+  });
+
+  await connection.setLocalDescription(await connection.createOffer());
+  await gathered(connection);
+
+  const answer = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: connection.localDescription.sdp });
+
+  if (!answer.ok) {
+    throw new Error('WHEP answered ' + answer.status);
+  }
+
+  report.firstByteMs = Date.now() - started;
+
+  await connection.setRemoteDescription({ type: 'answer', sdp: await answer.text() });
+
+  const stream = await tracks;
+  const element = new Audio();
+
+  element.srcObject = stream;
+  element.muted = true;
+  await element.play().catch(() => {});
+
+  const source = context.createMediaStreamSource(stream);
+  const detector = new AudioWorkletNode(context, 'beep-detector');
+  const silent = context.createGain();
+
+  silent.gain.value = 0;
+  source.connect(detector).connect(silent).connect(context.destination);
+  await context.resume();
+
+  detector.port.onmessage = event => {
+    const message = event.data;
+
+    if (message.kind === 'audio' && report.startupMs === undefined) {
+      report.startupMs = wallOf(context, message.frame) - started;
+    }
+    else if (message.kind === 'beep') {
+      report.beeps.push({ code: message.code, wallMs: wallOf(context, message.frame) });
+    }
+  };
+
+  status.textContent = 'listening';
+
+  const deadline = started + seconds * 1000;
+
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const audio = await statsOf(connection);
+
+    if (audio) {
+      report.samples.push({
+        atMs: Date.now() - started,
+        received: audio.totalSamplesReceived ?? 0,
+        concealed: audio.concealedSamples ?? 0,
+        silent: audio.silentConcealedSamples ?? 0,
+        events: audio.concealmentEvents ?? 0,
+        lost: audio.packetsLost ?? 0,
+        bytes: audio.bytesReceived ?? 0,
+        jitterBufferDelay: audio.jitterBufferDelay ?? 0,
+        jitterBufferEmitted: audio.jitterBufferEmittedCount ?? 0
+      });
+    }
+  }
+
+  connection.close();
+  await context.close();
+  status.textContent = 'done';
+}
+catch (error) {
+  report.error = String(error && error.message ? error.message : error);
+  status.textContent = 'failed: ' + report.error;
+}
+
+report.finishedAt = Date.now();
+window.report = report;
+</script>
+</body>
+</html>

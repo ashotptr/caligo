@@ -19,6 +19,8 @@ public class PostSummaryDto
     public List<string> Tags { get; set; } = new();
     public string Status { get; set; } = PostStatuses.Published;
     public DateTime? ScheduledFor { get; set; }
+    public int? ContentId { get; set; }
+    public string? ContentTitle { get; set; }
 }
 
 public class PostDetailDto
@@ -33,6 +35,8 @@ public class PostDetailDto
     public string Status { get; set; } = PostStatuses.Published;
     public DateTime? ScheduledFor { get; set; }
     public int Version { get; set; }
+    public int? ContentId { get; set; }
+    public string? ContentTitle { get; set; }
 
     [JsonIgnore]
     public bool IsPublished => Status == PostStatuses.Published;

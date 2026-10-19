@@ -21,6 +21,9 @@ jobs:
       analytics: ${{ steps.filter.outputs.analytics }}
       notifications: ${{ steps.filter.outputs.notifications }}
       client: ${{ steps.filter.outputs.client }}
+      caligo: ${{ steps.filter.outputs.caligo }}
+      streaming: ${{ steps.filter.outputs.streaming }}
+      liquidsoap: ${{ steps.filter.outputs.liquidsoap }}
       k8s: ${{ steps.filter.outputs.k8s }}
     steps:
       - uses: actions/checkout@v5
@@ -36,6 +39,8 @@ jobs:
             api:
               - *shared
               - 'src/posts/**'
+              - 'src/catalog/**'
+              - 'src/streamingservice/**'
             analytics:
               - *shared
               - 'src/analytics/**'
@@ -44,6 +49,13 @@ jobs:
               - 'src/notifications/**'
             client:
               - 'src/blog-client/**'
+            caligo:
+              - 'src/caligo/**'
+              - 'deploy/caligo/**'
+            streaming:
+              - 'src/caligo-streaming/**'
+            liquidsoap:
+              - 'deploy/liquidsoap/**'
             k8s:
               - 'deploy/k8s/**'
 
@@ -70,7 +82,7 @@ jobs:
       - name: Unit tests
         run: |
           set -e
-          for project in             tests/Blog.Posts.UnitTests             tests/Blog.Notifications.UnitTests             tests/Blog.Api.Tests
+          for project in             tests/Blog.Posts.UnitTests             tests/Blog.Catalog.UnitTests             tests/Blog.Notifications.UnitTests             tests/Blog.StreamLab.Tests             tests/Blog.Api.Tests
           do
             echo "::group::$project"
             dotnet test --no-build -c Release "$project"               --logger "trx;LogFileName=$(basename "$project").trx"               --collect:"XPlat Code Coverage"               --results-directory ./TestResults
@@ -112,6 +124,139 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+
+  caligo:
+    name: Caligo - build
+    needs: changes
+    if: needs.changes.outputs.caligo == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends build-essential libjansson-dev libssl-dev
+
+      - name: Build with its own Makefile, outside the checkout
+        run: |
+          cp -r src/caligo "$RUNNER_TEMP/caligo"
+          make -C "$RUNNER_TEMP/caligo" all
+
+  streaming:
+    name: Caligo streaming (C) - build and test
+    needs: changes
+    if: needs.changes.outputs.streaming == 'true'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: src/caligo-streaming
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install OpenSSL, jansson and ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libssl-dev libjansson-dev ffmpeg
+
+      - name: Build with warnings as errors
+        run: make EXTRA=-Werror all
+
+      - name: Unit and integration tests
+        run: make EXTRA=-Werror test
+
+      - name: The same tests under AddressSanitizer and UBSan
+        run: make sanitize
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: moq-lite against moq-dev's own client
+        run: |
+          npm ci --prefix tests/interop --no-audit --no-fund
+          make EXTRA=-Werror interop
+
+      - name: The lab's network impairment in two network namespaces
+        run: |
+          make EXTRA=-Werror netem
+          sudo env CI=true python3 tests/netem_integration.py build/caligo-netem
+
+  streaming-quic:
+    name: Caligo streaming (C) - QUIC and WebTransport
+    needs: changes
+    if: needs.changes.outputs.streaming == 'true'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: src/caligo-streaming
+    env:
+      PICOQUIC_COMMIT: cc11becf4e90667e8145b4c7dd73985b17c6ddf8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install OpenSSL, jansson and the picoquic build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libssl-dev libjansson-dev cmake pkg-config
+
+      - name: Cache picoquic
+        id: picoquic
+        uses: actions/cache@v4
+        with:
+          path: ~/picoquic
+          key: picoquic-${{ runner.os }}-${{ env.PICOQUIC_COMMIT }}
+
+      - name: Build picoquic at the pinned commit
+        if: steps.picoquic.outputs.cache-hit != 'true'
+        run: |
+          git init --quiet ~/picoquic
+          git -C ~/picoquic fetch --quiet --depth 1 https://github.com/private-octopus/picoquic.git "$PICOQUIC_COMMIT"
+          git -C ~/picoquic checkout --quiet FETCH_HEAD
+          cmake -S ~/picoquic -B ~/picoquic/build -DCMAKE_BUILD_TYPE=Release -DPICOQUIC_FETCH_PTLS=ON \
+            -DBUILD_DEMO=OFF -DBUILD_PQBENCH=OFF -DBUILD_LOGLIB=OFF -DBUILD_LOGREADER=OFF -DBUILD_TESTING=OFF
+          cmake --build ~/picoquic/build --parallel --target picoquic-core picohttp-core
+
+      - name: Build the QUIC relay with warnings as errors
+        run: make EXTRA=-Werror PICOQUIC=$HOME/picoquic relay-quic
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: WebTransport against aioquic
+        run: |
+          python -m pip install --quiet aioquic==1.2.0
+          make EXTRA=-Werror PICOQUIC=$HOME/picoquic quic-test
+
+      - name: The same under AddressSanitizer and UBSan
+        run: >
+          make EXTRA=-Werror PICOQUIC=$HOME/picoquic BUILD=build/sanitize
+          OPTIMIZE="-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer" quic-test
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: moq-dev's client in headless Chrome over WebTransport
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          npm ci --prefix tests/interop --no-audit --no-fund
+          npm run --prefix tests/interop bundle
+          make EXTRA=-Werror PICOQUIC=$HOME/picoquic browser-interop
+
+  liquidsoap:
+    name: Liquidsoap - script check
+    needs: changes
+    if: needs.changes.outputs.liquidsoap == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the Opus source script with the image compose runs
+        run: |
+          image=$(grep -m1 -o 'savonet/liquidsoap:[^"[:space:]]*' deploy/compose/docker-compose.yml)
+          docker run --rm -v "$PWD/deploy/liquidsoap:/etc/liquidsoap:ro" "$image" --check /etc/liquidsoap/opus.liq
 
   manifests:
     name: Kubernetes manifests

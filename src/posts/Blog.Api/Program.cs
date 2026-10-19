@@ -6,12 +6,23 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Blog.Api.Composition;
+using Blog.Api.Lab;
+using Blog.Api.Media;
+using Blog.Api.Radio;
 using Blog.Api.Services;
+using Blog.Catalog.Application.Abstractions;
+using Blog.Catalog.Application.Media;
+using Blog.Catalog.Infrastructure;
+using Blog.Catalog.Infrastructure.Schema;
+using Blog.Posts.Application.Abstractions;
 using Blog.Observability;
 using OpenTelemetry.Trace;
 using Blog.Posts.Infrastructure;
 using Blog.Posts.Infrastructure.Identity;
+using Blog.Posts.Infrastructure.Messaging;
 using Blog.Posts.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -88,6 +99,28 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddPostsInfrastructure(builder.Environment.IsDevelopment());
 
+builder.Services.AddCatalogInfrastructure((provider, catalog) =>
+{
+    var database = provider.GetRequiredService<DependencyInjection.DatabaseChoice>();
+
+    catalog.Enabled = !catalog.Disabled && database.Provider == DatabaseProvider.Postgres;
+    catalog.ConnectionString = database.ConnectionString;
+});
+
+builder.Services.AddScoped<IBlogAccounts, IdentityBlogAccounts>();
+builder.Services.AddScoped<IContentLookup, CatalogContentLookup>();
+builder.Services.AddScoped<RadioHistory>();
+builder.Services.AddScoped<PlaybackQuality>();
+builder.Services.AddScoped<LabResults>();
+
+builder.Services.AddOptions<MediaRules>().Configure<IOptions<CatalogOptions>>((media, catalog) =>
+    media.Enabled = media.Enabled && catalog.Value.Enabled);
+
+builder.Services.AddSingleton<IPlaybackEventSink>(provider =>
+    provider.GetRequiredService<IOptions<KafkaOptions>>().Value.Enabled
+        ? ActivatorUtilities.CreateInstance<KafkaPlaybackEvents>(provider)
+        : new NullPlaybackEvents());
+
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
@@ -136,6 +169,15 @@ if (signingKeyBytes < 32)
     throw new InvalidOperationException(
         "Jwt:Key must be at least 32 bytes (256 bits) for HMAC-SHA256. " +
         $"The configured key is {signingKeyBytes} bytes.");
+}
+
+var mediaRules = app.Services.GetRequiredService<MediaRules>();
+
+if (mediaRules.Enabled && Encoding.UTF8.GetByteCount(mediaRules.SigningKey) < MediaRules.MinSigningKeyBytes)
+{
+    throw new InvalidOperationException(
+        $"Media:SigningKey must be at least {MediaRules.MinSigningKeyBytes} bytes when Media:Enabled is true. " +
+        "The same key goes to the C VOD server and packager as MEDIA_SIGNING_KEY.");
 }
 
 if (app.Environment.IsDevelopment())
@@ -220,6 +262,8 @@ using (var scope = app.Services.CreateScope())
                 await Task.Delay(3000);
             }
         }
+
+        services.GetRequiredService<StreamingSchema>().Ensure();
     }
 
     await SeedData.Initialize(services, services.GetRequiredService<IConfiguration>());

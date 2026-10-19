@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using Blog.Api.Services;
 using Blog.Posts.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -10,7 +11,7 @@ namespace Blog.Api.Tests;
 internal static class Authenticated
 {
     public static async Task<(HttpClient Client, string UserId)> ClientAsync(
-        SqliteApiFactory factory, params string[] roles)
+        WebApplicationFactory<Program> factory, params string[] roles)
     {
         using var scope = factory.Services.CreateScope();
 

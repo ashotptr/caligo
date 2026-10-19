@@ -1,5 +1,6 @@
 using Blog.Posts.Application.Posts;
 using Blog.Posts.Domain.Posts;
+using Blog.SharedKernel;
 
 namespace Blog.Posts.Application.Abstractions;
 
@@ -7,6 +8,9 @@ public interface IPostRepository
 {
     Task<PagedResult<PostSummaryDto>> GetPageAsync(
         PostCursor? cursor, int limit, string? authorId, CancellationToken cancellationToken = default);
+
+    Task<PagedResult<PostSummaryDto>> GetPageForContentAsync(
+        int contentId, PostCursor? cursor, int limit, CancellationToken cancellationToken = default);
 
     Task<PostDetailDto?> GetDetailAsync(int id, CancellationToken cancellationToken = default);
 

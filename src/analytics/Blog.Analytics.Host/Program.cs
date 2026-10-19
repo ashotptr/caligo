@@ -3,9 +3,13 @@ using Blog.Analytics.Host;
 using Blog.Observability;
 using OpenTelemetry.Trace;
 using Blog.Analytics.Core.Olap;
+using Blog.Analytics.Core.Lab;
+using Blog.Analytics.Core.Playback;
+using Blog.Analytics.Core.Radio;
 using Blog.Analytics.Core.Views;
 using Blog.Analytics.Host.Services;
 using Blog.Analytics.Infrastructure.Messaging;
+using Blog.Analytics.Infrastructure.Radio;
 using Blog.Analytics.Infrastructure.Stores;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -55,12 +59,20 @@ builder.Services.AddSingleton<ClickHouseOlapStore>();
 builder.Services.AddSingleton<IOlapSink>(provider => provider.GetRequiredService<ClickHouseOlapStore>());
 builder.Services.AddSingleton<IOlapQueries>(provider => provider.GetRequiredService<ClickHouseOlapStore>());
 
+builder.Services.AddOptions<RadioOptions>().BindConfiguration(RadioOptions.SectionName);
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IRadioStore, ClickHouseRadioStore>();
+builder.Services.AddSingleton<IPlaybackStore, ClickHousePlaybackStore>();
+builder.Services.AddSingleton<ILabStore, ClickHouseLabStore>();
+
 builder.Services.AddHostedService<ClickHouseSchemaInitializer>();
 
 builder.Services.AddHostedService<RawViewConsumer>();
 builder.Services.AddHostedService<TrendingConsumer>();
 builder.Services.AddHostedService<OlapViewConsumer>();
 builder.Services.AddHostedService<OlapClapConsumer>();
+builder.Services.AddHostedService<RadioCollector>();
+builder.Services.AddHostedService<PlaybackConsumer>();
 
 var app = builder.Build();
 

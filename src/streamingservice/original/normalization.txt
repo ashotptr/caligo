@@ -1,0 +1,34 @@
+1)
+SubscriptionPlans
+subscription_plan_id -> payment_info
+subscription_plan_id -> plan_info
+
+subscription_plan_id is ck and prime
+
+there is no non-prime attr -> non-prime attr => 3rd form
+for every functional dependency X -> Y, X is a candidate key => BCNF
+
+2)
+Users
+user_id -> dob
+user_id -> first_name
+user_id -> last_name
+user_id -> email
+user_id -> password
+user_id -> gender
+
+user_id is ck and prime
+
+there is no non-prime attr -> non-prime attr => 3rd form
+for every functional dependency X -> Y, X is a candidate key => BCNF
+
+3)
+Series
+series_id -> description
+series_id -> title
+series_id -> release
+
+series_id is ck and prime
+
+there is no non-prime attr -> non-prime attr => 3rd form
+for every functional dependency X -> Y, X is a candidate key => BCNF

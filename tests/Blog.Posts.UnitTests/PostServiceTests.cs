@@ -3,7 +3,9 @@ using Moq;
 using Blog.Posts.Application.Abstractions;
 using Blog.Posts.Application.Common;
 using Blog.Posts.Application.Posts;
+using Blog.Posts.Domain.Events;
 using Blog.Posts.Domain.Posts;
+using Blog.SharedKernel;
 using Xunit;
 
 namespace Blog.Posts.UnitTests;
@@ -18,9 +20,10 @@ public class PostServiceTests
     private readonly Mock<IAnalyticsPublisher> _analytics = new();
     private readonly FakeTimeProvider _time = new(Now);
     private readonly PostingRules _rules = new() { MaxScheduledPerAuthor = 3 };
+    private readonly Mock<IContentLookup> _contents = new();
 
     private PostService Service() =>
-        new(_repository.Object, _cache, _search.Object, _analytics.Object, _time, _rules);
+        new(_repository.Object, _cache, _search.Object, _analytics.Object, _time, _rules, _contents.Object);
 
     private static PostDetailDto Published(int id, string? authorId = "author-1") =>
         new() { Id = id, AuthorId = authorId, Status = PostStatuses.Published };
@@ -209,6 +212,60 @@ public class PostServiceTests
 
         Assert.True(result.IsSuccess);
         Assert.Contains(PostService.ListScope, _cache.Invalidated);
+    }
+
+    [Fact]
+    public async Task Create_AReviewOfAnUnknownTitle_IsInvalid()
+    {
+        _contents.Setup(c => c.ExistsAsync(77, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await Service().CreateAsync(
+            new WritePostCommand("Title", "Content", null, ContentId: 77), new Caller("user-1", false));
+
+        Assert.Equal(ResultStatus.Invalid, result.Status);
+        Assert.Equal(PostService.UnknownContent, result.Error);
+    }
+
+    [Fact]
+    public async Task Create_AReview_KeepsItsLinkToTheTitle_AndAnnouncesIt()
+    {
+        BlogPost? captured = null;
+
+        _contents.Setup(c => c.ExistsAsync(77, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _contents.Setup(c => c.GetTitlesAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(new Dictionary<int, string> { [77] = "Fight Club" });
+        _repository.Setup(r => r.Add(It.IsAny<BlogPost>())).Callback<BlogPost>(p => captured = p);
+        _repository.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _repository.Setup(r => r.GetDetailAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(new PostDetailDto { ContentId = 77 });
+
+        var result = await Service().CreateAsync(
+            new WritePostCommand("Title", "Content", null, ContentId: 77), new Caller("user-1", false));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Fight Club", result.Value!.ContentTitle);
+        Assert.Equal(77, captured!.ContentId);
+
+        var published = Assert.IsType<PostPublished>(Assert.Single(captured.DrainDomainEvents()));
+
+        Assert.Equal(77, published.ContentId);
+    }
+
+    [Fact]
+    public async Task Reviews_AreLoadedByTitle_WithTheTitleFilledIn()
+    {
+        _repository.Setup(r => r.GetPageForContentAsync(77, null, 20, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(new PagedResult<PostSummaryDto>
+                   {
+                       Items = new() { new PostSummaryDto { Id = 5, ContentId = 77 } }
+                   });
+        _contents.Setup(c => c.GetTitlesAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(new Dictionary<int, string> { [77] = "Fight Club" });
+
+        var result = await Service().GetReviewsAsync(77, null, 20);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Fight Club", Assert.Single(result.Value!.Items).ContentTitle);
     }
 
     [Fact]

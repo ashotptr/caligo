@@ -36,6 +36,12 @@ SyntaxHighlighter.registerLanguage('css', css);
 SyntaxHighlighter.registerLanguage('html', markup);
 SyntaxHighlighter.registerLanguage('xml', markup);
 
+const codeTheme = {
+  ...oneDark,
+  'pre[class*="language-"]': { ...oneDark['pre[class*="language-"]'], background: '#111111' },
+  'code[class*="language-"]': { ...oneDark['code[class*="language-"]'], background: 'transparent' }
+};
+
 interface MarkdownProps {
   children: string;
 }
@@ -51,7 +57,7 @@ const Markdown = ({ children }: MarkdownProps) => (
         const isBlock = !!match || text.includes('\n');
 
         return isBlock ? (
-          <SyntaxHighlighter style={oneDark} language={match?.[1] ?? 'text'} PreTag="div" className="code-block">
+          <SyntaxHighlighter style={codeTheme} language={match?.[1] ?? 'text'} PreTag="div" className="code-block">
             {text}
           </SyntaxHighlighter>
         ) : (

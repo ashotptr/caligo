@@ -1,0 +1,307 @@
+x-lab-limits: &lab-limits
+  cpus: 1
+  mem_limit: 512m
+  pids_limit: 256
+
+x-netem: &netem
+  profiles: ["lab"]
+  build:
+    context: ../../src/caligo-streaming
+    target: netem
+  image: blog-lab-netem
+  cap_drop:
+    - ALL
+  cap_add:
+    - NET_ADMIN
+    - NET_RAW
+  devices:
+    - /dev/net/tun
+  security_opt:
+    - no-new-privileges:true
+  read_only: true
+  restart: unless-stopped
+  volumes:
+    - labcontrol:/lab-control
+
+services:
+  rabbitmq:
+    ports: !reset []
+
+  aspire-dashboard:
+    ports: !reset []
+
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  kafka:
+    ports: !reset []
+    environment:
+      KAFKA_HEAP_OPTS: "-Xmx256m -Xms256m"
+    mem_limit: 768m
+
+  mongo:
+    ports: !reset []
+    mem_limit: 512m
+
+  clickhouse:
+    mem_limit: 1g
+
+  blog-api:
+    ports: !reset []
+    environment:
+      DOTNET_gcServer: "0"
+    mem_limit: 512m
+
+  blog-analytics:
+    ports: !reset []
+    environment:
+      DOTNET_gcServer: "0"
+    mem_limit: 512m
+
+  caligo:
+    build:
+      args:
+        CALIGO_PYTHON: none
+    image: blog-lab-caligo
+    sysctls:
+      net.ipv4.conf.all.rp_filter: "0"
+    networks:
+      caligo: {}
+      lab-listeners:
+        ipv4_address: 172.31.250.20
+        aliases: [caligo-lab]
+
+  relay:
+    environment:
+      RELAY_SOURCE_PASSWORD: ${LAB_SOURCE_PASSWORD:-dev-relay-source-password}
+      RELAY_QUIC_MAX_SESSIONS: "2000"
+      RELAY_MAX_LISTENERS: "4000"
+    mem_limit: 512m
+    sysctls:
+      net.ipv4.conf.all.rp_filter: "0"
+    networks:
+      caligo: {}
+      lab-listeners:
+        ipv4_address: 172.31.250.21
+        aliases: [relay-lab]
+      lab-sources:
+        aliases: [relay-ingest]
+
+  icecast:
+    <<: *lab-limits
+    profiles: ["lab"]
+    build: ../lab/icecast
+    environment:
+      LAB_SOURCE_PASSWORD: ${LAB_SOURCE_PASSWORD:-dev-relay-source-password}
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    sysctls:
+      net.ipv4.conf.all.rp_filter: "0"
+    networks:
+      lab-listeners:
+        ipv4_address: 172.31.250.22
+        aliases: [icecast-lab]
+      lab-sources:
+        aliases: [icecast-ingest]
+
+  mediamtx:
+    <<: *lab-limits
+    profiles: ["lab"]
+    image: bluenviron/mediamtx:1.9.3
+    environment:
+      MTX_WEBRTCIPSFROMINTERFACES: "no"
+      MTX_WEBRTCADDITIONALHOSTS: 172.31.250.23
+    volumes:
+      - ../lab/mediamtx.yml:/mediamtx.yml:ro
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    sysctls:
+      net.ipv4.conf.all.rp_filter: "0"
+    networks:
+      lab-listeners:
+        ipv4_address: 172.31.250.23
+        aliases: [mediamtx-lab]
+      lab-sources:
+        aliases: [mediamtx-ingest]
+
+  lab-web:
+    <<: *lab-limits
+    profiles: ["lab"]
+    image: nginx:1.27-alpine
+    user: "101:101"
+    volumes:
+      - ../lab/web/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../lab/probe:/lab-probe:ro
+      - labweb:/lab-web:ro
+      - labfiles:/lab-files:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    sysctls:
+      net.ipv4.conf.all.rp_filter: "0"
+    networks:
+      lab-listeners:
+        ipv4_address: 172.31.250.24
+        aliases: [web-lab]
+
+  lab-ftp:
+    <<: *lab-limits
+    profiles: ["lab"]
+    build: ../lab/ftp
+    volumes:
+      - labfiles:/lab-files:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - SYS_CHROOT
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    sysctls:
+      net.ipv4.conf.all.rp_filter: "0"
+    networks:
+      lab-listeners:
+        ipv4_address: 172.31.250.25
+        aliases: [ftp-lab]
+
+  lab-source:
+    profiles: ["lab"]
+    build: ../lab/source
+    environment:
+      LAB_SOURCE_PASSWORD: ${LAB_SOURCE_PASSWORD:-dev-relay-source-password}
+      LAB_RELAY: relay-ingest:8000
+      LAB_ICECAST: icecast-ingest:8000
+      LAB_MEDIAMTX: mediamtx-ingest
+      LAB_REFERENCE: 172.31.251.10:5099
+    volumes:
+      - labweb:/lab-web
+      - labfiles:/lab-files
+      - labcontrol:/lab-control
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    cpus: 2
+    mem_limit: 512m
+    networks:
+      lab-sources: {}
+    depends_on:
+      - relay
+      - icecast
+      - mediamtx
+
+  netem-caligo:
+    <<: *netem
+    network_mode: "service:caligo"
+    environment:
+      NETEM_NAME: caligo
+      NETEM_SUBNET: 172.31.250.0/24
+    depends_on:
+      - caligo
+
+  netem-relay:
+    <<: *netem
+    network_mode: "service:relay"
+    environment:
+      NETEM_NAME: relay
+      NETEM_SUBNET: 172.31.250.0/24
+    depends_on:
+      - relay
+
+  netem-icecast:
+    <<: *netem
+    network_mode: "service:icecast"
+    environment:
+      NETEM_NAME: icecast
+      NETEM_SUBNET: 172.31.250.0/24
+    depends_on:
+      - icecast
+
+  netem-mediamtx:
+    <<: *netem
+    network_mode: "service:mediamtx"
+    environment:
+      NETEM_NAME: mediamtx
+      NETEM_SUBNET: 172.31.250.0/24
+    depends_on:
+      - mediamtx
+
+  netem-web:
+    <<: *netem
+    network_mode: "service:lab-web"
+    environment:
+      NETEM_NAME: web
+      NETEM_SUBNET: 172.31.250.0/24
+    depends_on:
+      - lab-web
+
+  netem-ftp:
+    <<: *netem
+    network_mode: "service:lab-ftp"
+    environment:
+      NETEM_NAME: ftp
+      NETEM_SUBNET: 172.31.250.0/24
+    depends_on:
+      - lab-ftp
+
+  stream-lab:
+    profiles: ["lab-run"]
+    build:
+      context: ../..
+      dockerfile: tests/Blog.StreamLab/Dockerfile
+    environment:
+      LAB_CLICKHOUSE: Host=clickhouse;Port=8123;Username=blog;Password=blogpass;Database=blog_analytics
+      LAB_CONTROL: /lab-control
+      LAB_REFERENCE_PORT: "5099"
+    volumes:
+      - labcontrol:/lab-control
+    shm_size: 512m
+    cpus: 2
+    mem_limit: 1536m
+    networks:
+      default: {}
+      lab-listeners:
+        ipv4_address: 172.31.250.10
+      lab-sources:
+        ipv4_address: 172.31.251.10
+    depends_on:
+      - clickhouse
+
+networks:
+  lab-listeners:
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24
+  lab-sources:
+    ipam:
+      config:
+        - subnet: 172.31.251.0/24
+
+volumes:
+  labweb:
+  labfiles:
+  labcontrol:

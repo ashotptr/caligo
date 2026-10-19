@@ -21,6 +21,8 @@
 		<PackageReference Include="Testcontainers.ClickHouse" />
 		<PackageReference Include="Testcontainers.Kafka" />
 		<PackageReference Include="Testcontainers.MongoDb" />
+		<PackageReference Include="Testcontainers.MySql" />
+		<PackageReference Include="MySqlConnector" />
 		<PackageReference Include="Testcontainers.Redis" />
 		<PackageReference Include="Testcontainers.PostgreSql" />
 		<PackageReference Include="xunit" />
@@ -28,6 +30,11 @@
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="../../src/streamingservice/original/create_insert.sql" LogicalName="Original.create_insert.sql" />
+		<EmbeddedResource Include="../../src/streamingservice/original/queries.sql" LogicalName="Original.queries.sql" />
 	</ItemGroup>
 
 </Project>

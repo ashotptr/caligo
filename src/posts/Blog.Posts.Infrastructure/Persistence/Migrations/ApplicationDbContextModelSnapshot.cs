@@ -38,6 +38,9 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("ContentId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("PublishedDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -90,6 +93,10 @@ namespace Blog.Posts.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AuthorId", "PublishedDate", "Id")
                         .HasDatabaseName("IX_BlogPosts_Author_PublishedDate_Id");
+
+                    b.HasIndex("ContentId", "PublishedDate", "Id")
+                        .HasDatabaseName("IX_BlogPosts_Content_PublishedDate_Id")
+                        .HasFilter("\"Status\" = 0 AND \"ContentId\" IS NOT NULL");
 
                     b.ToTable("BlogPosts");
                 });

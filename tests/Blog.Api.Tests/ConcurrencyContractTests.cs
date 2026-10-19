@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Blog.Posts.Application.Posts;
 using Blog.Posts.Infrastructure.Publishing;
+using Blog.SharedKernel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;

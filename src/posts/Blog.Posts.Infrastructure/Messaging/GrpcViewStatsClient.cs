@@ -22,6 +22,8 @@ namespace Blog.Posts.Infrastructure.Messaging
         public TimeSpan Deadline { get; set; } = TimeSpan.FromMilliseconds(150);
 
         public TimeSpan OlapDeadline { get; set; } = TimeSpan.FromSeconds(2);
+
+        public TimeSpan LabDeadline { get; set; } = TimeSpan.FromSeconds(10);
     }
 
     public class GrpcViewStatsClient : IViewStatsClient

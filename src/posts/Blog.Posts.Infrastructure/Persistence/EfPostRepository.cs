@@ -4,6 +4,7 @@ using Blog.Posts.Application.Abstractions;
 using Blog.Posts.Application.Common;
 using Blog.Posts.Application.Posts;
 using Blog.Posts.Domain.Posts;
+using Blog.SharedKernel;
 
 namespace Blog.Posts.Infrastructure.Persistence
 {
@@ -29,6 +30,21 @@ namespace Blog.Posts.Infrastructure.Persistence
                 ? query.Where(p => p.Status == PostStatus.Published)
                 : query.Where(p => p.AuthorId == authorId);
 
+            return await PageAsync(query, cursor, limit, cancellationToken);
+        }
+
+        public Task<PagedResult<PostSummaryDto>> GetPageForContentAsync(
+            int contentId, PostCursor? cursor, int limit, CancellationToken cancellationToken = default) =>
+            PageAsync(
+                _context.BlogPosts.AsNoTracking()
+                    .Where(p => p.Status == PostStatus.Published && p.ContentId == contentId),
+                cursor,
+                limit,
+                cancellationToken);
+
+        private async Task<PagedResult<PostSummaryDto>> PageAsync(
+            IQueryable<BlogPost> query, PostCursor? cursor, int limit, CancellationToken cancellationToken)
+        {
             if (cursor is { } from)
             {
                 query = _context.Database.IsNpgsql()
@@ -81,7 +97,8 @@ namespace Blog.Posts.Infrastructure.Persistence
                     Tags = p.Tags.ToList(),
                     p.Status,
                     p.ScheduledFor,
-                    p.Version
+                    p.Version,
+                    p.ContentId
                 })
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -98,7 +115,8 @@ namespace Blog.Posts.Infrastructure.Persistence
                     Tags = row.Tags,
                     Status = StatusName(row.Status),
                     ScheduledFor = row.ScheduledFor,
-                    Version = row.Version
+                    Version = row.Version,
+                    ContentId = row.ContentId
                 };
         }
 
@@ -220,7 +238,8 @@ namespace Blog.Posts.Infrastructure.Persistence
                     .FirstOrDefault() ?? "Unknown",
                 Tags = p.Tags.ToList(),
                 Status = p.Status,
-                ScheduledFor = p.ScheduledFor
+                ScheduledFor = p.ScheduledFor,
+                ContentId = p.ContentId
             });
 
         internal static PostSummaryDto ToSummary(PostRow row) => new()
@@ -232,7 +251,8 @@ namespace Blog.Posts.Infrastructure.Persistence
             AuthorName = row.AuthorName,
             Tags = row.Tags,
             Status = StatusName(row.Status),
-            ScheduledFor = row.ScheduledFor
+            ScheduledFor = row.ScheduledFor,
+            ContentId = row.ContentId
         };
 
         internal static string StatusName(PostStatus status) => status == PostStatus.Scheduled
@@ -249,6 +269,7 @@ namespace Blog.Posts.Infrastructure.Persistence
             public List<string> Tags { get; init; } = new();
             public PostStatus Status { get; init; }
             public DateTime? ScheduledFor { get; init; }
+            public int? ContentId { get; init; }
         }
     }
 }

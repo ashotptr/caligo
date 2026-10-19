@@ -51,52 +51,56 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="auth-page">
-      <h1>Sign in</h1>
+    <div className="fog-stage">
+      <div className="auth-page">
+        <h1>Sign in</h1>
 
-      <form onSubmit={handleSubmit} className="auth-form">
-        <label>
-          Username
-          <input
-            type="text"
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            autoComplete="username"
-            required
-          />
-        </label>
+        <form onSubmit={handleSubmit} className="auth-form">
+          <label>
+            Username
+            <input
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              autoComplete="username"
+              required
+            />
+          </label>
 
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-          />
-        </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </label>
 
-        {error && <p className="form-error">{error}</p>}
+          {error && <p className="form-error">{error}</p>}
 
-        <button type="submit" disabled={submitting}>
-          {submitting ? 'Signing in…' : 'Sign in'}
-        </button>
-      </form>
+          <button type="submit" disabled={submitting}>
+            {submitting ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
 
-      {googleClientId && (
-        <div className="google-login">
-          <div className="divider">or</div>
-          <GoogleLogin
-            onSuccess={cred => handleGoogleSuccess(cred.credential)}
-            onError={() => setError('Google sign-in failed. Please try again.')}
-          />
-        </div>
-      )}
+        {googleClientId && (
+          <div className="google-login">
+            <div className="divider">or</div>
+            <GoogleLogin
+              theme="filled_black"
+              shape="pill"
+              onSuccess={cred => handleGoogleSuccess(cred.credential)}
+              onError={() => setError('Google sign-in failed. Please try again.')}
+            />
+          </div>
+        )}
 
-      <p className="auth-switch">
-        No account? <Link to="/register">Register</Link>
-      </p>
+        <p className="auth-switch">
+          No account? <Link to="/register">Register</Link>
+        </p>
+      </div>
     </div>
   );
 };

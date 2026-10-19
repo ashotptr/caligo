@@ -56,6 +56,10 @@ namespace Blog.Posts.Infrastructure.Persistence
                     .HasDatabaseName("IX_BlogPosts_Scheduled_Due")
                     .HasFilter("\"Status\" = 1");
 
+                post.HasIndex(p => new { p.ContentId, p.PublishedDate, p.Id })
+                    .HasDatabaseName("IX_BlogPosts_Content_PublishedDate_Id")
+                    .HasFilter("\"Status\" = 0 AND \"ContentId\" IS NOT NULL");
+
                 post.Property<NpgsqlTsVector>(ApplicationDbContext.SearchVectorProperty)
                     .HasColumnName("search_vector")
                     .HasComputedColumnSql(
@@ -72,6 +76,8 @@ namespace Blog.Posts.Infrastructure.Persistence
                 post.HasIndex(p => new { p.PublishedDate, p.Id });
 
                 post.HasIndex(p => new { p.Status, p.ScheduledFor });
+
+                post.HasIndex(p => new { p.ContentId, p.PublishedDate, p.Id });
             }
 
             if (IsSqlite)

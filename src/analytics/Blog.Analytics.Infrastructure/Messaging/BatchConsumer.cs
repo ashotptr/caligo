@@ -26,6 +26,8 @@ namespace Blog.Analytics.Infrastructure.Messaging
 
         public string OlapClapsGroup { get; set; } = "analytics-olap-claps";
 
+        public string PlaybackGroup { get; set; } = "analytics-playback";
+
         public int BatchSize { get; set; } = 200;
 
         public TimeSpan BatchLinger { get; set; } = TimeSpan.FromSeconds(2);

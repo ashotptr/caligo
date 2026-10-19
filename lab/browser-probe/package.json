@@ -1,0 +1,13 @@
+{
+  "name": "browser-probe",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Measures how a real browser starts, buffers and recovers on the radio streams.",
+  "scripts": {
+    "probe": "node probe.js",
+    "experiment": "node experiments/run.js"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.13.0"
+  }
+}

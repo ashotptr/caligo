@@ -1,0 +1,15 @@
+{
+  "name": "caligo-streaming-interop",
+  "private": true,
+  "type": "module",
+  "description": "moq-dev's own moq-lite client, used to check the relay against a second implementation, in Node and in a browser",
+  "dependencies": {
+    "@moq/net": "0.4.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0"
+  },
+  "scripts": {
+    "bundle": "esbuild moq_browser.mjs --bundle --format=esm --platform=browser --target=chrome120 --outfile=build/moq-browser.js"
+  }
+}

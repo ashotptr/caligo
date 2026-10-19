@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import { apiError, isEditConflict } from '../api/errors';
 import { etagOf } from '../api/etag';
+import ContentPicker from '../components/ContentPicker';
+import type { PickedContent } from '../components/ContentPicker';
 import Markdown from '../components/Markdown';
 import { formatDateTime, fromLocalInput, parseServerDate, toLocalInput } from '../dates';
-import type { PostDetail, PostStatus } from '../types';
+import type { ContentDetail, PostDetail, PostStatus } from '../types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -13,11 +15,14 @@ const MAX_SCHEDULE_DAYS = 365;
 
 const PostEditorPage = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const isEditing = !!id;
+  const reviewOf = searchParams.get('contentId');
 
   const [title, setTitle] = useState('');
   const [tagsInput, setTagsInput] = useState('');
   const [content, setContent] = useState('');
+  const [reviewed, setReviewed] = useState<PickedContent | null>(null);
   const [status, setStatus] = useState<PostStatus | null>(null);
   const [scheduledFor, setScheduledFor] = useState<string | null>(null);
   const [when, setWhen] = useState<'now' | 'schedule'>('now');
@@ -37,6 +42,9 @@ const PostEditorPage = () => {
     setTitle(post.title);
     setTagsInput(post.tags.join(', '));
     setContent(post.content);
+    setReviewed(post.contentId === null
+      ? null
+      : { contentId: post.contentId, title: post.contentTitle ?? `Title ${post.contentId}` });
     setStatus(post.status);
     setScheduledFor(post.scheduledFor);
     setEtag(etagOf(response));
@@ -61,6 +69,15 @@ const PostEditorPage = () => {
     };
     fetchPost();
   }, [isEditing, load]);
+
+  useEffect(() => {
+    if (isEditing || !reviewOf) return;
+
+    api
+      .get<ContentDetail>(`/api/content/${reviewOf}`)
+      .then(response => setReviewed({ contentId: response.data.contentId, title: response.data.title }))
+      .catch(() => undefined);
+  }, [isEditing, reviewOf]);
 
   const canSchedule = !isEditing || status === 'scheduled';
 
@@ -105,7 +122,7 @@ const PostEditorPage = () => {
     setSaving(true);
 
     try {
-      const body = { title, content, tags, publishAt: schedule };
+      const body = { title, content, tags, publishAt: schedule, contentId: reviewed?.contentId ?? null };
 
       if (isEditing) {
         await api.put(`/api/blogposts/${id}`, body, { headers: etag ? { 'If-Match': etag } : {} });
@@ -163,7 +180,7 @@ const PostEditorPage = () => {
         </label>
 
         <label>
-          Tags <span className="hint">(comma separated)</span>
+          <span>Tags <span className="hint">(comma separated)</span></span>
           <input
             type="text"
             value={tagsInput}
@@ -171,6 +188,8 @@ const PostEditorPage = () => {
             placeholder="dotnet, react, devops"
           />
         </label>
+
+        <ContentPicker value={reviewed} onChange={setReviewed} />
 
         {canSchedule && (
           <fieldset className="schedule-field">

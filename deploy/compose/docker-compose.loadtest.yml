@@ -34,7 +34,7 @@ services:
       context: ../..
       dockerfile: tests/Blog.LoadTests/Dockerfile
     environment:
-      BLOG_URL: http://blog-client
+      BLOG_URL: http://caligo-client
       BLOG_POSTS_DB: Host=postgres;Database=blogdb;Username=postgres;Password=postgres
       BLOG_NOTIFICATIONS_DB: Host=postgres;Database=blognotifications;Username=postgres;Password=postgres
       BLOG_LAB_DB: Host=postgres;Database=bloglab;Username=postgres;Password=postgres;Maximum Pool Size=300

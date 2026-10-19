@@ -1,24 +1,17 @@
 using Blog.Posts.Application.Abstractions;
 using Blog.Posts.Application.Common;
 using Blog.Posts.Domain.Posts;
+using Blog.SharedKernel;
 
 namespace Blog.Posts.Application.Posts;
-
-public readonly record struct Caller(string? UserId, bool IsAdministrator)
-{
-    public static readonly Caller Anonymous = new(null, false);
-
-    public bool IsAuthenticated => UserId is not null;
-
-    public bool CanManage(string? authorId) => IsAdministrator || (UserId is not null && UserId == authorId);
-}
 
 public record WritePostCommand(
     string Title,
     string Content,
     IReadOnlyList<string>? Tags,
     DateTime? PublishAt = null,
-    int? ExpectedVersion = null);
+    int? ExpectedVersion = null,
+    int? ContentId = null);
 
 public class PostService
 {
@@ -36,6 +29,7 @@ public class PostService
     private readonly IAnalyticsPublisher _analytics;
     private readonly TimeProvider _time;
     private readonly PostingRules _rules;
+    private readonly IContentLookup _contents;
 
     public PostService(
         IPostRepository posts,
@@ -43,7 +37,8 @@ public class PostService
         IPostSearch search,
         IAnalyticsPublisher analytics,
         TimeProvider time,
-        PostingRules rules)
+        PostingRules rules,
+        IContentLookup contents)
     {
         _posts = posts;
         _cache = cache;
@@ -51,6 +46,7 @@ public class PostService
         _analytics = analytics;
         _time = time;
         _rules = rules;
+        _contents = contents;
     }
 
     public async Task<Result<PagedResult<PostSummaryDto>>> GetPageAsync(
@@ -67,15 +63,34 @@ public class PostService
 
         if (mineOnly)
         {
-            return Result<PagedResult<PostSummaryDto>>.Ok(
-                await _posts.GetPageAsync(from, limit, caller.UserId, cancellationToken));
+            return Result<PagedResult<PostSummaryDto>>.Ok(await WithContentTitlesAsync(
+                await _posts.GetPageAsync(from, limit, caller.UserId, cancellationToken), cancellationToken));
         }
 
         var generation = await _cache.GetGenerationAsync(ListScope, cancellationToken);
 
         var page = await _cache.GetOrLoadAsync(
             $"posts:list:{generation}:page:{cursor ?? "first"}:{limit}",
-            async token => await _posts.GetPageAsync(from, limit, null, token),
+            async token => await WithContentTitlesAsync(await _posts.GetPageAsync(from, limit, null, token), token),
+            _ => true,
+            CacheTtl,
+            cancellationToken);
+
+        return Result<PagedResult<PostSummaryDto>>.Ok(page ?? new PagedResult<PostSummaryDto>());
+    }
+
+    public async Task<Result<PagedResult<PostSummaryDto>>> GetReviewsAsync(
+        int contentId, string? cursor, int limit, CancellationToken cancellationToken = default)
+    {
+        limit = Math.Clamp(limit, 1, MaxPageSize);
+
+        var from = PostCursor.TryDecode(cursor);
+        var generation = await _cache.GetGenerationAsync(ListScope, cancellationToken);
+
+        var page = await _cache.GetOrLoadAsync(
+            $"posts:list:{generation}:content:{contentId}:page:{cursor ?? "first"}:{limit}",
+            async token => await WithContentTitlesAsync(
+                await _posts.GetPageForContentAsync(contentId, from, limit, token), token),
             _ => true,
             CacheTtl,
             cancellationToken);
@@ -90,7 +105,7 @@ public class PostService
 
         var post = await _cache.GetOrLoadAsync(
             $"posts:detail:{id}:{generation}",
-            async token => await _posts.GetDetailAsync(id, token),
+            async token => await WithContentTitleAsync(await _posts.GetDetailAsync(id, token), token),
             detail => detail.IsPublished,
             CacheTtl,
             cancellationToken);
@@ -141,6 +156,11 @@ public class PostService
             return Result<PostDetailDto>.Unauthorized();
         }
 
+        if (!await ContentIsKnownAsync(command.ContentId, cancellationToken))
+        {
+            return Result<PostDetailDto>.Invalid(UnknownContent);
+        }
+
         var now = _time.GetUtcNow().UtcDateTime;
 
         if (command.PublishAt is { } publishAt && publishAt > now)
@@ -149,6 +169,8 @@ public class PostService
         }
 
         var post = BlogPost.Publish(command.Title, command.Content, command.Tags, caller.UserId, now);
+
+        post.LinkToContent(command.ContentId);
 
         _posts.Add(post);
 
@@ -193,6 +215,12 @@ public class PostService
             post.Reschedule(publishAt);
         }
 
+        if (command.ContentId != post.ContentId && !await ContentIsKnownAsync(command.ContentId, cancellationToken))
+        {
+            return Result.Invalid(UnknownContent);
+        }
+
+        post.LinkToContent(command.ContentId);
         post.Revise(command.Title, command.Content, command.Tags);
 
         try
@@ -269,6 +297,8 @@ public class PostService
 
         var post = BlogPost.Schedule(command.Title, command.Content, command.Tags, caller.UserId, publishAt);
 
+        post.LinkToContent(command.ContentId);
+
         bool added;
 
         try
@@ -291,11 +321,53 @@ public class PostService
 
     private async Task<Result<PostDetailDto>> DetailOfAsync(int id, CancellationToken cancellationToken)
     {
-        var detail = await _posts.GetDetailAsync(id, cancellationToken);
+        var detail = await WithContentTitleAsync(await _posts.GetDetailAsync(id, cancellationToken), cancellationToken);
 
         return detail is null
             ? Result<PostDetailDto>.NotFound()
             : Result<PostDetailDto>.Ok(detail);
+    }
+
+    public const string UnknownContent = "That title is not in the catalog.";
+
+    private async Task<bool> ContentIsKnownAsync(int? contentId, CancellationToken cancellationToken) =>
+        contentId is null || (contentId > 0 && await _contents.ExistsAsync(contentId.Value, cancellationToken));
+
+    private async Task<PagedResult<PostSummaryDto>> WithContentTitlesAsync(
+        PagedResult<PostSummaryDto> page, CancellationToken cancellationToken)
+    {
+        var ids = page.Items.Where(p => p.ContentId is not null).Select(p => p.ContentId!.Value).Distinct().ToList();
+
+        if (ids.Count == 0)
+        {
+            return page;
+        }
+
+        var titles = await _contents.GetTitlesAsync(ids, cancellationToken);
+
+        foreach (var post in page.Items)
+        {
+            if (post.ContentId is { } contentId && titles.TryGetValue(contentId, out var title))
+            {
+                post.ContentTitle = title;
+            }
+        }
+
+        return page;
+    }
+
+    private async Task<PostDetailDto?> WithContentTitleAsync(PostDetailDto? detail, CancellationToken cancellationToken)
+    {
+        if (detail?.ContentId is not { } contentId)
+        {
+            return detail;
+        }
+
+        var titles = await _contents.GetTitlesAsync(new[] { contentId }, cancellationToken);
+
+        detail.ContentTitle = titles.GetValueOrDefault(contentId);
+
+        return detail;
     }
 
     public static string PostScope(int id) => $"posts:{id}";

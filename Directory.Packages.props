@@ -36,6 +36,7 @@
     <PackageVersion Include="StackExchange.Redis" Version="2.8.16" />
     <PackageVersion Include="ClickHouse.Client" Version="7.14.0" />
     <PackageVersion Include="dbup-clickhouse" Version="1.0.0" />
+    <PackageVersion Include="dbup-postgresql" Version="6.0.3" />
     <PackageVersion Include="Npgsql" Version="9.0.3" />
     <PackageVersion Include="RabbitMQ.Client" Version="6.8.1" />
   </ItemGroup>
@@ -85,6 +86,8 @@
     <PackageVersion Include="Testcontainers.Redis" Version="4.1.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.1.0" />
     <PackageVersion Include="Testcontainers.ClickHouse" Version="4.1.0" />
+    <PackageVersion Include="Testcontainers.MySql" Version="4.1.0" />
+    <PackageVersion Include="MySqlConnector" Version="2.4.0" />
     <PackageVersion Include="xunit" Version="2.9.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>

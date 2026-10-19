@@ -66,7 +66,8 @@ namespace Blog.Posts.Infrastructure.Persistence
                 PostId = published.PostId,
                 Title = published.Title,
                 AuthorId = published.AuthorId,
-                Tags = published.Tags
+                Tags = published.Tags,
+                ContentId = published.ContentId
             },
 
             PostUpdated updated => new PostUpdatedEvent

@@ -1,4 +1,4 @@
-namespace Blog.Posts.Application.Posts;
+namespace Blog.SharedKernel;
 
 public class PagedResult<T>
 {

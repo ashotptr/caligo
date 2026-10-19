@@ -2,8 +2,8 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Blog.Posts.Application.Abstractions;
 using Blog.Posts.Application.Claps;
-using Blog.Posts.Application.Common;
 using Blog.Posts.Application.Posts;
+using Blog.SharedKernel;
 using Xunit;
 
 namespace Blog.Posts.UnitTests;

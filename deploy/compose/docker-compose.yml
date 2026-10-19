@@ -142,6 +142,13 @@ services:
       ForwardedHeaders__KnownNetworks__0: "172.16.0.0/12"
       ForwardedHeaders__KnownNetworks__1: "192.168.0.0/16"
       ForwardedHeaders__KnownNetworks__2: "10.0.0.0/8"
+      Catalog__CaligoPublicRoot: "/caligo/public_html"
+      Media__Enabled: "true"
+      Media__SigningKey: ${MEDIA_SIGNING_KEY:-dev-media-signing-key-0123456789abcdef}
+      Media__IncomingPath: "/media/incoming"
+    volumes:
+      - ../../src/caligo/public_html:/caligo/public_html:ro
+      - ../../media/incoming:/media/incoming:ro
     ports:
       - "5028:8080"
     depends_on:
@@ -166,6 +173,8 @@ services:
       ConnectionStrings__Redis: "redis:6379"
       ConnectionStrings__ClickHouse: "Host=clickhouse;Port=8123;Username=blog;Password=blogpass;Database=blog_analytics"
       Kafka__BootstrapServers: "kafka:29092"
+      Radio__EventsUrl: "http://caligo-client/radio/events"
+      Radio__StatsUrl: "http://caligo-client/live/stats"
     ports:
       - "5029:8081"
     depends_on:
@@ -221,18 +230,149 @@ services:
       kafka:
         condition: service_healthy
 
-  blog-client:
+  caligo-client:
     build:
       context: ../../src/blog-client
       args:
         VITE_API_URL: ""
     ports:
       - "8080:80"
+    networks:
+      - default
+      - caligo
     depends_on:
       - blog-api
+
+  caligo:
+    build:
+      context: ../..
+      dockerfile: deploy/caligo/Dockerfile
+      args:
+        CALIGO_PYTHON: ${CALIGO_PYTHON:-lean}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 1024
+    mem_limit: 2g
+    cpus: 2
+    volumes:
+      - ../../src/caligo:/caligo-copy:ro
+      - ../../src/caligo/public_html/music:/root/CaligoEngine/public_html/music
+      - ../../src/caligo/public_html/mixtape:/root/CaligoEngine/public_html/mixtape
+      - ../../src/caligo/data:/root/CaligoEngine/data
+      - ../../src/caligo/user_memories:/root/CaligoEngine/user_memories
+      - caligostate:/caligo-state
+    networks:
+      - caligo
+
+  relay:
+    build:
+      context: ../../src/caligo-streaming
+      target: relay-quic
+    environment:
+      RELAY_SOURCE_HOST: caligo
+      RELAY_SOURCE_PORT: "9001"
+      RELAY_SOURCE_PASSWORD: ${RELAY_SOURCE_PASSWORD:-dev-relay-source-password}
+    ports:
+      - "8443:8000"
+      - "8443:8000/udp"
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 1
+    networks:
+      - caligo
+    depends_on:
+      - caligo
+
+  liquidsoap:
+    profiles: ["liquidsoap"]
+    image: savonet/liquidsoap:v2.4.6
+    command: ["/etc/liquidsoap/opus.liq"]
+    environment:
+      RELAY_SOURCE_PASSWORD: ${RELAY_SOURCE_PASSWORD:-dev-relay-source-password}
+    volumes:
+      - ../liquidsoap:/etc/liquidsoap:ro
+    tmpfs:
+      - /var/cache/liquidsoap:uid=100,gid=101
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1
+    networks:
+      - caligo
+    depends_on:
+      - relay
+      - caligo
+
+  vod:
+    build:
+      context: ../../src/caligo-streaming
+      target: vod
+    environment:
+      API_HOST: blog-api
+      API_PORT: "8080"
+      MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:-dev-media-signing-key-0123456789abcdef}
+      VOD_LIBRARY: /media/library
+    volumes:
+      - medialibrary:/media/library:ro
+    ports:
+      - "8010:8010"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 1
+    depends_on:
+      - blog-api
+
+  packager:
+    build:
+      context: ../../src/caligo-streaming
+      target: packager
+    environment:
+      API_HOST: blog-api
+      API_PORT: "8080"
+      MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:-dev-media-signing-key-0123456789abcdef}
+      PACKAGER_INCOMING: /media/incoming
+      PACKAGER_LIBRARY: /media/library
+    volumes:
+      - ../../media/incoming:/media/incoming:ro
+      - medialibrary:/media/library
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2
+    depends_on:
+      - blog-api
+
+networks:
+  caligo:
 
 volumes:
   pgdata:
   mongodata:
   kafkadata:
   clickhousedata:
+  caligostate:
+  medialibrary:

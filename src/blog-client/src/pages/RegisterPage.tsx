@@ -37,59 +37,61 @@ const RegisterPage = () => {
   };
 
   return (
-    <div className="auth-page">
-      <h1>Create an account</h1>
+    <div className="fog-stage">
+      <div className="auth-page">
+        <h1>Create an account</h1>
 
-      <form onSubmit={handleSubmit} className="auth-form">
-        <label>
-          Username
-          <input
-            type="text"
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            autoComplete="username"
-            required
-          />
-        </label>
+        <form onSubmit={handleSubmit} className="auth-form">
+          <label>
+            Username
+            <input
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              autoComplete="username"
+              required
+            />
+          </label>
 
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            autoComplete="email"
-            required
-          />
-        </label>
+          <label>
+            Email
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              autoComplete="email"
+              required
+            />
+          </label>
 
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            autoComplete="new-password"
-            required
-          />
-        </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              autoComplete="new-password"
+              required
+            />
+          </label>
 
-        {errors.length > 0 && (
-          <ul className="form-error">
-            {errors.map(err => (
-              <li key={err}>{err}</li>
-            ))}
-          </ul>
-        )}
+          {errors.length > 0 && (
+            <ul className="form-error">
+              {errors.map(err => (
+                <li key={err}>{err}</li>
+              ))}
+            </ul>
+          )}
 
-        <button type="submit" disabled={submitting}>
-          {submitting ? 'Creating…' : 'Register'}
-        </button>
-      </form>
+          <button type="submit" disabled={submitting}>
+            {submitting ? 'Creating…' : 'Register'}
+          </button>
+        </form>
 
-      <p className="auth-switch">
-        Already have an account? <Link to="/login">Sign in</Link>
-      </p>
+        <p className="auth-switch">
+          Already have an account? <Link to="/login">Sign in</Link>
+        </p>
+      </div>
     </div>
   );
 };

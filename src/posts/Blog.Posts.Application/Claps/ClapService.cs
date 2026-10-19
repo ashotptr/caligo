@@ -1,7 +1,7 @@
 using Blog.Posts.Application.Abstractions;
-using Blog.Posts.Application.Common;
 using Blog.Posts.Application.Posts;
 using Blog.Posts.Domain.Posts;
+using Blog.SharedKernel;
 
 namespace Blog.Posts.Application.Claps;
 

@@ -8,6 +8,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="../Blog.Posts.Infrastructure/Blog.Posts.Infrastructure.csproj" />
+		<ProjectReference Include="../../catalog/Blog.Catalog.Infrastructure/Blog.Catalog.Infrastructure.csproj" />
 		<ProjectReference Include="../../shared/Blog.Observability/Blog.Observability.csproj" />
 	</ItemGroup>
 

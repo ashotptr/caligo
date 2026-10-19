@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Blog.Posts.Application.Posts;
 using Blog.Posts.Domain.Posts;
 using Blog.Posts.Infrastructure.Identity;
+using Blog.SharedKernel;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 

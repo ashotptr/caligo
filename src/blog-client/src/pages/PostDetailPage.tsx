@@ -107,6 +107,12 @@ const PostDetailPage = () => {
         )}
       </p>
 
+      {post.contentId !== null && (
+        <p className="review-of">
+          Review of <Link to={`/catalog/${post.contentId}`}>{post.contentTitle ?? 'a title in the catalog'}</Link>
+        </p>
+      )}
+
       {actionError && <p className="form-error">{actionError}</p>}
 
       {post.tags.length > 0 && (

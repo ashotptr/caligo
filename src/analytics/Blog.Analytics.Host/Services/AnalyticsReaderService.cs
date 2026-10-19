@@ -8,12 +8,19 @@ using CoreStats = Blog.Analytics.Core.Views.PostStats;
 using IOlapQueries = Blog.Analytics.Core.Olap.IOlapQueries;
 using CoreBucket = Blog.Analytics.Core.Olap.SeriesBucket;
 using CoreRankBy = Blog.Analytics.Core.Olap.RankBy;
+using IRadioStore = Blog.Analytics.Core.Radio.IRadioStore;
+using IPlaybackStore = Blog.Analytics.Core.Playback.IPlaybackStore;
+using ILabStore = Blog.Analytics.Core.Lab.ILabStore;
+using CoreLabRun = Blog.Analytics.Core.Lab.LabRunSummary;
 
 namespace Blog.Analytics.Host.Services;
 
 public class AnalyticsReaderService : AnalyticsReader.AnalyticsReaderBase
 {
     private const int MaxBatchSize = 100;
+    private const int MaxRadioPlays = 100;
+    private const int MaxPlaybackTitles = 100;
+    private const int MaxLabRuns = 200;
 
     private static readonly TimeSpan MaxMinuteSeries = TimeSpan.FromDays(1);
     private static readonly TimeSpan MaxHourSeries = TimeSpan.FromDays(31);
@@ -22,6 +29,9 @@ public class AnalyticsReaderService : AnalyticsReader.AnalyticsReaderBase
     private readonly IViewStore _views;
     private readonly ITrendingStore _trending;
     private readonly IOlapQueries _olap;
+    private readonly IRadioStore _radio;
+    private readonly IPlaybackStore _playback;
+    private readonly ILabStore _lab;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AnalyticsReaderService> _logger;
 
@@ -29,14 +39,164 @@ public class AnalyticsReaderService : AnalyticsReader.AnalyticsReaderBase
         IViewStore views,
         ITrendingStore trending,
         IOlapQueries olap,
+        IRadioStore radio,
+        IPlaybackStore playback,
+        ILabStore lab,
         IConfiguration configuration,
         ILogger<AnalyticsReaderService> logger)
     {
         _views = views;
         _trending = trending;
         _olap = olap;
+        _radio = radio;
+        _playback = playback;
+        _lab = lab;
         _configuration = configuration;
         _logger = logger;
+    }
+
+    public override async Task<RadioPlays> GetRadioPlays(GetRadioPlaysRequest request, ServerCallContext context)
+    {
+        var reply = new RadioPlays { Enabled = _radio.IsConfigured };
+
+        if (!_radio.IsConfigured)
+        {
+            return reply;
+        }
+
+        var plays = await _radio.RecentPlaysAsync(
+            Math.Clamp(request.Limit, 1, MaxRadioPlays), context.CancellationToken);
+
+        reply.Plays.AddRange(plays.Select(play => new RadioPlay
+        {
+            StartedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(play.StartedAt, DateTimeKind.Utc)),
+            Artist = play.Artist,
+            Album = play.Album,
+            Title = play.Title,
+            IsRequest = play.IsRequest
+        }));
+
+        return reply;
+    }
+
+    public override async Task<LabRuns> GetLabRuns(GetLabRunsRequest request, ServerCallContext context)
+    {
+        var reply = new LabRuns { Enabled = _lab.IsConfigured };
+
+        if (!_lab.IsConfigured)
+        {
+            return reply;
+        }
+
+        var runs = await _lab.RunsAsync(Math.Clamp(request.Limit == 0 ? 50 : request.Limit, 1, MaxLabRuns), context.CancellationToken);
+
+        reply.Runs.AddRange(runs.Select(ToProto));
+
+        return reply;
+    }
+
+    public override async Task<LabRunDetail> GetLabRun(GetLabRunRequest request, ServerCallContext context)
+    {
+        var reply = new LabRunDetail { Enabled = _lab.IsConfigured };
+
+        if (!_lab.IsConfigured || !Guid.TryParse(request.RunId, out var runId))
+        {
+            return reply;
+        }
+
+        var detail = await _lab.RunAsync(runId, context.CancellationToken);
+
+        if (detail is null)
+        {
+            return reply;
+        }
+
+        reply.Found = true;
+        reply.Run = ToProto(detail.Run);
+        reply.Contestants.AddRange(detail.Contestants.Select(result => new LabContestant
+        {
+            Contestant = result.Contestant,
+            Server = result.Server,
+            Protocol = result.Protocol,
+            Container = result.Container,
+            Repetitions = result.Repetitions,
+            Listeners = result.Listeners,
+            Connected = result.Connected,
+            TtfbP50Ms = result.TtfbP50Ms,
+            StartupP50Ms = result.StartupP50Ms,
+            StartupP95Ms = result.StartupP95Ms,
+            StartupSpreadMs = result.StartupSpreadMs,
+            Stalls = result.Stalls,
+            StallMs = result.StallMs,
+            MediaMs = result.MediaMs,
+            LatencyP50Ms = result.LatencyP50Ms,
+            LatencySpreadMs = result.LatencySpreadMs,
+            DataLatencyP50Ms = result.DataLatencyP50Ms,
+            CpuMeanPercent = result.CpuMeanPercent,
+            CpuPeakPercent = result.CpuPeakPercent,
+            MemoryPeakBytes = result.MemoryPeakBytes,
+            ImpairedPackets = result.ImpairedPackets,
+            ImpairedLost = result.ImpairedLost,
+            ImpairedOverflowed = result.ImpairedOverflowed,
+            Errors = result.Errors
+        }));
+        reply.Latency.AddRange(detail.Latency.Select(point => new LabLatencyPoint
+        {
+            Contestant = point.Contestant,
+            Repetition = point.Repetition,
+            MeasuredAt = Timestamp.FromDateTime(DateTime.SpecifyKind(point.MeasuredAt, DateTimeKind.Utc)),
+            LatencyMs = point.LatencyMs
+        }));
+
+        return reply;
+    }
+
+    private static LabRun ToProto(CoreLabRun run) => new()
+    {
+        RunId = run.RunId.ToString(),
+        Scenario = run.Scenario,
+        Profile = run.Profile,
+        StartedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(run.StartedAt, DateTimeKind.Utc)),
+        FinishedAt = Timestamp.FromDateTime(DateTime.SpecifyKind(run.FinishedAt, DateTimeKind.Utc)),
+        Listeners = run.Listeners,
+        Seconds = run.Seconds,
+        Repetitions = run.Repetitions,
+        Contestants = run.Contestants,
+        SourceBiasMs = run.SourceBiasMs,
+        Notes = run.Notes
+    };
+
+    public override async Task<PlaybackSummary> GetPlaybackSummary(GetPlaybackSummaryRequest request, ServerCallContext context)
+    {
+        var days = Math.Clamp(request.Days == 0 ? 7 : request.Days, 1, 180);
+        var reply = new PlaybackSummary { Enabled = _playback.IsConfigured, Days = days };
+
+        if (!_playback.IsConfigured)
+        {
+            return reply;
+        }
+
+        var titles = await _playback.SummaryAsync(
+            days, Math.Clamp(request.Limit == 0 ? 20 : request.Limit, 1, MaxPlaybackTitles), context.CancellationToken);
+
+        reply.Titles.AddRange(titles.Select(title => new PlaybackTitle
+        {
+            ContentId = title.ContentId,
+            Sessions = title.Sessions,
+            Startups = title.Startups,
+            MedianStartupMs = title.MedianStartupMs,
+            P95StartupMs = title.P95StartupMs,
+            Stalls = title.Stalls,
+            StallMs = title.StallMs,
+            QualitySwitches = title.QualitySwitches,
+            Errors = title.Errors,
+            HlsStartups = title.HlsStartups,
+            NativeHlsStartups = title.NativeHlsStartups,
+            DashStartups = title.DashStartups,
+            ProgressiveStartups = title.ProgressiveStartups
+        }));
+
+        return reply;
     }
 
     public override async Task<PostStats> GetPostStats(GetPostStatsRequest request, ServerCallContext context)

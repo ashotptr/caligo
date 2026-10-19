@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Blog.Posts.Application.Common;
 using Blog.Posts.Application.Posts;
 using Blog.Posts.Domain.Posts;
 using Blog.Posts.Infrastructure.Identity;
 using Blog.Posts.Infrastructure.Persistence;
 using Blog.Posts.Infrastructure.Publishing;
+using Blog.SharedKernel;
 using Xunit;
 
 namespace Blog.IntegrationTests.Concurrency;

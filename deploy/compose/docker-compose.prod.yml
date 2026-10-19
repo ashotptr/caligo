@@ -103,13 +103,19 @@ services:
       Jwt__Key: ${JWT_KEY:?}
       Jwt__Issuer: blog-api
       Jwt__Audience: blog-client
-      Cors__AllowedOrigins: "https://blog.${DOMAIN:?}"
+      Cors__AllowedOrigins: "https://caligo.${DOMAIN:?}"
       AdminUser__Email: ${ADMIN_EMAIL:?}
       AdminUser__Password: ${ADMIN_PASSWORD:?}
       Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID:-}
       ForwardedHeaders__KnownNetworks__0: "172.16.0.0/12"
+      Catalog__CaligoPublicRoot: "/caligo/public_html"
+      Media__Enabled: ${MEDIA_ENABLED:-false}
+      Media__SigningKey: ${MEDIA_SIGNING_KEY:-}
+      Media__IncomingPath: "/media/incoming"
     volumes:
       - dpkeys:/home/app/.aspnet/DataProtection-Keys
+      - ../../src/caligo/public_html:/caligo/public_html:ro
+      - ../../media/incoming:/media/incoming:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health/ready || exit 1"]
       interval: 10s
@@ -168,6 +174,8 @@ services:
       ConnectionStrings__Redis: "redis:6379"
       ConnectionStrings__ClickHouse: "Host=clickhouse;Port=8123;Username=blog;Password=${CLICKHOUSE_PASSWORD:?};Database=blog_analytics"
       Kafka__BootstrapServers: "kafka:29092"
+      Radio__EventsUrl: "http://caligo-client/radio/events"
+      Radio__StatsUrl: "http://caligo-client/live/stats"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/health/ready || exit 1"]
       interval: 10s
@@ -197,7 +205,7 @@ services:
       ConnectionStrings__Notifications: "Host=postgres;Port=5432;Database=blognotifications;Username=bloguser;Password=${POSTGRES_PASSWORD:?}"
       Notifications__RabbitMq: "amqp://blog:${RABBITMQ_PASSWORD:?}@rabbitmq:5672/"
       Notifications__KafkaBootstrapServers: "kafka:29092"
-      Notifications__SiteUrl: "https://blog.${DOMAIN:?}"
+      Notifications__SiteUrl: "https://caligo.${DOMAIN:?}"
       Smtp__Host: "${SMTP_HOST:-}"
       Smtp__Port: "${SMTP_PORT:-587}"
       Smtp__UseStartTls: "${SMTP_STARTTLS:-true}"
@@ -242,7 +250,7 @@ services:
     ports:
       - "127.0.0.1:18888:18888"
 
-  blog-client:
+  caligo-client:
     build:
       context: ../../src/blog-client
       args:
@@ -256,6 +264,137 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+    networks:
+      - default
+      - caligo
+    depends_on:
+      - blog-api
+
+  caligo:
+    build:
+      context: ../..
+      dockerfile: deploy/caligo/Dockerfile
+      args:
+        CALIGO_PYTHON: ${CALIGO_PYTHON:-lean}
+    restart: unless-stopped
+    logging: *default-logging
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 1024
+    mem_limit: 2g
+    cpus: 2
+    volumes:
+      - ../../src/caligo:/caligo-copy:ro
+      - ../../src/caligo/public_html/music:/root/CaligoEngine/public_html/music
+      - ../../src/caligo/public_html/mixtape:/root/CaligoEngine/public_html/mixtape
+      - ../../src/caligo/data:/root/CaligoEngine/data
+      - ../../src/caligo/user_memories:/root/CaligoEngine/user_memories
+      - caligostate:/caligo-state
+    networks:
+      - caligo
+
+  relay:
+    build:
+      context: ../../src/caligo-streaming
+      target: relay
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      RELAY_SOURCE_HOST: caligo
+      RELAY_SOURCE_PORT: "9001"
+      RELAY_SOURCE_PASSWORD: ${RELAY_SOURCE_PASSWORD:-}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 1
+    networks:
+      - caligo
+    depends_on:
+      - caligo
+
+  liquidsoap:
+    profiles: ["liquidsoap"]
+    image: savonet/liquidsoap:v2.4.6
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["/etc/liquidsoap/opus.liq"]
+    environment:
+      RELAY_SOURCE_PASSWORD: ${RELAY_SOURCE_PASSWORD:-}
+    volumes:
+      - ../liquidsoap:/etc/liquidsoap:ro
+    tmpfs:
+      - /var/cache/liquidsoap:uid=100,gid=101
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    pids_limit: 128
+    mem_limit: 768m
+    cpus: 1
+    networks:
+      - caligo
+    depends_on:
+      - relay
+      - caligo
+
+  vod:
+    profiles: ["media"]
+    build:
+      context: ../../src/caligo-streaming
+      target: vod
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      API_HOST: blog-api
+      API_PORT: "8080"
+      MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:-}
+      VOD_LIBRARY: /media/library
+    volumes:
+      - medialibrary:/media/library:ro
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 1
+    depends_on:
+      - blog-api
+
+  packager:
+    profiles: ["media"]
+    build:
+      context: ../../src/caligo-streaming
+      target: packager
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      API_HOST: blog-api
+      API_PORT: "8080"
+      MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:-}
+      PACKAGER_INCOMING: /media/incoming
+      PACKAGER_LIBRARY: /media/library
+    volumes:
+      - ../../media/incoming:/media/incoming:ro
+      - medialibrary:/media/library
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2
     depends_on:
       - blog-api
 
@@ -267,7 +406,10 @@ services:
     environment:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:?}
     depends_on:
-      - blog-client
+      - caligo-client
+
+networks:
+  caligo:
 
 volumes:
   pgdata:
@@ -276,3 +418,5 @@ volumes:
   mongodata:
   kafkadata:
   clickhousedata:
+  caligostate:
+  medialibrary:

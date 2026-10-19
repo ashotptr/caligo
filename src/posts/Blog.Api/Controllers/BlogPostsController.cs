@@ -1,10 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using System.Security.Claims;
 using Blog.Api.Dtos;
 using Blog.Posts.Application.Claps;
-using Blog.Posts.Application.Common;
 using Blog.Posts.Application.Posts;
 
 namespace Blog.Api.Controllers;
@@ -12,7 +10,7 @@ namespace Blog.Api.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [EnableRateLimiting("reads")]
-public class BlogPostsController : ControllerBase
+public class BlogPostsController : ApiControllerBase
 {
     private readonly PostService _posts;
     private readonly ClapService _claps;
@@ -28,8 +26,11 @@ public class BlogPostsController : ControllerBase
         [FromQuery] string? cursor,
         [FromQuery] int limit = PostService.DefaultPageSize,
         [FromQuery] bool mine = false,
+        [FromQuery] int? contentId = null,
         CancellationToken cancellationToken = default) =>
-        Respond(await _posts.GetPageAsync(cursor, limit, mine, CurrentCaller(), cancellationToken));
+        Respond(contentId is { } reviewed
+            ? await _posts.GetReviewsAsync(reviewed, cursor, limit, cancellationToken)
+            : await _posts.GetPageAsync(cursor, limit, mine, CurrentCaller(), cancellationToken));
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetBlogPost(int id, CancellationToken cancellationToken)
@@ -101,29 +102,7 @@ public class BlogPostsController : ControllerBase
         Ok(await _claps.AuditAsync(postId, cancellationToken));
 
     private static WritePostCommand ToCommand(BlogPostDto dto) =>
-        new(dto.Title, dto.Content, dto.Tags, dto.PublishAt?.UtcDateTime);
-
-    private static string ETag(int version) => $"\"{version}\"";
-
-    private int? ExpectedVersion()
-    {
-        var header = Request.Headers.IfMatch.ToString().Trim();
-
-        if (header.Length == 0 || header == "*")
-        {
-            return null;
-        }
-
-        if (header.StartsWith("W/", StringComparison.Ordinal))
-        {
-            header = header[2..];
-        }
-
-        return int.TryParse(header.Trim('"'), out var version) ? version : -1;
-    }
-
-    private Caller CurrentCaller() =>
-        new(User.FindFirstValue(ClaimTypes.NameIdentifier), User.IsInRole("Admin"));
+        new(dto.Title, dto.Content, dto.Tags, dto.PublishAt?.UtcDateTime, ContentId: dto.ContentId);
 
     private ViewContext CurrentView() => new(
         Request.Headers.Referer.ToString() is { Length: > 0 } referrer ? referrer : null,
@@ -144,27 +123,4 @@ public class BlogPostsController : ControllerBase
 
         return Convert.ToHexString(bytes)[..16];
     }
-
-    private IActionResult Respond<T>(Result<T> result) => result.Status switch
-    {
-        ResultStatus.Ok => Ok(result.Value),
-        _ => Failure(result.Status, result.Error)
-    };
-
-    private IActionResult Respond(Result result) => result.Status switch
-    {
-        ResultStatus.Ok => NoContent(),
-        _ => Failure(result.Status, result.Error)
-    };
-
-    private IActionResult Failure(ResultStatus status, string? error) => status switch
-    {
-        ResultStatus.NotFound => NotFound(),
-        ResultStatus.Forbidden => Forbid(),
-        ResultStatus.Unauthorized => Unauthorized(),
-        ResultStatus.Invalid => BadRequest(error),
-        ResultStatus.Conflict => Conflict(error),
-        ResultStatus.PreconditionFailed => StatusCode(StatusCodes.Status412PreconditionFailed, error),
-        _ => StatusCode(StatusCodes.Status500InternalServerError)
-    };
 }

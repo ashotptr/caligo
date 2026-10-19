@@ -9,4 +9,5 @@ public class BlogPostDto
     public string Content { get; set; } = string.Empty;
     public List<string> Tags { get; set; } = new List<string>();
     public DateTimeOffset? PublishAt { get; set; }
+    public int? ContentId { get; set; }
 }

@@ -1,4 +1,4 @@
-namespace Blog.Posts.Application.Common;
+namespace Blog.SharedKernel;
 
 public enum ResultStatus
 {
@@ -8,7 +8,9 @@ public enum ResultStatus
     Invalid,
     Unauthorized,
     Conflict,
-    PreconditionFailed
+    PreconditionFailed,
+    Gone,
+    Unavailable
 }
 
 public readonly record struct Result<T>(ResultStatus Status, T? Value, string? Error)
@@ -28,6 +30,10 @@ public readonly record struct Result<T>(ResultStatus Status, T? Value, string? E
     public static Result<T> Conflict(string? error = null) => new(ResultStatus.Conflict, default, error);
 
     public static Result<T> PreconditionFailed(string? error = null) => new(ResultStatus.PreconditionFailed, default, error);
+
+    public static Result<T> Gone(string? error = null) => new(ResultStatus.Gone, default, error);
+
+    public static Result<T> Unavailable(string? error = null) => new(ResultStatus.Unavailable, default, error);
 }
 
 public readonly record struct Result(ResultStatus Status, string? Error)
@@ -47,4 +53,8 @@ public readonly record struct Result(ResultStatus Status, string? Error)
     public static Result Conflict(string? error = null) => new(ResultStatus.Conflict, error);
 
     public static Result PreconditionFailed(string? error = null) => new(ResultStatus.PreconditionFailed, error);
+
+    public static Result Gone(string? error = null) => new(ResultStatus.Gone, error);
+
+    public static Result Unavailable(string? error = null) => new(ResultStatus.Unavailable, error);
 }

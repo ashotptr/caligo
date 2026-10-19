@@ -5,6 +5,7 @@ package blog.analytics.v1;
 option csharp_namespace = "Blog.Contracts.Analytics";
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
 
 service AnalyticsReader {
   rpc GetPostStats (GetPostStatsRequest) returns (PostStats);
@@ -20,6 +21,14 @@ service AnalyticsReader {
   rpc GetTopInWindow (GetTopInWindowRequest) returns (TopInWindow);
 
   rpc GetEngagementFunnel (GetEngagementFunnelRequest) returns (EngagementFunnel);
+
+  rpc GetRadioPlays (GetRadioPlaysRequest) returns (RadioPlays);
+
+  rpc GetPlaybackSummary (GetPlaybackSummaryRequest) returns (PlaybackSummary);
+
+  rpc GetLabRuns (GetLabRunsRequest) returns (LabRuns);
+
+  rpc GetLabRun (GetLabRunRequest) returns (LabRunDetail);
 }
 
 message GetPostStatsRequest {
@@ -126,4 +135,117 @@ message EngagementFunnel {
   int64 clappers = 4;
   int64 claps = 5;
   int32 days = 6;
+}
+
+message GetRadioPlaysRequest {
+  int32 limit = 1;
+}
+
+message RadioPlay {
+  google.protobuf.Timestamp started_at = 1;
+  string artist = 2;
+  string album = 3;
+  string title = 4;
+  bool is_request = 5;
+}
+
+message RadioPlays {
+  repeated RadioPlay plays = 1;
+  bool enabled = 2;
+}
+
+message GetPlaybackSummaryRequest {
+  int32 days = 1;
+  int32 limit = 2;
+}
+
+message PlaybackTitle {
+  int32 content_id = 1;
+  int64 sessions = 2;
+  int64 startups = 3;
+  double median_startup_ms = 4;
+  double p95_startup_ms = 5;
+  int64 stalls = 6;
+  int64 stall_ms = 7;
+  int64 quality_switches = 8;
+  int64 errors = 9;
+  int64 hls_startups = 10;
+  int64 native_hls_startups = 11;
+  int64 dash_startups = 12;
+  int64 progressive_startups = 13;
+}
+
+message PlaybackSummary {
+  repeated PlaybackTitle titles = 1;
+  bool enabled = 2;
+  int32 days = 3;
+}
+
+message GetLabRunsRequest {
+  int32 limit = 1;
+}
+
+message LabRun {
+  string run_id = 1;
+  string scenario = 2;
+  string profile = 3;
+  google.protobuf.Timestamp started_at = 4;
+  google.protobuf.Timestamp finished_at = 5;
+  int32 listeners = 6;
+  int32 seconds = 7;
+  int32 repetitions = 8;
+  int32 contestants = 9;
+  google.protobuf.DoubleValue source_bias_ms = 10;
+  string notes = 11;
+}
+
+message LabRuns {
+  repeated LabRun runs = 1;
+  bool enabled = 2;
+}
+
+message GetLabRunRequest {
+  string run_id = 1;
+}
+
+message LabContestant {
+  string contestant = 1;
+  string server = 2;
+  string protocol = 3;
+  string container = 4;
+  int32 repetitions = 5;
+  int64 listeners = 6;
+  int64 connected = 7;
+  google.protobuf.DoubleValue ttfb_p50_ms = 8;
+  google.protobuf.DoubleValue startup_p50_ms = 9;
+  google.protobuf.DoubleValue startup_p95_ms = 10;
+  google.protobuf.DoubleValue startup_spread_ms = 11;
+  int64 stalls = 12;
+  double stall_ms = 13;
+  double media_ms = 14;
+  google.protobuf.DoubleValue latency_p50_ms = 15;
+  google.protobuf.DoubleValue latency_spread_ms = 16;
+  google.protobuf.DoubleValue data_latency_p50_ms = 17;
+  google.protobuf.DoubleValue cpu_mean_percent = 18;
+  google.protobuf.DoubleValue cpu_peak_percent = 19;
+  google.protobuf.DoubleValue memory_peak_bytes = 20;
+  int64 impaired_packets = 21;
+  int64 impaired_lost = 22;
+  int64 impaired_overflowed = 23;
+  string errors = 24;
+}
+
+message LabLatencyPoint {
+  string contestant = 1;
+  int32 repetition = 2;
+  google.protobuf.Timestamp measured_at = 3;
+  double latency_ms = 4;
+}
+
+message LabRunDetail {
+  bool enabled = 1;
+  bool found = 2;
+  LabRun run = 3;
+  repeated LabContestant contestants = 4;
+  repeated LabLatencyPoint latency = 5;
 }

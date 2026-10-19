@@ -1,0 +1,29 @@
+logLevel: warn
+
+api: yes
+apiAddress: :9997
+
+rtsp: yes
+rtspAddress: :8554
+
+rtmp: yes
+rtmpAddress: :1935
+
+hls: yes
+hlsAddress: :8888
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsAllowOrigin: "*"
+
+webrtc: yes
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+webrtcAllowOrigin: "*"
+
+srt: yes
+srtAddress: :8890
+
+paths:
+  all_others:

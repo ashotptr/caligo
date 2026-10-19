@@ -8,7 +8,10 @@ public abstract record PostEvent(int PostId) : IDomainEvent
 }
 
 public sealed record PostPublished(int PostId, string Title, string? AuthorId, IReadOnlyList<string> Tags)
-    : PostEvent(PostId);
+    : PostEvent(PostId)
+{
+    public int? ContentId { get; init; }
+}
 
 public sealed record PostUpdated(int PostId, string Title) : PostEvent(PostId);
 
