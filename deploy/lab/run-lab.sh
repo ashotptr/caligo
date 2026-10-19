@@ -10,17 +10,17 @@ fi
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 compose_dir="$(cd "$here/../compose" && pwd)"
 clickhouse="${LAB_CLICKHOUSE_URL:-http://127.0.0.1:8123}"
-clickhouse_user="${LAB_CLICKHOUSE_USER:-blog}"
-clickhouse_password="${LAB_CLICKHOUSE_PASSWORD:-blogpass}"
-clickhouse_database="${LAB_CLICKHOUSE_DATABASE:-blog_analytics}"
+clickhouse_user="${LAB_CLICKHOUSE_USER:-caligo}"
+clickhouse_password="${LAB_CLICKHOUSE_PASSWORD:-caligopass}"
+clickhouse_database="${LAB_CLICKHOUSE_DATABASE:-caligo_analytics}"
 site="${LAB_SITE_URL:-http://localhost:8080}"
 floor="${LAB_MEMORY_FLOOR_MIB:-700}"
 host_floor="${LAB_HOST_FLOOR_MIB:-500}"
 contestants=(caligo relay icecast mediamtx lab-web lab-ftp)
 sidecars=(netem-caligo netem-relay netem-icecast netem-mediamtx netem-web netem-ftp)
-containers=(blog-caligo-1 blog-relay-1 blog-icecast-1 blog-mediamtx-1 blog-lab-web-1 blog-lab-ftp-1)
-results=(postgres redis blog-analytics blog-api caligo-client)
-built=(blog-api blog-analytics caligo-client)
+containers=(caligo-dev-caligo-1 caligo-dev-relay-1 caligo-dev-icecast-1 caligo-dev-mediamtx-1 caligo-dev-lab-web-1 caligo-dev-lab-ftp-1)
+results=(postgres redis caligo-analytics caligo-api caligo-client)
+built=(caligo-api caligo-analytics caligo-client)
 scratch="$(mktemp -d)"
 sampler=""
 guardian=""
@@ -76,7 +76,7 @@ healthy() {
 }
 
 vm_available_mib() {
-    { docker exec blog-clickhouse-1 cat /proc/meminfo 2>/dev/null || true; } \
+    { docker exec caligo-dev-clickhouse-1 cat /proc/meminfo 2>/dev/null || true; } \
         | awk '/^MemAvailable:/ { printf "%d\n", $2 / 1024 }'
 }
 
@@ -140,7 +140,7 @@ guard() {
         if [ -n "$short" ]; then
             echo "lab: stopping the run: $short" >&2
             : > "$scratch/starved"
-            docker ps -q --filter label=com.docker.compose.project=blog --filter label=com.docker.compose.service=stream-lab \
+            docker ps -q --filter label=com.docker.compose.project=caligo-dev --filter label=com.docker.compose.service=stream-lab \
                 | xargs -r docker stop >/dev/null 2>&1 || true
             compose stop lab-source "${sidecars[@]}" "${contestants[@]}" >/dev/null 2>&1 || true
 
@@ -168,7 +168,7 @@ fi
 
 echo "lab: starting the contestants, the source and the impairment sidecars"
 start "${contestants[@]}" lab-source "${sidecars[@]}"
-wait_for "the relay" healthy blog-relay-1
+wait_for "the relay" healthy caligo-dev-relay-1
 
 compose run --rm -T stream-lab schema
 

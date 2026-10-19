@@ -15,11 +15,11 @@ spec:
           image: clickhouse/clickhouse-server:26.8
           env:
             - name: CLICKHOUSE_DB
-              value: blog_analytics
+              value: caligo_analytics
             - name: CLICKHOUSE_USER
-              value: blog
+              value: caligo
             - name: CLICKHOUSE_PASSWORD
-              value: blogpass
+              value: caligopass
           ports: [{ name: http, containerPort: 8123 }]
           readinessProbe:
             httpGet: { path: /ping, port: http }

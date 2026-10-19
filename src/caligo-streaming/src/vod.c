@@ -196,7 +196,7 @@ static long env_number(const char *name, long fallback, long minimum, long maxim
 
 static int load_config(void) {
     snprintf(config.listen_host, sizeof(config.listen_host), "%s", env_text("VOD_LISTEN_HOST", "0.0.0.0"));
-    snprintf(config.api_host, sizeof(config.api_host), "%s", env_text("API_HOST", "blog-api"));
+    snprintf(config.api_host, sizeof(config.api_host), "%s", env_text("API_HOST", "caligo-api"));
     snprintf(config.api_path, sizeof(config.api_path), "%s", env_text("VOD_SESSIONS_PATH", "/internal/v1/media/sessions/"));
     snprintf(config.library, sizeof(config.library), "%s", env_text("VOD_LIBRARY", "/media/library"));
 

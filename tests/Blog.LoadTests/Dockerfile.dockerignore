@@ -1,7 +1,0 @@
-*
-!Directory.Packages.props
-!src/shared/Blog.Contracts/
-!tests/Blog.LoadTests/
-**/bin/
-**/obj/
-tests/Blog.LoadTests/reports/

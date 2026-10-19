@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: blog
+namespace: caligo
 
 resources:
   - ../../base
@@ -10,20 +10,20 @@ resources:
 patches:
   - target:
       kind: Deployment
-      name: blog-analytics
+      name: caligo-analytics
     patch: |
       - op: remove
         path: /spec/replicas
   - target:
       kind: Deployment
-      name: blog-notifications
+      name: caligo-notifications
     patch: |
       - op: remove
         path: /spec/replicas
 
   - target:
       kind: Ingress
-      name: blog
+      name: caligo
     patch: |
       - op: add
         path: /metadata/annotations/cert-manager.io~1cluster-issuer
@@ -32,15 +32,15 @@ patches:
         path: /spec/tls
         value:
           - hosts:
-              - blog.example.com
-            secretName: blog-tls
+              - caligo.example.com
+            secretName: caligo-tls
 
 images:
-  - name: ghcr.io/ashotptr/blog/blog-api
+  - name: ghcr.io/ashotptr/caligo/caligo-api
     newTag: latest
-  - name: ghcr.io/ashotptr/blog/blog-analytics
+  - name: ghcr.io/ashotptr/caligo/caligo-analytics
     newTag: latest
-  - name: ghcr.io/ashotptr/blog/blog-notifications
+  - name: ghcr.io/ashotptr/caligo/caligo-notifications
     newTag: latest
-  - name: ghcr.io/ashotptr/blog/blog-client
+  - name: ghcr.io/ashotptr/caligo/caligo-client
     newTag: latest

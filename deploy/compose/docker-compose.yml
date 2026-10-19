@@ -1,20 +1,20 @@
-name: blog
+name: caligo-dev
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: blogdb
+      POSTGRES_DB: caligodb
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_MULTIPLE_DATABASES: blognotifications
+      POSTGRES_MULTIPLE_DATABASES: caligonotifications
     volumes:
       - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
       - pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d blogdb"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d caligodb"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -32,8 +32,8 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     environment:
-      RABBITMQ_DEFAULT_USER: blog
-      RABBITMQ_DEFAULT_PASS: blogpass
+      RABBITMQ_DEFAULT_USER: caligo
+      RABBITMQ_DEFAULT_PASS: caligopass
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -74,7 +74,7 @@ services:
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     environment:
-      KAFKA_CLUSTERS_0_NAME: blog
+      KAFKA_CLUSTERS_0_NAME: caligo
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
       DYNAMIC_CONFIG_ENABLED: "true"
     ports:
@@ -86,8 +86,8 @@ services:
   mongo:
     image: mongo:7
     environment:
-      MONGO_INITDB_ROOT_USERNAME: blog
-      MONGO_INITDB_ROOT_PASSWORD: blogpass
+      MONGO_INITDB_ROOT_USERNAME: caligo
+      MONGO_INITDB_ROOT_PASSWORD: caligopass
     ports:
       - "27017:27017"
     volumes:
@@ -101,9 +101,9 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:26.8
     environment:
-      CLICKHOUSE_DB: blog_analytics
-      CLICKHOUSE_USER: blog
-      CLICKHOUSE_PASSWORD: blogpass
+      CLICKHOUSE_DB: caligo_analytics
+      CLICKHOUSE_USER: caligo
+      CLICKHOUSE_PASSWORD: caligopass
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     ports:
       - "8123:8123"
@@ -120,21 +120,21 @@ services:
       timeout: 3s
       retries: 20
 
-  blog-api:
+  caligo-api:
     build:
       context: ../..
-      dockerfile: src/posts/Blog.Api/Dockerfile
+      dockerfile: src/posts/Caligo.Api/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       Otlp__Endpoint: "http://aspire-dashboard:18889"
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=blogdb;Username=postgres;Password=postgres"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=caligodb;Username=postgres;Password=postgres"
       Database__FallbackToSqlite: "false"
       ConnectionStrings__Redis: "redis:6379"
       Kafka__BootstrapServers: "kafka:29092"
-      Analytics__Address: "http://blog-analytics:8080"
+      Analytics__Address: "http://caligo-analytics:8080"
       Jwt__Key: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-      Jwt__Issuer: blog-api
-      Jwt__Audience: blog-client
+      Jwt__Issuer: caligo-api
+      Jwt__Audience: caligo-client
       Jwt__AccessTokenMinutes: "5"
       Cors__AllowedOrigins: "http://localhost:8080,http://localhost:5173"
       AdminUser__Email: "admin@localhost.dev"
@@ -158,20 +158,20 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-      blog-analytics:
+      caligo-analytics:
         condition: service_started
 
-  blog-analytics:
+  caligo-analytics:
     build:
       context: ../..
-      dockerfile: src/analytics/Blog.Analytics.Host/Dockerfile
+      dockerfile: src/analytics/Caligo.Analytics.Host/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       Otlp__Endpoint: "http://aspire-dashboard:18889"
       ASPNETCORE_URLS: "http://+:8080"
-      ConnectionStrings__Mongo: "mongodb://blog:blogpass@mongo:27017/"
+      ConnectionStrings__Mongo: "mongodb://caligo:caligopass@mongo:27017/"
       ConnectionStrings__Redis: "redis:6379"
-      ConnectionStrings__ClickHouse: "Host=clickhouse;Port=8123;Username=blog;Password=blogpass;Database=blog_analytics"
+      ConnectionStrings__ClickHouse: "Host=clickhouse;Port=8123;Username=caligo;Password=caligopass;Database=caligo_analytics"
       Kafka__BootstrapServers: "kafka:29092"
       Radio__EventsUrl: "http://caligo-client/radio/events"
       Radio__StatsUrl: "http://caligo-client/live/stats"
@@ -200,16 +200,16 @@ services:
       - "1025:1025"
       - "8025:8025"
 
-  blog-notifications:
+  caligo-notifications:
     build:
       context: ../..
-      dockerfile: src/notifications/Blog.Notifications.Host/Dockerfile
+      dockerfile: src/notifications/Caligo.Notifications.Host/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       Otlp__Endpoint: "http://aspire-dashboard:18889"
       ASPNETCORE_URLS: "http://+:8080"
-      ConnectionStrings__Notifications: "Host=postgres;Port=5432;Database=blognotifications;Username=postgres;Password=postgres"
-      Notifications__RabbitMq: "amqp://blog:blogpass@rabbitmq:5672/"
+      ConnectionStrings__Notifications: "Host=postgres;Port=5432;Database=caligonotifications;Username=postgres;Password=postgres"
+      Notifications__RabbitMq: "amqp://caligo:caligopass@rabbitmq:5672/"
       Notifications__KafkaBootstrapServers: "kafka:29092"
       Notifications__SiteUrl: "http://localhost:8080"
       Smtp__Host: "mailhog"
@@ -232,7 +232,7 @@ services:
 
   caligo-client:
     build:
-      context: ../../src/blog-client
+      context: ../../src/caligo-client
       args:
         VITE_API_URL: ""
     ports:
@@ -241,7 +241,7 @@ services:
       - default
       - caligo
     depends_on:
-      - blog-api
+      - caligo-api
 
   caligo:
     build:
@@ -321,7 +321,7 @@ services:
       context: ../../src/caligo-streaming
       target: vod
     environment:
-      API_HOST: blog-api
+      API_HOST: caligo-api
       API_PORT: "8080"
       MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:-dev-media-signing-key-0123456789abcdef}
       VOD_LIBRARY: /media/library
@@ -338,14 +338,14 @@ services:
     mem_limit: 256m
     cpus: 1
     depends_on:
-      - blog-api
+      - caligo-api
 
   packager:
     build:
       context: ../../src/caligo-streaming
       target: packager
     environment:
-      API_HOST: blog-api
+      API_HOST: caligo-api
       API_PORT: "8080"
       MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:-dev-media-signing-key-0123456789abcdef}
       PACKAGER_INCOMING: /media/incoming
@@ -364,7 +364,7 @@ services:
     mem_limit: 2g
     cpus: 2
     depends_on:
-      - blog-api
+      - caligo-api
 
 networks:
   caligo:

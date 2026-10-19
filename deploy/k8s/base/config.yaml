@@ -1,16 +1,16 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: blog-config
+  name: caligo-config
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   Otlp__Endpoint: "http://aspire-dashboard:18889"
   Kafka__BootstrapServers: "kafka:9092"
   Notifications__KafkaBootstrapServers: "kafka:9092"
-  Analytics__Address: "http://blog-analytics:8080"
+  Analytics__Address: "http://caligo-analytics:8080"
   ForwardedHeaders__KnownNetworks__0: "10.0.0.0/8"
-  Jwt__Issuer: "blog-api"
-  Jwt__Audience: "blog-client"
-  Notifications__SiteUrl: "https://blog.example.com"
+  Jwt__Issuer: "caligo-api"
+  Jwt__Audience: "caligo-client"
+  Notifications__SiteUrl: "https://caligo.example.com"
   Smtp__Host: "mailhog"
   Smtp__Port: "1025"

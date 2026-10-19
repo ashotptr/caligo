@@ -1,0 +1,7 @@
+*
+!Directory.Packages.props
+!src/shared/Caligo.Contracts/
+!tests/Caligo.LoadTests/
+**/bin/
+**/obj/
+tests/Caligo.LoadTests/reports/

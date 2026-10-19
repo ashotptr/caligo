@@ -1,18 +1,18 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: blog
+namespace: caligo
 
 resources:
   - namespace.yaml
   - config.yaml
-  - blog-api.yaml
-  - blog-analytics.yaml
-  - blog-notifications.yaml
-  - blog-client.yaml
+  - caligo-api.yaml
+  - caligo-analytics.yaml
+  - caligo-notifications.yaml
+  - caligo-client.yaml
   - ingress.yaml
 
 labels:
   - pairs:
-      app.kubernetes.io/part-of: blog
+      app.kubernetes.io/part-of: caligo
     includeSelectors: false

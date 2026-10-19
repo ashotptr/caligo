@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<IsPackable>false</IsPackable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="../../src/shared/Caligo.Contracts/Caligo.Contracts.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="ClickHouse.Client" />
+		<PackageReference Include="Confluent.Kafka" />
+		<PackageReference Include="NBomber" />
+		<PackageReference Include="NBomber.Http" />
+		<PackageReference Include="Npgsql" />
+	</ItemGroup>
+
+</Project>

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent
 OVERLAYS = ["dev", "prod"]
 
 EXTERNALLY_SUPPLIED: dict[str, set[str]] = {
-    "prod": {"blog-secrets"},
+    "prod": {"caligo-secrets"},
 }
 
 def build(overlay: str) -> list[dict]:

@@ -1,10 +1,10 @@
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: blog-analytics-lag
+  name: caligo-analytics-lag
 spec:
   scaleTargetRef:
-    name: blog-analytics
+    name: caligo-analytics
 
   minReplicaCount: 2
 
@@ -18,24 +18,24 @@ spec:
       metadata:
         bootstrapServers: kafka:9092
         consumerGroup: analytics-raw-writer
-        topic: blog.post.viewed.v1
+        topic: caligo.post.viewed.v1
         lagThreshold: "1000"
         offsetResetPolicy: earliest
     - type: kafka
       metadata:
         bootstrapServers: kafka:9092
         consumerGroup: analytics-olap
-        topic: blog.post.viewed.v1
+        topic: caligo.post.viewed.v1
         lagThreshold: "1000"
         offsetResetPolicy: earliest
 ---
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: blog-notifications-queue
+  name: caligo-notifications-queue
 spec:
   scaleTargetRef:
-    name: blog-notifications
+    name: caligo-notifications
 
   minReplicaCount: 2
   maxReplicaCount: 10
@@ -47,7 +47,7 @@ spec:
     - type: rabbitmq
       metadata:
         protocol: amqp
-        queueName: blog.notifications.email
+        queueName: caligo.notifications.email
         mode: QueueLength
         value: "50"
       authenticationRef:
@@ -60,5 +60,5 @@ metadata:
 spec:
   secretTargetRef:
     - parameter: host
-      name: blog-secrets
+      name: caligo-secrets
       key: Notifications__RabbitMq

@@ -140,7 +140,7 @@ static long env_number(const char *name, long fallback, long minimum, long maxim
 }
 
 static int load_config(void) {
-    snprintf(config.api_host, sizeof(config.api_host), "%s", env_text("API_HOST", "blog-api"));
+    snprintf(config.api_host, sizeof(config.api_host), "%s", env_text("API_HOST", "caligo-api"));
     snprintf(config.incoming, sizeof(config.incoming), "%s", env_text("PACKAGER_INCOMING", "/media/incoming"));
     snprintf(config.library, sizeof(config.library), "%s", env_text("PACKAGER_LIBRARY", "/media/library"));
     snprintf(config.ffmpeg, sizeof(config.ffmpeg), "%s", env_text("PACKAGER_FFMPEG", "ffmpeg"));

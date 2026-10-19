@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: blog
+namespace: caligo
 
 resources:
   - ../../base
@@ -13,42 +13,42 @@ resources:
 patches:
   - target:
       kind: Deployment
-      name: blog-api
+      name: caligo-api
     patch: |
       - op: replace
         path: /spec/replicas
         value: 1
   - target:
       kind: Deployment
-      name: blog-analytics
+      name: caligo-analytics
     patch: |
       - op: replace
         path: /spec/replicas
         value: 1
   - target:
       kind: Deployment
-      name: blog-notifications
+      name: caligo-notifications
     patch: |
       - op: replace
         path: /spec/replicas
         value: 1
   - target:
       kind: Deployment
-      name: blog-client
+      name: caligo-client
     patch: |
       - op: replace
         path: /spec/replicas
         value: 1
   - target:
       kind: PodDisruptionBudget
-      name: blog-api
+      name: caligo-api
     patch: |
       - op: replace
         path: /spec/minAvailable
         value: 0
   - target:
       kind: HorizontalPodAutoscaler
-      name: blog-api
+      name: caligo-api
     patch: |
       - op: replace
         path: /spec/minReplicas
@@ -58,22 +58,22 @@ patches:
         value: 3
   - target:
       kind: Ingress
-      name: blog
+      name: caligo
     patch: |
       - op: replace
         path: /spec/rules/0/host
-        value: blog.localtest.me
+        value: caligo.localtest.me
 
 images:
-  - name: ghcr.io/ashotptr/blog/blog-api
-    newName: blog-blog-api
+  - name: ghcr.io/ashotptr/caligo/caligo-api
+    newName: caligo-dev-caligo-api
     newTag: latest
-  - name: ghcr.io/ashotptr/blog/blog-analytics
-    newName: blog-blog-analytics
+  - name: ghcr.io/ashotptr/caligo/caligo-analytics
+    newName: caligo-dev-caligo-analytics
     newTag: latest
-  - name: ghcr.io/ashotptr/blog/blog-notifications
-    newName: blog-blog-notifications
+  - name: ghcr.io/ashotptr/caligo/caligo-notifications
+    newName: caligo-dev-caligo-notifications
     newTag: latest
-  - name: ghcr.io/ashotptr/blog/blog-client
-    newName: blog-blog-client
+  - name: ghcr.io/ashotptr/caligo/caligo-client
+    newName: caligo-dev-caligo-client
     newTag: latest

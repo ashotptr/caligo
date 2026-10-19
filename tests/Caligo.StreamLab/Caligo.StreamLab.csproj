@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<IsPackable>false</IsPackable>
+		<EnablePreviewFeatures>true</EnablePreviewFeatures>
+		<NoWarn>$(NoWarn);CA2252;CA1416</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="ClickHouse.Client" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="../../src/analytics/Caligo.Analytics.Infrastructure/Stores/ClickHouseMigrations/0004-lab.sql" LogicalName="lab-schema.sql" />
+	</ItemGroup>
+
+</Project>

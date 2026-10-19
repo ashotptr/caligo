@@ -8,7 +8,7 @@ x-netem: &netem
   build:
     context: ../../src/caligo-streaming
     target: netem
-  image: blog-lab-netem
+  image: caligo-lab-netem
   cap_drop:
     - ALL
   cap_add:
@@ -49,13 +49,13 @@ services:
   clickhouse:
     mem_limit: 1g
 
-  blog-api:
+  caligo-api:
     ports: !reset []
     environment:
       DOTNET_gcServer: "0"
     mem_limit: 512m
 
-  blog-analytics:
+  caligo-analytics:
     ports: !reset []
     environment:
       DOTNET_gcServer: "0"
@@ -65,7 +65,7 @@ services:
     build:
       args:
         CALIGO_PYTHON: none
-    image: blog-lab-caligo
+    image: caligo-lab-caligo
     sysctls:
       net.ipv4.conf.all.rp_filter: "0"
     networks:
@@ -272,9 +272,9 @@ services:
     profiles: ["lab-run"]
     build:
       context: ../..
-      dockerfile: tests/Blog.StreamLab/Dockerfile
+      dockerfile: tests/Caligo.StreamLab/Dockerfile
     environment:
-      LAB_CLICKHOUSE: Host=clickhouse;Port=8123;Username=blog;Password=blogpass;Database=blog_analytics
+      LAB_CLICKHOUSE: Host=clickhouse;Port=8123;Username=caligo;Password=caligopass;Database=caligo_analytics
       LAB_CONTROL: /lab-control
       LAB_REFERENCE_PORT: "5099"
     volumes:

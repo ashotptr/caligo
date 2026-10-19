@@ -1,6 +1,0 @@
-*
-!Directory.Packages.props
-!src/analytics/Blog.Analytics.Infrastructure/Stores/ClickHouseMigrations/0004-lab.sql
-!tests/Blog.StreamLab/
-**/bin/
-**/obj/

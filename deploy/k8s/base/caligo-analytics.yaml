@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: caligo-analytics
+  labels:
+    app.kubernetes.io/name: caligo-analytics
+    app.kubernetes.io/part-of: caligo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: caligo-analytics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: caligo-analytics
+        app.kubernetes.io/part-of: caligo
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 64198
+        fsGroup: 64198
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: caligo-analytics
+          image: ghcr.io/ashotptr/caligo/caligo-analytics:latest
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: grpc
+              containerPort: 8080
+            - name: http
+              containerPort: 8081
+
+          env:
+            - name: ASPNETCORE_URLS
+              value: "http://+:8080"
+
+          envFrom:
+            - configMapRef:
+                name: caligo-config
+            - secretRef:
+                name: caligo-secrets
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              memory: 512Mi
+
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: caligo-analytics
+  labels:
+    app.kubernetes.io/name: caligo-analytics
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: caligo-analytics
+  ports:
+    - name: grpc
+      port: 8080
+      targetPort: grpc
+      appProtocol: kubernetes.io/h2c
+    - name: http
+      port: 8081
+      targetPort: http

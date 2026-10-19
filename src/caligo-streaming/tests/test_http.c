@@ -24,7 +24,7 @@ static void a_browser_request_is_understood(void) {
     HttpRequest request;
     const char *text =
         "GET /live/?t=1791925326375 HTTP/1.1\r\n"
-        "Host: blog.example\r\n"
+        "Host: caligo.example\r\n"
         "range: bytes=196608-\r\n"
         "Accept: */*\r\n\r\n";
 

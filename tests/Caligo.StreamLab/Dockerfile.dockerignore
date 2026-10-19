@@ -1,0 +1,6 @@
+*
+!Directory.Packages.props
+!src/analytics/Caligo.Analytics.Infrastructure/Stores/ClickHouseMigrations/0004-lab.sql
+!tests/Caligo.StreamLab/
+**/bin/
+**/obj/

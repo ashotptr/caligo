@@ -48,7 +48,7 @@ jobs:
               - *shared
               - 'src/notifications/**'
             client:
-              - 'src/blog-client/**'
+              - 'src/caligo-client/**'
             caligo:
               - 'src/caligo/**'
               - 'deploy/caligo/**'
@@ -82,7 +82,7 @@ jobs:
       - name: Unit tests
         run: |
           set -e
-          for project in             tests/Blog.Posts.UnitTests             tests/Blog.Catalog.UnitTests             tests/Blog.Notifications.UnitTests             tests/Blog.StreamLab.Tests             tests/Blog.Api.Tests
+          for project in             tests/Caligo.Posts.UnitTests             tests/Caligo.Catalog.UnitTests             tests/Caligo.Notifications.UnitTests             tests/Caligo.StreamLab.Tests             tests/Caligo.Api.Tests
           do
             echo "::group::$project"
             dotnet test --no-build -c Release "$project"               --logger "trx;LogFileName=$(basename "$project").trx"               --collect:"XPlat Code Coverage"               --results-directory ./TestResults
@@ -92,7 +92,7 @@ jobs:
       - name: Integration tests
         run: >
           dotnet test --no-build -c Release
-          tests/Blog.IntegrationTests/Blog.IntegrationTests.csproj
+          tests/Caligo.IntegrationTests/Caligo.IntegrationTests.csproj
           --logger "trx;LogFileName=integration-tests.trx"
           --results-directory ./TestResults
 
@@ -111,7 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: src/blog-client
+        working-directory: src/caligo-client
     steps:
       - uses: actions/checkout@v5
 
@@ -119,7 +119,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: src/blog-client/package-lock.json
+          cache-dependency-path: src/caligo-client/package-lock.json
 
       - run: npm ci
       - run: npm run lint
@@ -292,22 +292,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - service: blog-api
+          - service: caligo-api
             changed: api
             context: .
-            dockerfile: src/posts/Blog.Api/Dockerfile
-          - service: blog-analytics
+            dockerfile: src/posts/Caligo.Api/Dockerfile
+          - service: caligo-analytics
             changed: analytics
             context: .
-            dockerfile: src/analytics/Blog.Analytics.Host/Dockerfile
-          - service: blog-notifications
+            dockerfile: src/analytics/Caligo.Analytics.Host/Dockerfile
+          - service: caligo-notifications
             changed: notifications
             context: .
-            dockerfile: src/notifications/Blog.Notifications.Host/Dockerfile
-          - service: blog-client
+            dockerfile: src/notifications/Caligo.Notifications.Host/Dockerfile
+          - service: caligo-client
             changed: client
-            context: src/blog-client
-            dockerfile: src/blog-client/Dockerfile
+            context: src/caligo-client
+            dockerfile: src/caligo-client/Dockerfile
 
     steps:
       - uses: actions/checkout@v5

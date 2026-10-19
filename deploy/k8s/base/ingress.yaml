@@ -1,21 +1,21 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: blog
+  name: caligo
   annotations:
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
 spec:
   ingressClassName: nginx
   rules:
-    - host: blog.example.com
+    - host: caligo.example.com
       http:
         paths:
           - path: /api/subscriptions
             pathType: Prefix
             backend:
               service:
-                name: blog-notifications
+                name: caligo-notifications
                 port:
                   name: http
 
@@ -23,7 +23,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: blog-api
+                name: caligo-api
                 port:
                   name: http
 
@@ -31,6 +31,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: blog-client
+                name: caligo-client
                 port:
                   name: http
