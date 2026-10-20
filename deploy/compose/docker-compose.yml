@@ -263,6 +263,10 @@ services:
       - ../../src/caligo/data:/root/CaligoEngine/data
       - ../../src/caligo/user_memories:/root/CaligoEngine/user_memories
       - caligostate:/caligo-state
+      - ../../src/caligo/chat_rooms.txt:/caligo-state/chat_rooms.txt
+      - ../../src/caligo/cgi_debug.log:/caligo-state/cgi_debug.log
+      - ../../src/caligo/agent_memory.json:/caligo-state/agent_memory.json
+      - ../../src/caligo/cookies.txt:/caligo-state/cookies.txt
     networks:
       - caligo
 
