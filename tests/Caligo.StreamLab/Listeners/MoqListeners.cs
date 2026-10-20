@@ -70,6 +70,22 @@ public sealed class GroupReader
     {
         _data.AddRange(bytes.ToArray());
 
+        while (TryNextPacket(out var packet))
+        {
+            await sink.PacketAsync(packet);
+        }
+
+        if (_position > 65536)
+        {
+            _data.RemoveRange(0, _position);
+            _position = 0;
+        }
+    }
+
+    private bool TryNextPacket(out byte[] packet)
+    {
+        packet = Array.Empty<byte>();
+
         while (true)
         {
             var span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_data);
@@ -79,7 +95,7 @@ public sealed class GroupReader
             {
                 if (!Varint.TryRead(span, ref position, out var type))
                 {
-                    break;
+                    return false;
                 }
 
                 _typed = true;
@@ -93,14 +109,14 @@ public sealed class GroupReader
             {
                 _position = span.Length;
 
-                break;
+                return false;
             }
 
             if (!_headed)
             {
                 if (!Varint.TryRead(span, ref position, out var size) || position + (int)size > span.Length)
                 {
-                    break;
+                    return false;
                 }
 
                 _headed = true;
@@ -112,20 +128,13 @@ public sealed class GroupReader
             if (!Varint.TryRead(span, ref position, out _) || !Varint.TryRead(span, ref position, out var length) ||
                 position + (int)length > span.Length)
             {
-                break;
+                return false;
             }
 
-            var packet = span.Slice(position, (int)length).ToArray();
-
+            packet = span.Slice(position, (int)length).ToArray();
             _position = position + (int)length;
 
-            await sink.PacketAsync(packet);
-        }
-
-        if (_position > 65536)
-        {
-            _data.RemoveRange(0, _position);
-            _position = 0;
+            return true;
         }
     }
 }
@@ -176,10 +185,10 @@ public sealed class ObjectsListener : IListener
             }
 
             var position = 1;
-            var span = buffer.AsSpan(0, length);
+            var frame = buffer.AsMemory(0, length);
 
-            if (!Varint.TryRead(span, ref position, out var track) || !Varint.TryRead(span, ref position, out _) ||
-                !Varint.TryRead(span, ref position, out _))
+            if (!Varint.TryRead(frame.Span, ref position, out var track) || !Varint.TryRead(frame.Span, ref position, out _) ||
+                !Varint.TryRead(frame.Span, ref position, out _))
             {
                 continue;
             }
@@ -196,11 +205,11 @@ public sealed class ObjectsListener : IListener
                     }
                 }
             }
-            else if (track == 1 && span[position] == 0)
+            else if (track == 1 && frame.Span[position] == 0)
             {
                 position++;
 
-                if (Varint.TryRead(span, ref position, out _) && position < length)
+                if (Varint.TryRead(frame.Span, ref position, out _) && position < length)
                 {
                     await sink.PacketAsync(buffer.AsMemory(position, length - position).ToArray());
                 }
@@ -293,28 +302,28 @@ public sealed class MoqLiteListener : IListener
 
             while (position < length)
             {
-                var span = buffer.AsSpan(0, length);
+                var frame = buffer.AsMemory(0, length);
 
-                if (!Varint.TryRead(span, ref position, out var type))
+                if (!Varint.TryRead(frame.Span, ref position, out var type))
                 {
                     break;
                 }
 
                 if (type is >= 0x08 and <= 0x0f)
                 {
-                    Varint.TryRead(span, ref position, out var id);
+                    Varint.TryRead(frame.Span, ref position, out var id);
 
                     ulong offset = 0;
                     var size = (ulong)(length - position);
 
                     if ((type & 0x04) != 0)
                     {
-                        Varint.TryRead(span, ref position, out offset);
+                        Varint.TryRead(frame.Span, ref position, out offset);
                     }
 
                     if ((type & 0x02) != 0)
                     {
-                        Varint.TryRead(span, ref position, out size);
+                        Varint.TryRead(frame.Span, ref position, out size);
                     }
 
                     var data = buffer.AsMemory(position, (int)size);
@@ -340,13 +349,13 @@ public sealed class MoqLiteListener : IListener
                 }
                 else if (type == 0x04 || type == 0x24)
                 {
-                    Varint.TryRead(span, ref position, out var id);
-                    Varint.TryRead(span, ref position, out _);
-                    Varint.TryRead(span, ref position, out _);
+                    Varint.TryRead(frame.Span, ref position, out var id);
+                    Varint.TryRead(frame.Span, ref position, out _);
+                    Varint.TryRead(frame.Span, ref position, out _);
 
                     if (type == 0x24)
                     {
-                        Varint.TryRead(span, ref position, out _);
+                        Varint.TryRead(frame.Span, ref position, out _);
                     }
 
                     if (groups.Remove(id))
@@ -356,12 +365,12 @@ public sealed class MoqLiteListener : IListener
                 }
                 else if (type is 0x05 or 0x11 or 0x15)
                 {
-                    Varint.TryRead(span, ref position, out _);
-                    Varint.TryRead(span, ref position, out _);
+                    Varint.TryRead(frame.Span, ref position, out _);
+                    Varint.TryRead(frame.Span, ref position, out _);
                 }
                 else if (type is 0x10 or 0x12 or 0x13 or 0x14 or 0x16 or 0x17)
                 {
-                    Varint.TryRead(span, ref position, out _);
+                    Varint.TryRead(frame.Span, ref position, out _);
                 }
                 else if (type is 0x1c or 0x1d)
                 {
@@ -373,24 +382,24 @@ public sealed class MoqLiteListener : IListener
 
                     if (type == 0x31)
                     {
-                        Varint.TryRead(span, ref position, out size);
+                        Varint.TryRead(frame.Span, ref position, out size);
                     }
 
                     position += (int)size;
                 }
                 else if (type == PingRequest)
                 {
-                    Varint.TryRead(span, ref position, out var sequence);
+                    Varint.TryRead(frame.Span, ref position, out var sequence);
                     Varint.Write(reply, PingResponse);
                     Varint.Write(reply, sequence);
                 }
                 else if (type == PingResponse)
                 {
-                    Varint.TryRead(span, ref position, out _);
+                    Varint.TryRead(frame.Span, ref position, out _);
                 }
                 else if (type == Parameters)
                 {
-                    Varint.TryRead(span, ref position, out var size);
+                    Varint.TryRead(frame.Span, ref position, out var size);
 
                     position += (int)size;
                 }
