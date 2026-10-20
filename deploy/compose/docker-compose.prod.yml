@@ -8,19 +8,20 @@ x-logging: &default-logging
 
 services:
   postgres:
-    image: postgres:16-alpine
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
     restart: unless-stopped
     logging: *default-logging
     environment:
       POSTGRES_DB: caligodb
-      POSTGRES_USER: bloguser
+      POSTGRES_USER: caligo
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       POSTGRES_MULTIPLE_DATABASES: caligonotifications
     volumes:
-      - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bloguser -d caligodb"]
+      test: ["CMD-SHELL", "pg_isready -U caligo -d caligodb"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -96,7 +97,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       Otlp__Endpoint: "http://aspire-dashboard:18889"
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=caligodb;Username=bloguser;Password=${POSTGRES_PASSWORD}"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=caligodb;Username=caligo;Password=${POSTGRES_PASSWORD}"
       ConnectionStrings__Redis: "redis:6379"
       Kafka__BootstrapServers: "kafka:29092"
       Analytics__Address: "http://caligo-analytics:8080"
@@ -202,7 +203,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: "http://+:8080"
       Otlp__Endpoint: "http://aspire-dashboard:18889"
-      ConnectionStrings__Notifications: "Host=postgres;Port=5432;Database=caligonotifications;Username=bloguser;Password=${POSTGRES_PASSWORD:?}"
+      ConnectionStrings__Notifications: "Host=postgres;Port=5432;Database=caligonotifications;Username=caligo;Password=${POSTGRES_PASSWORD:?}"
       Notifications__RabbitMq: "amqp://caligo:${RABBITMQ_PASSWORD:?}@rabbitmq:5672/"
       Notifications__KafkaBootstrapServers: "kafka:29092"
       Notifications__SiteUrl: "https://caligo.${DOMAIN:?}"
@@ -292,6 +293,10 @@ services:
       - ../../src/caligo/data:/root/CaligoEngine/data
       - ../../src/caligo/user_memories:/root/CaligoEngine/user_memories
       - caligostate:/caligo-state
+      - ../../src/caligo/chat_rooms.txt:/caligo-state/chat_rooms.txt
+      - ../../src/caligo/cgi_debug.log:/caligo-state/cgi_debug.log
+      - ../../src/caligo/agent_memory.json:/caligo-state/agent_memory.json
+      - ../../src/caligo/cookies.txt:/caligo-state/cookies.txt
     networks:
       - caligo
 
@@ -320,14 +325,13 @@ services:
 
   liquidsoap:
     profiles: ["liquidsoap"]
-    image: savonet/liquidsoap:v2.4.6
+    build:
+      context: ../liquidsoap
     restart: unless-stopped
     logging: *default-logging
     command: ["/etc/liquidsoap/opus.liq"]
     environment:
       RELAY_SOURCE_PASSWORD: ${RELAY_SOURCE_PASSWORD:-}
-    volumes:
-      - ../liquidsoap:/etc/liquidsoap:ro
     tmpfs:
       - /var/cache/liquidsoap:uid=100,gid=101
     cap_drop:
