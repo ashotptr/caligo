@@ -39,7 +39,7 @@ public sealed class MusicSyncService : BackgroundService, IMusicSync
     {
         var catalog = _options.Value;
 
-        if (!catalog.Enabled || string.IsNullOrWhiteSpace(catalog.CaligoPublicRoot))
+        if (!catalog.Enabled || !catalog.SyncMusic || string.IsNullOrWhiteSpace(catalog.CaligoPublicRoot))
         {
             return;
         }

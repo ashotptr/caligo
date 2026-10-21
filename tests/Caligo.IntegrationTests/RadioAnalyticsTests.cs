@@ -215,7 +215,7 @@ public class RadioAnalyticsTests : IAsyncLifetime
 
         await collector.StopAsync(CancellationToken.None);
 
-        var samples = await SamplesOfAsync(source);
+        var samples = (await SamplesOfAsync(source)).OrderBy(s => s.SampledAt).ThenBy(s => s.Listeners).ToList();
 
         Assert.Equal(7, samples[0].Listeners);
         Assert.All(samples, sample => Assert.Contains(sample.Listeners, new[] { 7, 9 }));

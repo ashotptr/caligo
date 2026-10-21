@@ -16,6 +16,8 @@ namespace Caligo.Catalog.Infrastructure
 
         public string? CaligoDataRoot { get; set; }
 
+        public bool SyncMusic { get; set; } = true;
+
         public string MusicUrlPrefix { get; set; } = "/music/";
 
         public string MixtapeUrlPrefix { get; set; } = "/mixtape/";

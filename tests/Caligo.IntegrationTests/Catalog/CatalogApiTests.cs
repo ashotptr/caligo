@@ -366,6 +366,7 @@ public class CatalogApiTests : IAsyncLifetime
             using var factory = new ContainerApiFactory(_infrastructure, new Dictionary<string, string?>
             {
                 ["Catalog:CaligoPublicRoot"] = root,
+                ["Catalog:SyncMusic"] = "false",
                 ["RateLimiting:ReadsPermitLimit"] = "100000"
             });
 
