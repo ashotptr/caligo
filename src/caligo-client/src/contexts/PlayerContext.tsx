@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import api from '../api/axios';
 import { createPlayer } from '../listen/players';
 import type { PlayerStatus } from '../listen/players';
-import { DEFAULT_WAY, allWays } from '../listen/ways';
+import { DEFAULT_WAY, FALLBACK_WAY, allWays } from '../listen/ways';
 import type { Way } from '../listen/ways';
 import { RadioEngine, opusPlayable, parseNowPlaying } from '../radio';
 import type { NowPlaying, RadioPath, RadioState } from '../radio';
@@ -63,26 +63,35 @@ interface PlayerClock {
   duration: number;
 }
 
-const WAY_KEY = 'radioWay';
-const OLD_FORMAT_KEY = 'radioFormat';
-const OLD_FORMATS: Record<string, string> = { mp3: 'relay-mp3', opus: 'relay-opus', moq: 'relay-objects' };
+const CHOICE_KEY = 'radioChoice';
+const OLD_KEYS = ['radioWay', 'radioFormat'];
 const RESTART_PREVIOUS_S = 3;
 
+const defaultWay = (ways: Way[]): Way => {
+  const preferred = opusPlayable() ? DEFAULT_WAY : FALLBACK_WAY;
+
+  return ways.find(way => way.id === preferred) ?? ways[0];
+};
+
 const storedWay = (ways: Way[]): Way => {
-  const fallback = ways.find(way => way.id === DEFAULT_WAY) ?? ways[0];
-
   try {
-    const id = localStorage.getItem(WAY_KEY) ?? OLD_FORMATS[localStorage.getItem(OLD_FORMAT_KEY) ?? ''];
+    OLD_KEYS.forEach(key => localStorage.removeItem(key));
 
-    return ways.find(way => way.id === id && way.kind !== 'external') ?? fallback;
+    const id = localStorage.getItem(CHOICE_KEY);
+
+    return ways.find(way => way.id === id && way.kind !== 'external') ?? defaultWay(ways);
   } catch {
-    return fallback;
+    return defaultWay(ways);
   }
 };
 
-const storeWay = (way: Way): void => {
+const storeChoice = (way: Way | null): void => {
   try {
-    localStorage.setItem(WAY_KEY, way.id);
+    if (way) {
+      localStorage.setItem(CHOICE_KEY, way.id);
+    } else {
+      localStorage.removeItem(CHOICE_KEY);
+    }
   } catch {
     return;
   }
@@ -293,13 +302,11 @@ export const PlayerProvider = ({ children }: { children: ReactNode }) => {
             return;
           }
 
-          const fallback = ways.find(candidate => candidate.id === DEFAULT_WAY);
+          const fallback = defaultWay(ways);
 
-          if (fallback) {
-            setWay(fallback);
-            storeWay(fallback);
-            start(fallback);
-          }
+          setWay(fallback);
+          storeChoice(null);
+          start(fallback);
         }
       );
 
@@ -349,7 +356,11 @@ export const PlayerProvider = ({ children }: { children: ReactNode }) => {
     silenceTrack();
     setMode('radio');
     setWay(target);
-    storeWay(target);
+
+    if (wayId) {
+      storeChoice(target);
+    }
+
     startWay(target);
   }, [silenceTrack, startWay, way, ways]);
 
@@ -480,12 +491,8 @@ export const PlayerProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
 
-        const fallback = ways.find(candidate => candidate.id === DEFAULT_WAY);
-
-        if (fallback) {
-          backgrounded.current = true;
-          startWay(fallback);
-        }
+        backgrounded.current = true;
+        startWay(defaultWay(ways));
       } else if (backgrounded.current) {
         backgrounded.current = false;
 

@@ -16,7 +16,8 @@ export interface Way {
   command?: string;
 }
 
-export const DEFAULT_WAY = 'relay-mp3';
+export const DEFAULT_WAY = 'relay-opus';
+export const FALLBACK_WAY = 'relay-mp3';
 
 const LAB_HOSTS = ['localhost', '127.0.0.1'];
 
