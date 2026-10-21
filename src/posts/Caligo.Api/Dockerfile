@@ -22,7 +22,7 @@ COPY src/posts/ src/posts/
 COPY src/catalog/ src/catalog/
 COPY src/streamingservice/ src/streamingservice/
 
-RUN dotnet publish src/posts/Caligo.Api/Caligo.Api.csproj -c Release -o /app/out --no-restore
+RUN dotnet publish src/posts/Caligo.Api/Caligo.Api.csproj -c Release -o /app/out --no-restore -m:1 -p:UseSharedCompilation=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app

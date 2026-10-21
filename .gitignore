@@ -8,6 +8,7 @@ node_modules/
 dist/
 build/
 /media/
+/data/
 
 .env
 .env.local
@@ -33,3 +34,4 @@ Thumbs.db
 *.mmd
 
 merge-report.md
+understanding.md

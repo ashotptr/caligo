@@ -1,0 +1,28 @@
+services:
+  lab-source:
+    environment:
+      LAB_INPUT: radio
+      LAB_RADIO: http://caligo:9001/radio/
+    networks:
+      caligo: {}
+
+  icecast:
+    ports:
+      - "127.0.0.1:8001:8000"
+
+  mediamtx:
+    environment:
+      MTX_WEBRTCADDITIONALHOSTS: 127.0.0.1
+      MTX_WEBRTCLOCALTCPADDRESS: ":8189"
+    ports:
+      - "127.0.0.1:8554:8554"
+      - "127.0.0.1:1935:1935"
+      - "127.0.0.1:8888:8888"
+      - "127.0.0.1:8889:8889"
+      - "127.0.0.1:8189:8189"
+      - "127.0.0.1:8189:8189/udp"
+      - "127.0.0.1:8890:8890/udp"
+
+  lab-web:
+    ports:
+      - "127.0.0.1:8090:8080"

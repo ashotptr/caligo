@@ -10,10 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@moq/net": "0.4.3",
     "@react-oauth/google": "^0.13.5",
     "axios": "^1.18.1",
     "dashjs": "^5.2.1",
     "hls.js": "^1.7.3",
+    "jszip": "3.10.1",
     "jwt-decode": "^4.0.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -31,5 +33,10 @@
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.1"
+  },
+  "overrides": {
+    "@moq/signals": {
+      "react": "19.2.7"
+    }
   }
 }

@@ -5,6 +5,7 @@ import { catalogError, formatDay, statusOf } from '../catalog';
 import AlbumGrid from '../components/AlbumGrid';
 import Artwork from '../components/Artwork';
 import TrackList from '../components/TrackList';
+import { ARTISTS, singlePath } from '../thesaurarium';
 import type { ArtistDetail } from '../types';
 
 const ArtistDetailPage = () => {
@@ -26,7 +27,7 @@ const ArtistDetailPage = () => {
       })
       .catch(err => {
         if (!cancelled) {
-          setError(statusOf(err) === 404 ? 'This artist is not in the catalog.' : catalogError(err, 'Could not load the artist.'));
+          setError(statusOf(err) === 404 ? 'This artist is not in the Thesaurarium.' : catalogError(err, 'Could not load the artist.'));
         }
       });
 
@@ -39,7 +40,7 @@ const ArtistDetailPage = () => {
     return (
       <div>
         <p className="form-error">{error}</p>
-        <Link to="/artists">← All artists</Link>
+        <Link to={ARTISTS}>← All artists</Link>
       </div>
     );
   }
@@ -53,7 +54,7 @@ const ArtistDetailPage = () => {
 
   return (
     <article className="post-detail">
-      <Link to="/artists" className="back-link">← All artists</Link>
+      <Link to={ARTISTS} className="back-link">← All artists</Link>
 
       <div className="portrait-header">
         <Artwork src={artist.pictureUri} className="portrait" />
@@ -80,7 +81,7 @@ const ArtistDetailPage = () => {
           <ul className="review-list">
             {artist.singles.map(single => (
               <li key={single.id}>
-                <Link to={`/singles/${single.id}`}>{single.name}</Link>
+                <Link to={singlePath(single.id)}>{single.name}</Link>
               </li>
             ))}
           </ul>

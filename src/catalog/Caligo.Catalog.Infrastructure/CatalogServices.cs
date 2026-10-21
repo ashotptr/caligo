@@ -6,11 +6,14 @@ using Npgsql.NameTranslation;
 using Caligo.Catalog.Application.Abstractions;
 using Caligo.Catalog.Application.Accounts;
 using Caligo.Catalog.Application.Activity;
+using Caligo.Catalog.Application.Collections;
 using Caligo.Catalog.Application.Contents;
+using Caligo.Catalog.Application.Engine;
 using Caligo.Catalog.Application.Insights;
 using Caligo.Catalog.Application.Media;
 using Caligo.Catalog.Application.Music;
 using Caligo.Catalog.Domain.Users;
+using Caligo.Catalog.Infrastructure.Engine;
 using Caligo.Catalog.Infrastructure.Media;
 using Caligo.Catalog.Infrastructure.Music;
 using Caligo.Catalog.Infrastructure.Persistence;
@@ -60,6 +63,10 @@ namespace Caligo.Catalog.Infrastructure
             services.AddScoped<IPlaybackStore, PlaybackStore>();
             services.AddSingleton<IMediaInbox, MediaInbox>();
             services.AddScoped<IPackagingQueue, PackagingQueue>();
+            services.AddScoped<ICollectionStore, CollectionStore>();
+            services.AddScoped<IMixtapeLookup, MixtapeLookup>();
+            services.AddScoped<MixtapeVisibility>();
+            services.AddSingleton<MixtapeVisibilityCache>();
 
             services.AddScoped<CatalogService>();
             services.AddScoped<StreamingAccountService>();
@@ -69,6 +76,8 @@ namespace Caligo.Catalog.Infrastructure
             services.AddScoped<MediaService>();
             services.AddScoped<PlaybackService>();
             services.AddScoped<PackagingService>();
+            services.AddScoped<CollectionService>();
+            services.AddScoped<CaligoService>();
 
             return services;
         }

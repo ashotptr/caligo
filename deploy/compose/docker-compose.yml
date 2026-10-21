@@ -10,7 +10,7 @@ services:
       POSTGRES_MULTIPLE_DATABASES: caligonotifications
     volumes:
       - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
-      - pgdata:/var/lib/postgresql/data
+      - ../../data/dev/postgres:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
@@ -23,6 +23,8 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    volumes:
+      - ../../data/dev/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -31,12 +33,15 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
+    hostname: rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: caligo
       RABBITMQ_DEFAULT_PASS: caligopass
     ports:
       - "5672:5672"
       - "15672:15672"
+    volumes:
+      - ../../data/dev/rabbitmq:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -63,7 +68,8 @@ services:
     ports:
       - "9092:9092"
     volumes:
-      - kafkadata:/var/lib/kafka/data
+      - ../../data/dev/kafka/data:/var/lib/kafka/data
+      - ../../data/dev/kafka/secrets:/etc/kafka/secrets
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092"]
       interval: 10s
@@ -91,7 +97,8 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - mongodata:/data/db
+      - ../../data/dev/mongo/db:/data/db
+      - ../../data/dev/mongo/configdb:/data/configdb
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -108,8 +115,8 @@ services:
     ports:
       - "8123:8123"
     volumes:
-      - clickhousedata:/var/lib/clickhouse
-      - ./clickhouse-dev.xml:/etc/clickhouse-server/config.d/dev.xml:ro
+      - ../../data/dev/clickhouse:/var/lib/clickhouse
+      - ./clickhouse-logs.xml:/etc/clickhouse-server/config.d/logs.xml:ro
     ulimits:
       nofile:
         soft: 262144
@@ -143,12 +150,18 @@ services:
       ForwardedHeaders__KnownNetworks__1: "192.168.0.0/16"
       ForwardedHeaders__KnownNetworks__2: "10.0.0.0/8"
       Catalog__CaligoPublicRoot: "/caligo/public_html"
+      Catalog__CaligoEngineUrl: "http://caligo:8080"
+      Catalog__CaligoDataRoot: "/caligo/data"
       Media__Enabled: "true"
       Media__SigningKey: ${MEDIA_SIGNING_KEY:-dev-media-signing-key-0123456789abcdef}
       Media__IncomingPath: "/media/incoming"
     volumes:
       - ../../src/caligo/public_html:/caligo/public_html:ro
+      - ../../src/caligo/data:/caligo/data:ro
       - ../../media/incoming:/media/incoming:ro
+    networks:
+      - default
+      - caligo
     ports:
       - "5028:8080"
     depends_on:
@@ -262,7 +275,7 @@ services:
       - ../../src/caligo/public_html/mixtape:/root/CaligoEngine/public_html/mixtape
       - ../../src/caligo/data:/root/CaligoEngine/data
       - ../../src/caligo/user_memories:/root/CaligoEngine/user_memories
-      - caligostate:/caligo-state
+      - ../../data/dev/caligo-home:/caligo-state/home
       - ../../src/caligo/chat_rooms.txt:/caligo-state/chat_rooms.txt
       - ../../src/caligo/cgi_debug.log:/caligo-state/cgi_debug.log
       - ../../src/caligo/agent_memory.json:/caligo-state/agent_memory.json
@@ -330,7 +343,7 @@ services:
       MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:-dev-media-signing-key-0123456789abcdef}
       VOD_LIBRARY: /media/library
     volumes:
-      - medialibrary:/media/library:ro
+      - ../../media/library:/media/library:ro
     ports:
       - "8010:8010"
     cap_drop:
@@ -356,7 +369,7 @@ services:
       PACKAGER_LIBRARY: /media/library
     volumes:
       - ../../media/incoming:/media/incoming:ro
-      - medialibrary:/media/library
+      - ../../media/library:/media/library
     tmpfs:
       - /tmp
     cap_drop:
@@ -372,11 +385,3 @@ services:
 
 networks:
   caligo:
-
-volumes:
-  pgdata:
-  mongodata:
-  kafkadata:
-  clickhousedata:
-  caligostate:
-  medialibrary:

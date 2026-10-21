@@ -12,6 +12,8 @@ api.interceptors.request.use(config => {
   return config;
 });
 
+export const LOGOUT = '/api/account/logout';
+
 let refreshing: Promise<string | null> | null = null;
 
 const refreshTokens = async (): Promise<string | null> => {
@@ -33,6 +35,10 @@ api.interceptors.response.use(
   response => response,
   async error => {
     const original = error.config;
+
+    if (original?.url === LOGOUT) {
+      return Promise.reject(error);
+    }
 
     if (error.response?.status === 401 && original && !original._retry) {
       original._retry = true;

@@ -14,6 +14,8 @@ export default defineConfig({
       '/music/': caligo,
       '/mixtape/': caligo,
       '/caligo': caligo,
+      '/cgi_bin/get_chat_rooms': caligo,
+      '/chat/': { target: caligo, ws: true },
       '/vod/': vod,
     },
   },

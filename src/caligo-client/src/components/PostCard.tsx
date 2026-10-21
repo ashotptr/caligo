@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { titlePath } from '../thesaurarium';
 import type { PostSummary } from '../types';
 
 const PostCard = ({ post, views }: { post: PostSummary; views?: number }) => (
@@ -14,7 +15,7 @@ const PostCard = ({ post, views }: { post: PostSummary; views?: number }) => (
     </p>
     {post.contentId !== null && (
       <p className="review-of">
-        Review of <Link to={`/catalog/${post.contentId}`}>{post.contentTitle ?? 'a title in the catalog'}</Link>
+        Review of <Link to={titlePath(post.contentId)}>{post.contentTitle ?? 'a title in the Thesaurarium'}</Link>
       </p>
     )}
     <p className="post-excerpt">{post.excerpt}</p>

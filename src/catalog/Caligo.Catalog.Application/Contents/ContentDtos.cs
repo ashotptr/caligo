@@ -90,6 +90,15 @@ public record ArtistSummaryDto(int ArtistId, string Name, int Songs);
 
 public record AlbumSummaryDto(int AlbumId, string Title, DateOnly? ReleaseDate, string? CoverUri, List<string> Artists, int Songs);
 
+public static class ReleaseKinds
+{
+    public const string Album = "album";
+    public const string Single = "single";
+}
+
+public record ReleaseSummaryDto(
+    string Kind, int Id, string Title, DateOnly? ReleaseDate, string? CoverUri, List<string> Artists, int Songs);
+
 public record TrackDto(int ContentId, int SongId, string Title, float Duration, int? DiscNumber, int? TrackNumber, string? AudioUri, List<string> Artists);
 
 public record ArtistDetailDto(

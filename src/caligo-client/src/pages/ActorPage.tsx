@@ -4,6 +4,7 @@ import api from '../api/axios';
 import { catalogError, formatDay, statusOf } from '../catalog';
 import Artwork from '../components/Artwork';
 import ContentCard from '../components/ContentCard';
+import { TITLES } from '../thesaurarium';
 import type { ActorDetail } from '../types';
 
 const ActorPage = () => {
@@ -25,7 +26,7 @@ const ActorPage = () => {
       })
       .catch(err => {
         if (!cancelled) {
-          setError(statusOf(err) === 404 ? 'This actor is not in the catalog.' : catalogError(err, 'Could not load the actor.'));
+          setError(statusOf(err) === 404 ? 'This actor is not in the Thesaurarium.' : catalogError(err, 'Could not load the actor.'));
         }
       });
 
@@ -38,7 +39,7 @@ const ActorPage = () => {
     return (
       <div>
         <p className="form-error">{error}</p>
-        <Link to="/catalog">← Back to the catalog</Link>
+        <Link to={TITLES}>← Back to the Thesaurarium</Link>
       </div>
     );
   }
@@ -49,7 +50,7 @@ const ActorPage = () => {
 
   return (
     <article className="post-detail">
-      <Link to="/catalog" className="back-link">← Catalog</Link>
+      <Link to={TITLES} className="back-link">← Thesaurarium</Link>
 
       <div className="portrait-header">
         <Artwork src={actor.profilePictureUri} className="portrait" />
@@ -64,7 +65,7 @@ const ActorPage = () => {
       <p className="content-description">{actor.biography}</p>
 
       <section className="catalog-section">
-        <h2>In the catalog</h2>
+        <h2>In the Thesaurarium</h2>
         {actor.contents.length === 0 && <p className="status-line">Nothing yet.</p>}
         {actor.contents.length > 0 && (
           <div className="card-grid">

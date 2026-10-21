@@ -63,6 +63,8 @@ export class MoqRadio {
   private socket: WebSocket | null = null;
   private context: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
+  private gain: GainNode | null = null;
+  private volume = 1;
   private decoder: AudioDecoder | null = null;
   private channels = 0;
   private catalogChannels = 2;
@@ -133,11 +135,17 @@ export class MoqRadio {
           outputChannelCount: [2]
         });
 
+        const gain = context.createGain();
+
+        gain.gain.value = this.volume;
+        gain.connect(context.destination);
+
         node.port.onmessage = (event: MessageEvent<WorkletMessage>) => this.fromWorklet(event.data);
-        node.connect(context.destination);
+        node.connect(gain);
         node.port.postMessage({ type: 'target', target: Math.round((this.targetMs * RATE) / 1000) });
 
         this.node = node;
+        this.gain = gain;
 
         context.resume().catch(() => undefined);
         this.connect();
@@ -161,12 +169,22 @@ export class MoqRadio {
 
     this.node?.disconnect();
     this.node = null;
+    this.gain?.disconnect();
+    this.gain = null;
 
     this.context?.close().catch(() => undefined);
     this.context = null;
 
     this.onNow(null);
     this.onState('off');
+  }
+
+  setVolume(volume: number): void {
+    this.volume = volume;
+
+    if (this.gain) {
+      this.gain.gain.value = volume;
+    }
   }
 
   private giveUp(): void {

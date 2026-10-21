@@ -3,13 +3,13 @@ import { Link } from 'react-router-dom';
 import api from '../api/axios';
 import { statusOf } from '../catalog';
 import { useAuth } from '../contexts/AuthContext';
-import { useRadio } from '../contexts/RadioContext';
+import { usePlayer } from '../contexts/PlayerContext';
 
 type Status = 'idle' | 'saving' | 'profile' | 'failed';
 
 const ListenLog = ({ contentId }: { contentId: number }) => {
   const { isAuthenticated } = useAuth();
-  const { loggedId, markLogged } = useRadio();
+  const { loggedId, markLogged } = usePlayer();
   const [status, setStatus] = useState<Status>('idle');
 
   useEffect(() => {

@@ -497,3 +497,56 @@ export interface LabRunDetail {
   contestants: LabContestant[];
   latency: LabLatencyPoint[];
 }
+
+export interface ReleaseSummary {
+  kind: 'album' | 'single';
+  id: number;
+  title: string;
+  releaseDate: string | null;
+  coverUri: string | null;
+  artists: string[];
+  songs: number;
+}
+
+export interface CollectionSummary {
+  collectionId: number;
+  name: string;
+  titles: number;
+  songs: number;
+  coverUri: string | null;
+}
+
+export interface CollectionTitle {
+  contentId: number;
+  title: string;
+  kind: ContentKind;
+  duration: number;
+  audioUri: string | null;
+  artists: string[];
+  albumId: number | null;
+  albumTitle: string | null;
+  coverUri: string | null;
+  position: number;
+}
+
+export interface CollectionDetail {
+  collectionId: number;
+  name: string;
+  titles: CollectionTitle[];
+}
+
+export interface AddTitlesResult {
+  added: number;
+  alreadyThere: number;
+}
+
+export interface AskSong {
+  artist: string;
+  title: string;
+  url: string | null;
+}
+
+export interface AskAnswer {
+  text: string | null;
+  songs: AskSong[] | null;
+}

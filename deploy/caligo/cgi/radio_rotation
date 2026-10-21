@@ -1,0 +1,101 @@
+#!/usr/bin/python3
+import json
+import os
+import signal
+import subprocess
+import sys
+
+MIXTAPE = "public_html/mixtape"
+MUSIC = "public_html/music"
+TOOL = "./cgi_bin/add_to_radio"
+
+
+def chunk(text):
+    data = text.encode("utf-8")
+    sys.stdout.buffer.write(b"%X\r\n%s\r\n" % (len(data), data))
+    sys.stdout.buffer.flush()
+
+
+def say(line):
+    chunk(line + "\n")
+
+
+def finish():
+    sys.stdout.buffer.write(b"0\r\n\r\n")
+    sys.stdout.buffer.flush()
+
+
+def safe(part):
+    return isinstance(part, str) and part not in ("", ".", "..") and not any(c in part for c in "/\\\0")
+
+
+def restart_radio():
+    for name in os.listdir("/proc"):
+        if not name.isdigit():
+            continue
+        try:
+            with open(f"/proc/{name}/comm") as comm:
+                if comm.read().strip() == "radio_server":
+                    os.kill(int(name), signal.SIGTERM)
+        except (OSError, ValueError):
+            continue
+
+
+def main():
+    sys.stdout.buffer.write(
+        b"HTTP/1.1 200 OK\r\n"
+        b"Content-Type: text/plain; charset=utf-8\r\n"
+        b"Cache-Control: no-cache, no-transform\r\n"
+        b"X-Accel-Buffering: no\r\n"
+        b"Transfer-Encoding: chunked\r\n\r\n")
+
+    try:
+        length = int(os.environ.get("CONTENT_LENGTH") or 0)
+        request = json.loads(sys.stdin.buffer.read(length).decode("utf-8")) if length > 0 else {}
+    except (ValueError, UnicodeDecodeError):
+        request = {}
+
+    folder = request.get("folder")
+    track = request.get("file")
+
+    if not safe(folder) or not os.path.isdir(os.path.join(MIXTAPE, folder)):
+        say("ERROR: no such album in the mixtape.")
+        finish()
+        return
+
+    if track is None:
+        metadata = os.path.join(MIXTAPE, folder, "metadata.json")
+        if not os.path.isfile(metadata):
+            say("ERROR: the album has no metadata.json.")
+            finish()
+            return
+        command = [TOOL, "-j", metadata, "-o", MUSIC]
+    else:
+        source = os.path.join(MIXTAPE, folder, track) if safe(track) else None
+        if source is None or not os.path.isfile(source):
+            say("ERROR: no such track in the album.")
+            finish()
+            return
+        command = [TOOL, "-f", source, "-o", MUSIC,
+                   "-a", str(request.get("artist") or "Unknown Artist"),
+                   "-l", str(request.get("album") or "Unknown Album"),
+                   "-t", str(request.get("title") or os.path.splitext(track)[0])]
+
+    say("> Adding to the radio rotation...")
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+    for raw in process.stdout:
+        line = raw.decode("utf-8", "replace").strip()
+        if line:
+            say(line)
+
+    if process.wait() == 0:
+        restart_radio()
+        say("SUCCESS. The radio reloads its rotation.")
+    else:
+        say(f"ERROR: add_to_radio stopped with code {process.returncode}.")
+
+    finish()
+
+
+main()

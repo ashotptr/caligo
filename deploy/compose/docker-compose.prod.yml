@@ -19,7 +19,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       POSTGRES_MULTIPLE_DATABASES: caligonotifications
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ../../data/prod/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U caligo -d caligodb"]
       interval: 5s
@@ -30,6 +30,8 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     logging: *default-logging
+    volumes:
+      - ../../data/prod/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -38,6 +40,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
+    hostname: rabbitmq
     restart: unless-stopped
     logging: *default-logging
     environment:
@@ -46,7 +49,7 @@ services:
     ports:
       - "127.0.0.1:15672:15672"
     volumes:
-      - rabbitdata:/var/lib/rabbitmq
+      - ../../data/prod/rabbitmq:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -61,7 +64,8 @@ services:
       MONGO_INITDB_ROOT_USERNAME: caligo
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?}
     volumes:
-      - mongodata:/data/db
+      - ../../data/prod/mongo/db:/data/db
+      - ../../data/prod/mongo/configdb:/data/configdb
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -77,7 +81,8 @@ services:
       CLICKHOUSE_USER: caligo
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?}
     volumes:
-      - clickhousedata:/var/lib/clickhouse
+      - ../../data/prod/clickhouse:/var/lib/clickhouse
+      - ./clickhouse-logs.xml:/etc/clickhouse-server/config.d/logs.xml:ro
     ulimits:
       nofile:
         soft: 262144
@@ -110,13 +115,19 @@ services:
       Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID:-}
       ForwardedHeaders__KnownNetworks__0: "172.16.0.0/12"
       Catalog__CaligoPublicRoot: "/caligo/public_html"
+      Catalog__CaligoEngineUrl: "http://caligo:8080"
+      Catalog__CaligoDataRoot: "/caligo/data"
       Media__Enabled: ${MEDIA_ENABLED:-false}
       Media__SigningKey: ${MEDIA_SIGNING_KEY:-}
       Media__IncomingPath: "/media/incoming"
     volumes:
-      - dpkeys:/home/app/.aspnet/DataProtection-Keys
+      - ../../data/prod/dpkeys:/home/app/.aspnet/DataProtection-Keys
       - ../../src/caligo/public_html:/caligo/public_html:ro
+      - ../../src/caligo/data:/caligo/data:ro
       - ../../media/incoming:/media/incoming:ro
+    networks:
+      - default
+      - caligo
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health/ready || exit 1"]
       interval: 10s
@@ -153,7 +164,8 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
     volumes:
-      - kafkadata:/var/lib/kafka/data
+      - ../../data/prod/kafka/data:/var/lib/kafka/data
+      - ../../data/prod/kafka/secrets:/etc/kafka/secrets
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092"]
       interval: 10s
@@ -292,7 +304,7 @@ services:
       - ../../src/caligo/public_html/mixtape:/root/CaligoEngine/public_html/mixtape
       - ../../src/caligo/data:/root/CaligoEngine/data
       - ../../src/caligo/user_memories:/root/CaligoEngine/user_memories
-      - caligostate:/caligo-state
+      - ../../data/prod/caligo-home:/caligo-state/home
       - ../../src/caligo/chat_rooms.txt:/caligo-state/chat_rooms.txt
       - ../../src/caligo/cgi_debug.log:/caligo-state/cgi_debug.log
       - ../../src/caligo/agent_memory.json:/caligo-state/agent_memory.json
@@ -361,7 +373,7 @@ services:
       MEDIA_SIGNING_KEY: ${MEDIA_SIGNING_KEY:-}
       VOD_LIBRARY: /media/library
     volumes:
-      - medialibrary:/media/library:ro
+      - ../../media/library:/media/library:ro
     cap_drop:
       - ALL
     security_opt:
@@ -388,7 +400,7 @@ services:
       PACKAGER_LIBRARY: /media/library
     volumes:
       - ../../media/incoming:/media/incoming:ro
-      - medialibrary:/media/library
+      - ../../media/library:/media/library
     tmpfs:
       - /tmp
     cap_drop:
@@ -414,13 +426,3 @@ services:
 
 networks:
   caligo:
-
-volumes:
-  pgdata:
-  dpkeys:
-  rabbitdata:
-  mongodata:
-  kafkadata:
-  clickhousedata:
-  caligostate:
-  medialibrary:

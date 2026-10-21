@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../api/axios';
 import { catalogError, formatAmount, formatDay, kindLabel, planFacts, planName, statusOf } from '../catalog';
 import { formatDateTime } from '../dates';
+import { titlePath } from '../thesaurarium';
 import type { Plan, Recommendation, Spending, StreamingNotification, StreamingProfile, WatchEntry } from '../types';
 
 const GENDERS = ['Female', 'Male', 'Other'];
@@ -253,7 +254,7 @@ const StreamingProfilePage = () => {
         <ul className="dashboard-list">
           {recommendations.map(item => (
             <li key={item.contentId}>
-              <Link to={`/catalog/${item.contentId}`}>{item.title}</Link>
+              <Link to={titlePath(item.contentId)}>{item.title}</Link>
               <span className="post-meta">
                 {[kindLabel(item.kind), item.reason, formatDay(item.date)].filter(Boolean).join(' · ')}
               </span>
@@ -282,7 +283,7 @@ const StreamingProfilePage = () => {
         <ul className="dashboard-list">
           {history.map(entry => (
             <li key={entry.watchedContentId}>
-              <Link to={`/catalog/${entry.contentId}`}>{entry.title}</Link>
+              <Link to={titlePath(entry.contentId)}>{entry.title}</Link>
               <span className="post-meta">
                 {kindLabel(entry.kind)} · {formatDateTime(entry.date)}{position(entry.timestamp)}
               </span>

@@ -8,6 +8,7 @@ import ClapButton from '../components/ClapButton';
 import Markdown from '../components/Markdown';
 import { useAuth } from '../contexts/AuthContext';
 import { formatDate, formatDateTime, parseServerDate } from '../dates';
+import { titlePath } from '../thesaurarium';
 import type { PostDetail, PostStats } from '../types';
 
 const PostDetailPage = () => {
@@ -109,7 +110,7 @@ const PostDetailPage = () => {
 
       {post.contentId !== null && (
         <p className="review-of">
-          Review of <Link to={`/catalog/${post.contentId}`}>{post.contentTitle ?? 'a title in the catalog'}</Link>
+          Review of <Link to={titlePath(post.contentId)}>{post.contentTitle ?? 'a title in the Thesaurarium'}</Link>
         </p>
       )}
 

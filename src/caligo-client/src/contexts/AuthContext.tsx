@@ -1,7 +1,7 @@
 import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 import { jwtDecode } from 'jwt-decode';
-import api from '../api/axios';
+import api, { LOGOUT } from '../api/axios';
 
 interface JwtClaims {
   sub?: string;
@@ -28,7 +28,7 @@ interface AuthContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
   hasRole: (...roles: string[]) => boolean;
-  login: (accessToken: string, refreshToken: string) => void;
+  login: (accessToken: string, refreshToken: string) => AuthUser | null;
   logout: () => void;
 }
 
@@ -93,11 +93,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
 
-    setUser(parseUser(accessToken));
+    const parsed = parseUser(accessToken);
+
+    setUser(parsed);
+
+    return parsed;
   };
 
   const logout = () => {
-    api.post('/api/account/logout').catch(() => undefined);
+    api.post(LOGOUT).catch(() => undefined);
 
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');

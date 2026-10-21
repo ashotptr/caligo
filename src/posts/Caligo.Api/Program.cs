@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Caligo.Api.Catalog;
 using Caligo.Api.Composition;
 using Caligo.Api.Lab;
 using Caligo.Api.Media;
@@ -16,6 +17,7 @@ using Caligo.Api.Services;
 using Caligo.Catalog.Application.Abstractions;
 using Caligo.Catalog.Application.Media;
 using Caligo.Catalog.Infrastructure;
+using Caligo.Catalog.Infrastructure.Engine;
 using Caligo.Catalog.Infrastructure.Schema;
 using Caligo.Posts.Application.Abstractions;
 using Caligo.Observability;
@@ -94,6 +96,16 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         }));
 
+    options.AddPolicy("caligo", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = limits.GetValue("CaligoPermitLimit", 30),
+            Window = limits.GetValue("CaligoWindow", TimeSpan.FromMinutes(1)),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        }));
+
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 
@@ -106,6 +118,24 @@ builder.Services.AddCatalogInfrastructure((provider, catalog) =>
     catalog.Enabled = !catalog.Disabled && database.Provider == DatabaseProvider.Postgres;
     catalog.ConnectionString = database.ConnectionString;
 });
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICatalogViewer, HttpCatalogViewer>();
+builder.Services.AddHttpClient<ICaligoEngine, CaligoEngineClient>((provider, http) =>
+{
+    var engine = provider.GetRequiredService<IOptions<CatalogOptions>>().Value.CaligoEngineUrl;
+
+    if (!string.IsNullOrWhiteSpace(engine))
+    {
+        http.BaseAddress = new Uri(engine.EndsWith('/') ? engine : engine + "/");
+    }
+
+    http.Timeout = Timeout.InfiniteTimeSpan;
+});
+builder.Services.AddSingleton<MusicSyncService>();
+builder.Services.AddSingleton<IMusicSync>(provider => provider.GetRequiredService<MusicSyncService>());
+builder.Services.AddHostedService(provider => provider.GetRequiredService<MusicSyncService>());
+builder.Services.AddScoped<CaligoAccountImport>();
 
 builder.Services.AddScoped<IBlogAccounts, IdentityBlogAccounts>();
 builder.Services.AddScoped<IContentLookup, CatalogContentLookup>();
@@ -267,6 +297,15 @@ using (var scope = app.Services.CreateScope())
     }
 
     await SeedData.Initialize(services, services.GetRequiredService<IConfiguration>());
+}
+
+if (args.Contains(CaligoAccountImport.Command))
+{
+    using var importScope = app.Services.CreateScope();
+
+    Console.WriteLine(await importScope.ServiceProvider.GetRequiredService<CaligoAccountImport>().RunAsync());
+
+    return;
 }
 
 app.Run();

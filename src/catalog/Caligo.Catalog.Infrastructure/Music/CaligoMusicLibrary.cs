@@ -98,7 +98,7 @@ namespace Caligo.Catalog.Infrastructure.Music
                         var track = Track(
                             folder,
                             file,
-                            _options.MixtapeUrlPrefix + Uri.EscapeDataString(name) + "/" + Uri.EscapeDataString(file),
+                            _options.MixtapeUrlPrefix + name + "/" + file,
                             Text(entry, "title") ?? Path.GetFileNameWithoutExtension(file),
                             artist,
                             $"mixtape/{name}/{file}",
@@ -117,7 +117,7 @@ namespace Caligo.Catalog.Infrastructure.Music
                             artist,
                             cover is null
                                 ? null
-                                : _options.MixtapeUrlPrefix + Uri.EscapeDataString(name) + "/" + Uri.EscapeDataString(cover),
+                                : _options.MixtapeUrlPrefix + name + "/" + cover,
                             tracks.Count == 1,
                             tracks));
                     }
@@ -169,7 +169,7 @@ namespace Caligo.Catalog.Infrastructure.Music
                     var track = Track(
                         folder,
                         file,
-                        _options.MusicUrlPrefix + Uri.EscapeDataString(file),
+                        _options.MusicUrlPrefix + file,
                         title,
                         artist,
                         $"music/{file}",

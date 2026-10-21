@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Caligo.Catalog.Domain.Activity;
+using Caligo.Catalog.Domain.Collections;
 using Caligo.Catalog.Domain.Contents;
 using Caligo.Catalog.Domain.Media;
 using Caligo.Catalog.Domain.Music;
@@ -63,6 +64,9 @@ namespace Caligo.Catalog.Infrastructure.Persistence
         public DbSet<SubtitleFile> SubtitleFiles => Set<SubtitleFile>();
         public DbSet<PlaybackSession> PlaybackSessions => Set<PlaybackSession>();
         public DbSet<PlaybackPosition> PlaybackPositions => Set<PlaybackPosition>();
+
+        public DbSet<Collection> Collections => Set<Collection>();
+        public DbSet<CollectionTitle> CollectionTitles => Set<CollectionTitle>();
 
         public DbSet<PopularContentRow> PopularContent => Set<PopularContentRow>();
         public DbSet<ActiveUserRow> ActiveUsers => Set<ActiveUserRow>();
@@ -183,6 +187,17 @@ namespace Caligo.Catalog.Infrastructure.Persistence
             {
                 position.ToTable("playbackposition").HasKey(e => new { e.UserId, e.ContentId });
                 position.Property(e => e.UpdatedAt).HasColumnType(Timestamp);
+            });
+
+            model.Entity<Collection>(collection =>
+            {
+                collection.ToTable("collection").HasKey(e => e.CollectionId);
+                collection.Property(e => e.CreatedAt).HasColumnType(Timestamp);
+            });
+            model.Entity<CollectionTitle>(title =>
+            {
+                title.ToTable("collectiontitle").HasKey(e => new { e.CollectionId, e.ContentId });
+                title.Property(e => e.AddedAt).HasColumnType(Timestamp);
             });
 
             model.Entity<PopularContentRow>().HasNoKey().ToView("popularcontent");

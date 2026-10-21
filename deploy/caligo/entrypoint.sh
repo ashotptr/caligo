@@ -55,13 +55,6 @@ trap 'kill $PIDS 2>/dev/null || true; exit 0' TERM INT
 keep_running xmppd ./xmppd
 keep_running bridge ./bridge
 keep_running radio_server ./radio_server
-
-if [ -r cert.pem ] && [ -r key.pem ]; then
-    keep_running server_https ./server_https
-else
-    echo "[caligo] cert.pem or key.pem is missing, server_https is not started" >&2
-fi
-
 keep_running server_http ./server_http
 
 echo "[caligo] started: xmppd 5222, bridge 8082, radio_server 9001, server_http 8080" >&2

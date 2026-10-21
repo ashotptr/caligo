@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import { catalogError } from '../catalog';
-import CatalogNav from '../components/CatalogNav';
+import ThesaurariumNav from '../components/ThesaurariumNav';
+import { artistPath } from '../thesaurarium';
 import type { ArtistSummary } from '../types';
 
 const ArtistsPage = () => {
+  const [params] = useSearchParams();
+  const activeQuery = params.get('query') ?? '';
+
   const [artists, setArtists] = useState<ArtistSummary[]>([]);
-  const [query, setQuery] = useState('');
-  const [activeQuery, setActiveQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,37 +37,9 @@ const ArtistsPage = () => {
     };
   }, [activeQuery]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setActiveQuery(query.trim());
-  };
-
   return (
     <div>
-      <CatalogNav />
-
-      <form onSubmit={handleSearch} className="search-bar">
-        <input
-          type="search"
-          placeholder="Search artists…"
-          value={query}
-          maxLength={100}
-          onChange={e => setQuery(e.target.value)}
-        />
-        <button type="submit">Search</button>
-        {activeQuery && (
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => {
-              setQuery('');
-              setActiveQuery('');
-            }}
-          >
-            Clear
-          </button>
-        )}
-      </form>
+      <ThesaurariumNav />
 
       {loading && <p className="status-line">Loading artists…</p>}
       {error && <p className="form-error">{error}</p>}
@@ -79,7 +53,7 @@ const ArtistsPage = () => {
       <ul className="dashboard-list">
         {artists.map(artist => (
           <li key={artist.artistId}>
-            <Link to={`/artists/${artist.artistId}`}>{artist.name}</Link>
+            <Link to={artistPath(artist.artistId)}>{artist.name}</Link>
             <span className="post-meta">{artist.songs} song{artist.songs === 1 ? '' : 's'}</span>
           </li>
         ))}

@@ -20,6 +20,17 @@ fi
 printf '{"clock":"realtime","codes":16,"base_hz":1000,"step_hz":200,"beep_ms":60,"sample_rate":48000,"reference":"%s"}\n' \
     "${LAB_REFERENCE:-}" > "$CONTROL/source.json.part" && mv "$CONTROL/source.json.part" "$CONTROL/source.json"
 
+encode() {
+    ffmpeg -hide_banner -loglevel warning -nostdin "$@" \
+        -map 0:a -c:a:0 libmp3lame -b:a:0 128k \
+        -map 0:a -c:a:1 libopus -b:a:1 96k -frame_duration:a:1 20 \
+        -map 0:a -c:a:2 aac -b:a:2 128k \
+        -ar 48000 -ac 2 \
+        -f tee -use_fifo 1 \
+        -fifo_options "attempt_recovery=1:recover_any_error=1:recovery_wait_time=1:drop_pkts_on_overflow=1:queue_size=256" \
+        "$outputs"
+}
+
 while true; do
     rm -rf "$WEB/hls" "$WEB/dash"
     mkdir -p "$WEB/hls" "$WEB/dash"
@@ -32,14 +43,11 @@ while true; do
     outputs+="|[select=\\'a:2\\':f=hls:hls_time=2:hls_list_size=6:hls_flags=delete_segments+program_date_time]$WEB/hls/radio.m3u8"
     outputs+="|[select=\\'a:2\\':f=dash:seg_duration=2:window_size=6:extra_window_size=2:use_template=1:use_timeline=0]$WEB/dash/radio.mpd"
 
-    python3 /usr/local/bin/lab-signal | ffmpeg -hide_banner -loglevel warning -nostdin \
-        -f s16le -ar 48000 -ac 2 -i pipe:0 \
-        -map 0:a -c:a:0 libmp3lame -b:a:0 128k \
-        -map 0:a -c:a:1 libopus -b:a:1 96k -frame_duration:a:1 20 \
-        -map 0:a -c:a:2 aac -b:a:2 128k \
-        -f tee -use_fifo 1 \
-        -fifo_options "attempt_recovery=1:recover_any_error=1:recovery_wait_time=1:drop_pkts_on_overflow=1:queue_size=256" \
-        "$outputs"
+    if [ "${LAB_INPUT:-signal}" = radio ]; then
+        encode -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -i "${LAB_RADIO:-http://caligo:9001/radio/}"
+    else
+        python3 /usr/local/bin/lab-signal | encode -f s16le -ar 48000 -ac 2 -i pipe:0
+    fi
 
     echo "lab-source: ffmpeg stopped, starting again in a second" >&2
     sleep 1

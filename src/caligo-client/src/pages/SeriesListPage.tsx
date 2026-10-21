@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import { catalogError, yearOf } from '../catalog';
-import CatalogNav from '../components/CatalogNav';
+import ThesaurariumNav from '../components/ThesaurariumNav';
+import { seriesPath } from '../thesaurarium';
 import type { SeriesSummary } from '../types';
 
 const SeriesListPage = () => {
+  const [params] = useSearchParams();
+  const query = (params.get('query') ?? '').toLowerCase();
+
   const [series, setSeries] = useState<SeriesSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,18 +22,22 @@ const SeriesListPage = () => {
       .finally(() => setLoading(false));
   }, []);
 
+  const shown = series.filter(item => item.title.toLowerCase().includes(query));
+
   return (
     <div>
-      <CatalogNav />
+      <ThesaurariumNav />
 
       {loading && <p className="status-line">Loading series…</p>}
       {error && <p className="form-error">{error}</p>}
-      {!loading && !error && series.length === 0 && <p className="status-line">No series yet.</p>}
+      {!loading && !error && shown.length === 0 && (
+        <p className="status-line">{query ? 'Nothing found.' : 'No series yet.'}</p>
+      )}
 
-      {series.length > 0 && (
+      {shown.length > 0 && (
         <div className="card-grid">
-          {series.map(item => (
-            <Link key={item.seriesId} to={`/series/${item.seriesId}`} className="card content-card">
+          {shown.map(item => (
+            <Link key={item.seriesId} to={seriesPath(item.seriesId)} className="card content-card">
               <span className="card-kind">Series · {yearOf(item.releaseDate)}</span>
               <span className="card-title">{item.title}</span>
               <span className="card-sub">{item.seasons} season{item.seasons === 1 ? '' : 's'}</span>

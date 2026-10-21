@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { catalogError, formatDay, formatDuration, statusOf } from '../catalog';
+import { SERIES, titlePath } from '../thesaurarium';
 import type { SeriesDetail } from '../types';
 
 const SeriesDetailPage = () => {
@@ -23,7 +24,7 @@ const SeriesDetailPage = () => {
       })
       .catch(err => {
         if (!cancelled) {
-          setError(statusOf(err) === 404 ? 'This series is not in the catalog.' : catalogError(err, 'Could not load the series.'));
+          setError(statusOf(err) === 404 ? 'This series is not in the Thesaurarium.' : catalogError(err, 'Could not load the series.'));
         }
       });
 
@@ -36,7 +37,7 @@ const SeriesDetailPage = () => {
     return (
       <div>
         <p className="form-error">{error}</p>
-        <Link to="/series">← All series</Link>
+        <Link to={SERIES}>← All series</Link>
       </div>
     );
   }
@@ -47,7 +48,7 @@ const SeriesDetailPage = () => {
 
   return (
     <article className="post-detail">
-      <Link to="/series" className="back-link">← All series</Link>
+      <Link to={SERIES} className="back-link">← All series</Link>
 
       <h1>{series.title}</h1>
       <p className="post-meta">
@@ -64,14 +65,14 @@ const SeriesDetailPage = () => {
           </h2>
 
           {season.episodes.length === 0 ? (
-            <p className="status-line">No episodes in the catalog yet.</p>
+            <p className="status-line">No episodes in the Thesaurarium yet.</p>
           ) : (
             <ol className="track-list">
               {season.episodes.map(episode => (
                 <li key={episode.contentId}>
                   <span className="track-number">{episode.episodeNumber}</span>
                   <span className="track-title">
-                    <Link to={`/catalog/${episode.contentId}`}>{episode.title}</Link>
+                    <Link to={titlePath(episode.contentId)}>{episode.title}</Link>
                   </span>
                   <span className="track-duration">{formatDuration(episode.duration, 'episode')}</span>
                 </li>

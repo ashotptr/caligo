@@ -58,6 +58,7 @@ RUN apt-get update \
 COPY --from=build /root/CaligoEngine /root/CaligoEngine
 COPY --from=pyenv /root/CaligoEngine/venv /root/CaligoEngine/venv
 COPY --chmod=755 deploy/caligo/entrypoint.sh /usr/local/bin/caligo-entrypoint
+COPY --chmod=755 deploy/caligo/cgi/radio_rotation /root/CaligoEngine/cgi_bin/radio_rotation
 COPY deploy/caligo/page/harden.py /tmp/harden.py
 
 RUN python3 /tmp/harden.py /root/CaligoEngine/public_html/index.html \
@@ -80,9 +81,7 @@ ENV HOME=/caligo-state/home \
 USER caligo
 WORKDIR /root/CaligoEngine
 
-EXPOSE 8080 8081 8082 9001 5222
-
-VOLUME ["/caligo-state"]
+EXPOSE 8080 8082 9001 5222
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
     CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && exec 4<>/dev/tcp/127.0.0.1/9001"]

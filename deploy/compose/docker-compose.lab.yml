@@ -21,7 +21,7 @@ x-netem: &netem
   read_only: true
   restart: unless-stopped
   volumes:
-    - labcontrol:/lab-control
+    - ../../data/lab/control:/lab-control
 
 services:
   rabbitmq:
@@ -143,8 +143,8 @@ services:
     volumes:
       - ../lab/web/nginx.conf:/etc/nginx/nginx.conf:ro
       - ../lab/probe:/lab-probe:ro
-      - labweb:/lab-web:ro
-      - labfiles:/lab-files:ro
+      - ../../data/lab/web:/lab-web:ro
+      - ../../data/lab/files:/lab-files:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -164,7 +164,7 @@ services:
     profiles: ["lab"]
     build: ../lab/ftp
     volumes:
-      - labfiles:/lab-files:ro
+      - ../../data/lab/files:/lab-files:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -195,9 +195,9 @@ services:
       LAB_MEDIAMTX: mediamtx-ingest
       LAB_REFERENCE: 172.31.251.10:5099
     volumes:
-      - labweb:/lab-web
-      - labfiles:/lab-files
-      - labcontrol:/lab-control
+      - ../../data/lab/web:/lab-web
+      - ../../data/lab/files:/lab-files
+      - ../../data/lab/control:/lab-control
     read_only: true
     tmpfs:
       - /tmp
@@ -278,7 +278,7 @@ services:
       LAB_CONTROL: /lab-control
       LAB_REFERENCE_PORT: "5099"
     volumes:
-      - labcontrol:/lab-control
+      - ../../data/lab/control:/lab-control
     shm_size: 512m
     cpus: 2
     mem_limit: 1536m
@@ -300,8 +300,3 @@ networks:
     ipam:
       config:
         - subnet: 172.31.251.0/24
-
-volumes:
-  labweb:
-  labfiles:
-  labcontrol:

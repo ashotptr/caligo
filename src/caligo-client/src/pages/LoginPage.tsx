@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
 import axios from 'axios';
 import api from '../api/axios';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
@@ -13,7 +14,16 @@ const LoginPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { login } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  const registered = (location.state as { registered?: boolean } | null)?.registered === true;
+
+  const welcome = (name: string | undefined) => {
+    if (name) {
+      toast(registered ? `Welcome, ${name}!` : `Welcome back, ${name}`);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +31,7 @@ const LoginPage = () => {
     setSubmitting(true);
     try {
       const response = await api.post('/api/account/login', { username, password });
-      login(response.data.accessToken, response.data.refreshToken);
+      welcome(login(response.data.accessToken, response.data.refreshToken)?.name);
       navigate('/');
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 401) {
@@ -43,7 +53,7 @@ const LoginPage = () => {
       const response = await api.post('/api/account/google-login', JSON.stringify(credential), {
         headers: { 'Content-Type': 'application/json' }
       });
-      login(response.data.accessToken, response.data.refreshToken);
+      welcome(login(response.data.accessToken, response.data.refreshToken)?.name);
       navigate('/');
     } catch {
       setError('Google sign-in failed. Please try again.');

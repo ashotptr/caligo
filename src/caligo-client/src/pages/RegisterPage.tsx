@@ -1,12 +1,28 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import api from '../api/axios';
+import { useToast } from '../contexts/ToastContext';
 
 interface IdentityError {
   code: string;
   description: string;
 }
+
+const PASSWORD_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+const PASSWORD_LENGTH = 14;
+const PASSWORD_CLASSES = [/[a-z]/, /[A-Z]/, /[0-9]/, /[!@#$%^&*]/];
+
+const strongPassword = (): string => {
+  for (;;) {
+    const values = crypto.getRandomValues(new Uint32Array(PASSWORD_LENGTH));
+    const password = Array.from(values, value => PASSWORD_CHARS[value % PASSWORD_CHARS.length]).join('');
+
+    if (PASSWORD_CLASSES.every(pattern => pattern.test(password))) {
+      return password;
+    }
+  }
+};
 
 const RegisterPage = () => {
   const [username, setUsername] = useState('');
@@ -14,7 +30,20 @@ const RegisterPage = () => {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [shown, setShown] = useState(false);
+  const passwordInput = useRef<HTMLInputElement>(null);
+  const toast = useToast();
   const navigate = useNavigate();
+
+  const suggest = () => {
+    const suggested = strongPassword();
+
+    setPassword(suggested);
+    setShown(true);
+    window.setTimeout(() => passwordInput.current?.select(), 0);
+    navigator.clipboard?.writeText(suggested).catch(() => undefined);
+    toast('Password Copied');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,9 +94,13 @@ const RegisterPage = () => {
           </label>
 
           <label>
-            Password
+            <span className="password-label">
+              Password
+              <button type="button" className="suggest-password" onClick={suggest}>Suggest Strong Password</button>
+            </span>
             <input
-              type="password"
+              ref={passwordInput}
+              type={shown ? 'text' : 'password'}
               value={password}
               onChange={e => setPassword(e.target.value)}
               autoComplete="new-password"

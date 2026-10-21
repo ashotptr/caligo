@@ -1,6 +1,7 @@
 *
 !src/caligo/
 !deploy/caligo/entrypoint.sh
+!deploy/caligo/cgi/radio_rotation
 !deploy/caligo/page/harden.py
 
 src/caligo/.env

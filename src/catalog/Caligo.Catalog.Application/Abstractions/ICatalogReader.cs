@@ -38,6 +38,11 @@ public interface ICatalogReader
 
     Task<AlbumDetailDto?> GetAlbumAsync(int albumId, CancellationToken cancellationToken = default);
 
+    Task<PagedResult<ReleaseSummaryDto>> GetReleasesAsync(
+        string? search, int? artistId, int offset, int limit, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<NamedDto>> GetReleaseArtistsAsync(CancellationToken cancellationToken = default);
+
     Task<SingleDetailDto?> GetSingleAsync(int singleId, CancellationToken cancellationToken = default);
 
     Task<SongMatchDto?> FindSongAsync(string artist, string title, CancellationToken cancellationToken = default);

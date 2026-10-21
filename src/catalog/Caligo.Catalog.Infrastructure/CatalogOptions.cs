@@ -12,6 +12,10 @@ namespace Caligo.Catalog.Infrastructure
 
         public string? CaligoPublicRoot { get; set; }
 
+        public string? CaligoEngineUrl { get; set; }
+
+        public string? CaligoDataRoot { get; set; }
+
         public string MusicUrlPrefix { get; set; } = "/music/";
 
         public string MixtapeUrlPrefix { get; set; } = "/mixtape/";

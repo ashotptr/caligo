@@ -51,6 +51,19 @@ public class CatalogController : ApiControllerBase
         CancellationToken cancellationToken = default) =>
         Ok(await _catalog.GetAlbumsAsync(query, limit, cancellationToken));
 
+    [HttpGet("releases")]
+    public async Task<IActionResult> GetReleases(
+        [FromQuery] string? query,
+        [FromQuery] int? artistId,
+        [FromQuery] string? cursor,
+        [FromQuery] int limit = CatalogService.MaxPageSize,
+        CancellationToken cancellationToken = default) =>
+        Ok(await _catalog.GetReleasesAsync(query, artistId, cursor, limit, cancellationToken));
+
+    [HttpGet("releases/artists")]
+    public async Task<IActionResult> GetReleaseArtists(CancellationToken cancellationToken) =>
+        Ok(await _catalog.GetReleaseArtistsAsync(cancellationToken));
+
     [HttpGet("albums/{id:int}")]
     public async Task<IActionResult> GetAlbum(int id, CancellationToken cancellationToken) =>
         Respond(await _catalog.GetAlbumAsync(id, cancellationToken));

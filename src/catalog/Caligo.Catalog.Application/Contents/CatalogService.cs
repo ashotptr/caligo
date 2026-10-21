@@ -1,3 +1,4 @@
+using System.Globalization;
 using Caligo.Catalog.Application.Abstractions;
 using Caligo.SharedKernel;
 
@@ -91,6 +92,18 @@ public class CatalogService
     public Task<IReadOnlyList<AlbumSummaryDto>> GetAlbumsAsync(
         string? search, int limit, CancellationToken cancellationToken = default) =>
         _catalog.GetAlbumsAsync(Normalize(search), Math.Clamp(limit, 1, MaxPageSize), cancellationToken);
+
+    public Task<PagedResult<ReleaseSummaryDto>> GetReleasesAsync(
+        string? search, int? artistId, string? cursor, int limit, CancellationToken cancellationToken = default) =>
+        _catalog.GetReleasesAsync(
+            Normalize(search),
+            artistId,
+            int.TryParse(cursor, NumberStyles.None, CultureInfo.InvariantCulture, out var offset) ? offset : 0,
+            Math.Clamp(limit, 1, MaxPageSize),
+            cancellationToken);
+
+    public Task<IReadOnlyList<NamedDto>> GetReleaseArtistsAsync(CancellationToken cancellationToken = default) =>
+        _catalog.GetReleaseArtistsAsync(cancellationToken);
 
     public Task<Result<AlbumDetailDto>> GetAlbumAsync(int albumId, CancellationToken cancellationToken = default) =>
         Found(_catalog.GetAlbumAsync(albumId, cancellationToken));

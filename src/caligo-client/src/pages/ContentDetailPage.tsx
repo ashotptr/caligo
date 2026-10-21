@@ -4,17 +4,26 @@ import api from '../api/axios';
 import { catalogError, formatCount, formatDay, formatDuration, formatRating, kindLabel, statusOf } from '../catalog';
 import CommentsSection from '../components/CommentsSection';
 import MediaAdmin from '../components/MediaAdmin';
+import RadioQueueButton from '../components/RadioQueueButton';
 import ReviewsSection from '../components/ReviewsSection';
+import RotationButton from '../components/RotationButton';
+import { DownloadIcon } from '../components/TrackList';
 import VideoPlayer from '../components/VideoPlayer';
 import YourActivity from '../components/YourActivity';
 import { useAuth } from '../contexts/AuthContext';
+import { useCollections } from '../contexts/CollectionsContext';
+import { usePlayer } from '../contexts/PlayerContext';
+import { downloadTrack } from '../downloads';
+import { TITLES, actorPath, albumPath, artistPath, seriesPath, singlePath, titlePath } from '../thesaurarium';
 import type { ContentDetail, MediaInfo, SimilarContent } from '../types';
 
 const plural = (count: number, word: string) => `${count.toLocaleString()} ${word}${count === 1 ? '' : 's'}`;
 
 const ContentDetailPage = () => {
   const { id } = useParams<{ id: string }>();
-  const { hasRole } = useAuth();
+  const { hasRole, isAuthenticated } = useAuth();
+  const { addToCollection } = useCollections();
+  const { mode, current, playTracks, position } = usePlayer();
   const isAdmin = hasRole('Admin');
 
   const [content, setContent] = useState<ContentDetail | null>(null);
@@ -23,7 +32,6 @@ const ContentDetailPage = () => {
   const [media, setMedia] = useState<MediaInfo | null>(null);
 
   const request = useRef(0);
-  const audio = useRef<HTMLAudioElement>(null);
 
   const load = useCallback(async () => {
     const current = ++request.current;
@@ -36,7 +44,7 @@ const ContentDetailPage = () => {
     } catch (err) {
       if (current !== request.current) return;
       setError(statusOf(err) === 404
-        ? 'This title is not in the catalog.'
+        ? 'This title is not in the Thesaurarium.'
         : catalogError(err, 'Could not load the title.'));
     }
   }, [id]);
@@ -76,7 +84,7 @@ const ContentDetailPage = () => {
     return (
       <div>
         <p className="form-error">{error}</p>
-        <Link to="/catalog">← Back to the catalog</Link>
+        <Link to={TITLES}>← Back to the Thesaurarium</Link>
       </div>
     );
   }
@@ -86,10 +94,26 @@ const ContentDetailPage = () => {
   }
 
   const { movie, episode, song } = content;
+  const playingThis = mode === 'track' && current?.contentId === content.contentId;
+  const primaryArtist = song?.artists.find(artist => artist.role === 'primary') ?? song?.artists[0];
+
+  const play = () => {
+    if (!song?.audioUri) {
+      return;
+    }
+
+    playTracks([{
+      contentId: content.contentId,
+      title: content.title,
+      artist: primaryArtist?.name ?? '',
+      album: song.albums[0]?.title ?? song.singles[0]?.title ?? '',
+      audioUri: song.audioUri
+    }], 0);
+  };
 
   return (
     <article className="post-detail">
-      <Link to="/catalog" className="back-link">← Catalog</Link>
+      <Link to={TITLES} className="back-link">← Thesaurarium</Link>
 
       <h1>{content.title}</h1>
       <p className="post-meta">
@@ -102,7 +126,7 @@ const ContentDetailPage = () => {
       {content.genres.length > 0 && (
         <p className="post-tags">
           {content.genres.map(genre => (
-            <Link key={genre.id} to={`/catalog?genreId=${genre.id}`} className="tag">{genre.name}</Link>
+            <Link key={genre.id} to={`${TITLES}?genreId=${genre.id}`} className="tag">{genre.name}</Link>
           ))}
         </p>
       )}
@@ -115,16 +139,38 @@ const ContentDetailPage = () => {
         </section>
       )}
 
-      {song?.audioUri && (
-        <audio ref={audio} className="track-player" src={song.audioUri} controls preload="none" />
+      {(song?.audioUri || isAuthenticated) && (
+        <div className="album-actions title-actions">
+          {song?.audioUri && (
+            <button type="button" onClick={play}>▶ Play</button>
+          )}
+          {isAuthenticated && (
+            <button type="button" className="btn-secondary" onClick={() => addToCollection([content.contentId], content.title)}>
+              ＋ Add to Collection
+            </button>
+          )}
+          {song?.audioUri && <RadioQueueButton contentId={content.contentId} audioUri={song.audioUri} />}
+          {song?.audioUri && (
+            <button
+              type="button"
+              className="download-btn visible"
+              title="Download Track"
+              onClick={() => downloadTrack(song.audioUri!, content.title)}
+            >
+              <DownloadIcon />
+            </button>
+          )}
+        </div>
       )}
+
+      {isAdmin && song?.audioUri && <RotationButton contentId={content.contentId} />}
 
       <dl className="facts">
         {episode && (
           <>
             <dt>Series</dt>
             <dd>
-              <Link to={`/series/${episode.seriesId}`}>{episode.seriesTitle}</Link>
+              <Link to={seriesPath(episode.seriesId)}>{episode.seriesTitle}</Link>
               {' · '}season {episode.seasonNumber}{episode.seasonName ? ` (${episode.seasonName})` : ''}, episode {episode.episodeNumber}
             </dd>
           </>
@@ -137,7 +183,7 @@ const ContentDetailPage = () => {
               {song.artists.map((artist, index) => (
                 <span key={`${artist.artistId}-${artist.role ?? ''}`}>
                   {index > 0 && ', '}
-                  <Link to={`/artists/${artist.artistId}`}>{artist.name}</Link>
+                  <Link to={artistPath(artist.artistId)}>{artist.name}</Link>
                   {artist.role && artist.role !== 'primary' ? ` (${artist.role})` : ''}
                 </span>
               ))}
@@ -152,7 +198,7 @@ const ContentDetailPage = () => {
               {song.albums.map((album, index) => (
                 <span key={album.id}>
                   {index > 0 && ', '}
-                  <Link to={`/albums/${album.id}`}>{album.title}</Link>
+                  <Link to={albumPath(album.id)}>{album.title}</Link>
                   {album.trackNumber != null ? ` (track ${album.trackNumber})` : ''}
                 </span>
               ))}
@@ -167,7 +213,7 @@ const ContentDetailPage = () => {
               {song.singles.map((single, index) => (
                 <span key={single.id}>
                   {index > 0 && ', '}
-                  <Link to={`/singles/${single.id}`}>{single.title}</Link>
+                  <Link to={singlePath(single.id)}>{single.title}</Link>
                 </span>
               ))}
             </dd>
@@ -181,7 +227,7 @@ const ContentDetailPage = () => {
               {content.actors.map((actor, index) => (
                 <span key={actor.actorId}>
                   {index > 0 && ', '}
-                  <Link to={`/actors/${actor.actorId}`}>{actor.name}</Link>
+                  <Link to={actorPath(actor.actorId)}>{actor.name}</Link>
                 </span>
               ))}
             </dd>
@@ -236,7 +282,7 @@ const ContentDetailPage = () => {
 
       <section className="catalog-section">
         <h2>Yours</h2>
-        <YourActivity content={content} onChanged={load} position={() => audio.current?.currentTime ?? null} />
+        <YourActivity content={content} onChanged={load} position={() => (playingThis ? position() : null)} />
       </section>
 
       {similar.length > 0 && (
@@ -245,7 +291,7 @@ const ContentDetailPage = () => {
           <ol className="trending-list">
             {similar.map(item => (
               <li key={item.contentId}>
-                <Link to={`/catalog/${item.contentId}`}>{item.title}</Link>
+                <Link to={titlePath(item.contentId)}>{item.title}</Link>
                 <span className="trending-score" title="Share of genres in common">
                   {Math.round(item.similarity * 100)}%
                 </span>

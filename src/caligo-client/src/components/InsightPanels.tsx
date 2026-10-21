@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
+import { titlePath } from '../thesaurarium';
 import type { EngagingContent, PopularContent } from '../types';
 
 const SHOWN = 5;
@@ -33,7 +34,7 @@ const InsightPanels = () => {
           <ol className="trending-list">
             {popular.map(item => (
               <li key={item.contentId}>
-                <Link to={`/catalog/${item.contentId}`}>{item.title}</Link>
+                <Link to={titlePath(item.contentId)}>{item.title}</Link>
                 <span className="trending-score">{item.totalViews}</span>
               </li>
             ))}
@@ -47,7 +48,7 @@ const InsightPanels = () => {
           <ol className="trending-list">
             {engaging.map(item => (
               <li key={item.contentId}>
-                <Link to={`/catalog/${item.contentId}`}>{item.title}</Link>
+                <Link to={titlePath(item.contentId)}>{item.title}</Link>
                 <span className="trending-score" title="Ratings and comments per view">
                   {item.engagementRatio == null ? '' : item.engagementRatio.toFixed(2)}
                 </span>

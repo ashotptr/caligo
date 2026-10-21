@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Caligo.Catalog.Application.Abstractions;
 using Caligo.Catalog.Application.Contents;
@@ -9,11 +10,15 @@ namespace Caligo.Catalog.Infrastructure.Persistence
 {
     public class CatalogReader : ICatalogReader
     {
-        private readonly StreamingDbContext _db;
+        private const string UnknownArtist = "Unknown";
 
-        public CatalogReader(StreamingDbContext db)
+        private readonly StreamingDbContext _db;
+        private readonly ICatalogViewer _viewer;
+
+        public CatalogReader(StreamingDbContext db, ICatalogViewer viewer)
         {
             _db = db;
+            _viewer = viewer;
         }
 
         public async Task<PagedResult<ContentSummaryDto>> GetContentPageAsync(
@@ -21,6 +26,12 @@ namespace Caligo.Catalog.Infrastructure.Persistence
             CancellationToken cancellationToken = default)
         {
             var query = _db.Rows();
+            var hidden = (await _viewer.HiddenAsync(cancellationToken)).ContentIds;
+
+            if (hidden.Count > 0)
+            {
+                query = query.Where(r => !hidden.Contains(r.ContentId));
+            }
 
             query = kind switch
             {
@@ -76,6 +87,11 @@ namespace Caligo.Catalog.Infrastructure.Persistence
 
         public async Task<ContentDetailDto?> GetContentAsync(int contentId, CancellationToken cancellationToken = default)
         {
+            if ((await _viewer.HiddenAsync(cancellationToken)).ContentIds.Contains(contentId))
+            {
+                return null;
+            }
+
             var row = await _db.Rows().FirstOrDefaultAsync(r => r.ContentId == contentId, cancellationToken);
 
             if (row is null)
@@ -167,8 +183,9 @@ namespace Caligo.Catalog.Infrastructure.Persistence
             };
         }
 
-        public Task<bool> ContentExistsAsync(int contentId, CancellationToken cancellationToken = default) =>
-            _db.Contents.AnyAsync(c => c.ContentId == contentId, cancellationToken);
+        public async Task<bool> ContentExistsAsync(int contentId, CancellationToken cancellationToken = default) =>
+            !(await _viewer.HiddenAsync(cancellationToken)).ContentIds.Contains(contentId)
+            && await _db.Contents.AnyAsync(c => c.ContentId == contentId, cancellationToken);
 
         public async Task<IReadOnlyDictionary<int, string>> GetTitlesAsync(
             IReadOnlyCollection<int> contentIds, CancellationToken cancellationToken = default)
@@ -186,8 +203,15 @@ namespace Caligo.Catalog.Infrastructure.Persistence
         public async Task<IReadOnlyList<SimilarContentDto>> GetSimilarAsync(
             int contentId, int limit, CancellationToken cancellationToken = default)
         {
+            var hidden = (await _viewer.HiddenAsync(cancellationToken)).ContentIds;
+
+            if (hidden.Contains(contentId))
+            {
+                return Array.Empty<SimilarContentDto>();
+            }
+
             var rows = await _db.Rows()
-                .Where(r => r.ContentId != contentId)
+                .Where(r => r.ContentId != contentId && !hidden.Contains(r.ContentId))
                 .Select(r => new
                 {
                     Row = r,
@@ -206,6 +230,11 @@ namespace Caligo.Catalog.Infrastructure.Persistence
         public async Task<IReadOnlyList<CommentDto>> GetCommentsAsync(
             int contentId, int? beforeCommentId, int limit, CancellationToken cancellationToken = default)
         {
+            if ((await _viewer.HiddenAsync(cancellationToken)).ContentIds.Contains(contentId))
+            {
+                return Array.Empty<CommentDto>();
+            }
+
             var query = from c in _db.Comments.AsNoTracking()
                         join u in _db.Users on c.UserId equals u.UserId
                         where c.ContentId == contentId
@@ -303,6 +332,7 @@ namespace Caligo.Catalog.Infrastructure.Persistence
             string? search, int limit, CancellationToken cancellationToken = default)
         {
             var query = _db.Artists.AsNoTracking();
+            var hiddenSongs = (await _viewer.HiddenAsync(cancellationToken)).SongIds;
 
             if (search is not null)
             {
@@ -318,7 +348,7 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 .Select(a => new ArtistSummaryDto(
                     a.ArtistId,
                     a.Name,
-                    _db.SongArtists.Count(link => link.ArtistId == a.ArtistId)))
+                    _db.SongArtists.Count(link => link.ArtistId == a.ArtistId && !hiddenSongs.Contains(link.SongId))))
                 .ToListAsync(cancellationToken);
         }
 
@@ -332,20 +362,25 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 return null;
             }
 
+            var hidden = await _viewer.HiddenAsync(cancellationToken);
+            var hiddenAlbums = hidden.AlbumIds;
+            var hiddenSingles = hidden.SingleIds;
+            var hiddenSongs = hidden.SongIds;
+
             var albumIds = await _db.AlbumArtists.AsNoTracking()
-                .Where(link => link.ArtistId == artistId)
+                .Where(link => link.ArtistId == artistId && !hiddenAlbums.Contains(link.AlbumId))
                 .Select(link => link.AlbumId)
                 .ToListAsync(cancellationToken);
 
             var singles = await (
                 from link in _db.SingleArtists.AsNoTracking()
                 join s in _db.Singles on link.SingleId equals s.SingleId
-                where link.ArtistId == artistId
+                where link.ArtistId == artistId && !hiddenSingles.Contains(s.SingleId)
                 orderby s.ReleaseDate descending, s.SingleId descending
                 select new NamedDto(s.SingleId, s.Title)).ToListAsync(cancellationToken);
 
             var songIds = await _db.SongArtists.AsNoTracking()
-                .Where(link => link.ArtistId == artistId)
+                .Where(link => link.ArtistId == artistId && !hiddenSongs.Contains(link.SongId))
                 .Select(link => link.SongId)
                 .ToListAsync(cancellationToken);
 
@@ -367,6 +402,12 @@ namespace Caligo.Catalog.Infrastructure.Persistence
             string? search, int limit, CancellationToken cancellationToken = default)
         {
             var query = _db.Albums.AsNoTracking();
+            var hiddenAlbums = (await _viewer.HiddenAsync(cancellationToken)).AlbumIds;
+
+            if (hiddenAlbums.Count > 0)
+            {
+                query = query.Where(a => !hiddenAlbums.Contains(a.AlbumId));
+            }
 
             if (search is not null)
             {
@@ -385,8 +426,86 @@ namespace Caligo.Catalog.Infrastructure.Persistence
             return await AlbumSummariesAsync(ids, cancellationToken);
         }
 
+        public async Task<PagedResult<ReleaseSummaryDto>> GetReleasesAsync(
+            string? search, int? artistId, int offset, int limit, CancellationToken cancellationToken = default)
+        {
+            var hidden = await _viewer.HiddenAsync(cancellationToken);
+            var hiddenAlbums = hidden.AlbumIds;
+            var hiddenSingles = hidden.SingleIds;
+            var start = Math.Max(offset, 0);
+
+            var albums = _db.Albums.AsNoTracking().Where(a => !hiddenAlbums.Contains(a.AlbumId));
+            var singles = _db.Singles.AsNoTracking().Where(s => !hiddenSingles.Contains(s.SingleId));
+
+            if (search is not null)
+            {
+                var pattern = "%" + ContentRows.EscapeLike(search) + "%";
+
+                albums = albums.Where(a => EF.Functions.ILike(a.Title, pattern, "\\"));
+                singles = singles.Where(s => EF.Functions.ILike(s.Title, pattern, "\\"));
+            }
+
+            if (artistId is not null)
+            {
+                albums = albums.Where(a => _db.AlbumArtists.Any(link => link.AlbumId == a.AlbumId && link.ArtistId == artistId));
+                singles = singles.Where(s => _db.SingleArtists.Any(link => link.SingleId == s.SingleId && link.ArtistId == artistId));
+            }
+
+            var rows = await albums
+                .Select(a => new { Kind = ReleaseKinds.Album, Id = a.AlbumId, a.Title })
+                .Concat(singles.Select(s => new { Kind = ReleaseKinds.Single, Id = s.SingleId, s.Title }))
+                .OrderBy(r => r.Title)
+                .ThenBy(r => r.Kind)
+                .ThenBy(r => r.Id)
+                .Skip(start)
+                .Take(limit + 1)
+                .ToListAsync(cancellationToken);
+
+            var page = rows.Take(limit).ToList();
+
+            var albumSummaries = (await AlbumSummariesAsync(
+                    page.Where(r => r.Kind == ReleaseKinds.Album).Select(r => r.Id).ToList(), cancellationToken))
+                .ToDictionary(a => a.AlbumId);
+
+            var singleSummaries = (await SingleSummariesAsync(
+                    page.Where(r => r.Kind == ReleaseKinds.Single).Select(r => r.Id).ToList(), cancellationToken))
+                .ToDictionary(s => s.Id);
+
+            return new PagedResult<ReleaseSummaryDto>
+            {
+                Items = page
+                    .Select(r => r.Kind == ReleaseKinds.Album ? AlbumRelease(albumSummaries[r.Id]) : singleSummaries[r.Id])
+                    .ToList(),
+                NextCursor = rows.Count > limit ? (start + limit).ToString(CultureInfo.InvariantCulture) : null
+            };
+        }
+
+        public async Task<IReadOnlyList<NamedDto>> GetReleaseArtistsAsync(CancellationToken cancellationToken = default)
+        {
+            var hidden = await _viewer.HiddenAsync(cancellationToken);
+            var hiddenAlbums = hidden.AlbumIds;
+            var hiddenSingles = hidden.SingleIds;
+
+            var albumArtists = _db.AlbumArtists.Where(link => !hiddenAlbums.Contains(link.AlbumId)).Select(link => link.ArtistId);
+            var singleArtists = _db.SingleArtists.Where(link => !hiddenSingles.Contains(link.SingleId)).Select(link => link.ArtistId);
+
+            return await _db.Artists.AsNoTracking()
+                .Where(a => a.Name != UnknownArtist && (albumArtists.Contains(a.ArtistId) || singleArtists.Contains(a.ArtistId)))
+                .OrderBy(a => a.Name)
+                .ThenBy(a => a.ArtistId)
+                .Select(a => new NamedDto(a.ArtistId, a.Name))
+                .ToListAsync(cancellationToken);
+        }
+
         public async Task<AlbumDetailDto?> GetAlbumAsync(int albumId, CancellationToken cancellationToken = default)
         {
+            var hidden = await _viewer.HiddenAsync(cancellationToken);
+
+            if (hidden.AlbumIds.Contains(albumId))
+            {
+                return null;
+            }
+
             var album = await _db.Albums.AsNoTracking()
                 .FirstOrDefaultAsync(a => a.AlbumId == albumId, cancellationToken);
 
@@ -402,8 +521,10 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 orderby a.Name
                 select new NamedDto(a.ArtistId, a.Name)).ToListAsync(cancellationToken);
 
+            var hiddenSongs = hidden.SongIds;
+
             var listing = await _db.AlbumSongs.AsNoTracking()
-                .Where(link => link.AlbumId == albumId)
+                .Where(link => link.AlbumId == albumId && !hiddenSongs.Contains(link.SongId))
                 .ToListAsync(cancellationToken);
 
             var tracks = await TracksAsync(listing.Select(l => l.SongId).ToList(), cancellationToken);
@@ -434,6 +555,7 @@ namespace Caligo.Catalog.Infrastructure.Persistence
             var name = artist.Length <= Artist.MaxNameLength ? artist : artist[..Artist.MaxNameLength];
             var artistPattern = ContentRows.EscapeLike(name);
             var titlePattern = ContentRows.EscapeLike(Content.FitTitle(title));
+            var hiddenSongs = (await _viewer.HiddenAsync(cancellationToken)).SongIds;
 
             return await (
                 from s in _db.Songs.AsNoTracking()
@@ -441,12 +563,20 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 join link in _db.SongArtists on s.SongId equals link.SongId
                 join a in _db.Artists on link.ArtistId equals a.ArtistId
                 where EF.Functions.ILike(c.Title, titlePattern, "\\") && EF.Functions.ILike(a.Name, artistPattern, "\\")
+                      && !hiddenSongs.Contains(s.SongId)
                 orderby s.SongId
                 select new SongMatchDto(c.ContentId, s.SongId, c.Title, a.Name)).FirstOrDefaultAsync(cancellationToken);
         }
 
         public async Task<SingleDetailDto?> GetSingleAsync(int singleId, CancellationToken cancellationToken = default)
         {
+            var hidden = await _viewer.HiddenAsync(cancellationToken);
+
+            if (hidden.SingleIds.Contains(singleId))
+            {
+                return null;
+            }
+
             var single = await _db.Singles.AsNoTracking()
                 .FirstOrDefaultAsync(s => s.SingleId == singleId, cancellationToken);
 
@@ -462,8 +592,10 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 orderby a.Name
                 select new NamedDto(a.ArtistId, a.Name)).ToListAsync(cancellationToken);
 
+            var hiddenSongs = hidden.SongIds;
+
             var listing = await _db.SingleSongs.AsNoTracking()
-                .Where(link => link.SingleId == singleId)
+                .Where(link => link.SingleId == singleId && !hiddenSongs.Contains(link.SongId))
                 .ToListAsync(cancellationToken);
 
             var tracks = await TracksAsync(listing.Select(l => l.SongId).ToList(), cancellationToken);
@@ -542,17 +674,21 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 orderby a.Name
                 select new SongArtistDto(a.ArtistId, a.Name, link.Role)).ToListAsync(cancellationToken);
 
+            var hidden = await _viewer.HiddenAsync(cancellationToken);
+            var hiddenAlbums = hidden.AlbumIds;
+            var hiddenSingles = hidden.SingleIds;
+
             var albums = await (
                 from link in _db.AlbumSongs.AsNoTracking()
                 join a in _db.Albums on link.AlbumId equals a.AlbumId
-                where link.SongId == song.SongId
+                where link.SongId == song.SongId && !hiddenAlbums.Contains(a.AlbumId)
                 orderby a.Title
                 select new SongReleaseDto(a.AlbumId, a.Title, link.TrackNumber)).ToListAsync(cancellationToken);
 
             var singles = await (
                 from link in _db.SingleSongs.AsNoTracking()
                 join s in _db.Singles on link.SingleId equals s.SingleId
-                where link.SongId == song.SongId
+                where link.SongId == song.SongId && !hiddenSingles.Contains(s.SingleId)
                 orderby s.Title
                 select new SongReleaseDto(s.SingleId, s.Title, link.TrackNumber)).ToListAsync(cancellationToken);
 
@@ -589,6 +725,45 @@ namespace Caligo.Catalog.Infrastructure.Persistence
             return songs
                 .Select(s => new TrackDto(
                     s.ContentId, s.SongId, s.Title, s.Duration, null, null, s.AudioUri, artists[s.SongId].ToList()))
+                .ToList();
+        }
+
+        private static ReleaseSummaryDto AlbumRelease(AlbumSummaryDto album) =>
+            new(ReleaseKinds.Album, album.AlbumId, album.Title, album.ReleaseDate, album.CoverUri, album.Artists, album.Songs);
+
+        private async Task<List<ReleaseSummaryDto>> SingleSummariesAsync(List<int> singleIds, CancellationToken cancellationToken)
+        {
+            if (singleIds.Count == 0)
+            {
+                return new List<ReleaseSummaryDto>();
+            }
+
+            var singles = await _db.Singles.AsNoTracking()
+                .Where(s => singleIds.Contains(s.SingleId))
+                .Select(s => new
+                {
+                    Single = s,
+                    Songs = _db.SingleSongs.Count(link => link.SingleId == s.SingleId)
+                })
+                .ToListAsync(cancellationToken);
+
+            var artists = (await (
+                from link in _db.SingleArtists.AsNoTracking()
+                join a in _db.Artists on link.ArtistId equals a.ArtistId
+                where singleIds.Contains(link.SingleId)
+                orderby a.Name
+                select new { link.SingleId, a.Name }).ToListAsync(cancellationToken))
+                .ToLookup(x => x.SingleId, x => x.Name);
+
+            return singles
+                .Select(s => new ReleaseSummaryDto(
+                    ReleaseKinds.Single,
+                    s.Single.SingleId,
+                    s.Single.Title,
+                    s.Single.ReleaseDate,
+                    s.Single.CoverUri,
+                    artists[s.Single.SingleId].ToList(),
+                    s.Songs))
                 .ToList();
         }
 

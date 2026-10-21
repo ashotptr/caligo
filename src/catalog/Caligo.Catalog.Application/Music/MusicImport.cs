@@ -44,6 +44,8 @@ public interface IMusicImportStore
 
 public class MusicImportService
 {
+    private static readonly SemaphoreSlim OneAtATime = new(1, 1);
+
     private readonly IMusicLibrary _library;
     private readonly IMusicImportStore _store;
 
@@ -57,8 +59,17 @@ public class MusicImportService
 
     public async Task<MusicImportResult> ImportAsync(CancellationToken cancellationToken = default)
     {
-        var library = await _library.ReadAsync(cancellationToken);
+        await OneAtATime.WaitAsync(cancellationToken);
 
-        return await _store.ImportAsync(library, cancellationToken);
+        try
+        {
+            var library = await _library.ReadAsync(cancellationToken);
+
+            return await _store.ImportAsync(library, cancellationToken);
+        }
+        finally
+        {
+            OneAtATime.Release();
+        }
     }
 }

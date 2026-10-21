@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import { KINDS, catalogError } from '../catalog';
-import CatalogNav from '../components/CatalogNav';
 import ContentCard from '../components/ContentCard';
 import InsightPanels from '../components/InsightPanels';
+import ThesaurariumNav from '../components/ThesaurariumNav';
+import { TITLES } from '../thesaurarium';
 import type { ContentSummary, Named, PagedResult } from '../types';
 
 const CatalogPage = () => {
@@ -49,7 +50,7 @@ const CatalogPage = () => {
         if (current !== request.current) return;
         setItems([]);
         setCursor(null);
-        setError(catalogError(err, 'Could not load the catalog. Is the API running?'));
+        setError(catalogError(err, 'Could not load the Thesaurarium. Is the API running?'));
       })
       .finally(() => {
         if (current === request.current) setLoading(false);
@@ -97,11 +98,11 @@ const CatalogPage = () => {
 
   return (
     <div>
-      <CatalogNav />
+      <ThesaurariumNav />
 
       {activeQuery && (
         <p className="search-summary">
-          Titles matching “{activeQuery}” · <Link to="/catalog">Clear</Link>
+          Titles matching “{activeQuery}” · <Link to={TITLES}>Clear</Link>
         </p>
       )}
 
@@ -136,7 +137,7 @@ const CatalogPage = () => {
       {error && <p className="form-error">{error}</p>}
 
       {!loading && !error && items.length === 0 && (
-        <p className="status-line">{filtered ? 'Nothing matches those filters.' : 'The catalog is empty.'}</p>
+        <p className="status-line">{filtered ? 'Nothing matches those filters.' : 'The Thesaurarium is empty.'}</p>
       )}
 
       {items.length > 0 && (

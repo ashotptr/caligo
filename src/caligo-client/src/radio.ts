@@ -2,7 +2,7 @@ export type RadioState = 'off' | 'starting' | 'playing' | 'buffering' | 'retryin
 
 export type RadioPath = 'moq' | 'opus' | 'relay' | 'direct';
 
-export type RadioFormat = 'mp3' | 'opus' | 'moq';
+export type RadioFormat = 'mp3' | 'opus' | 'direct';
 
 export interface NowPlaying {
   file: string;
@@ -85,6 +85,7 @@ export class RadioEngine {
   private eventsUrl = '';
   private wanted = false;
   private format: RadioFormat = 'mp3';
+  private volume = 1;
   private attempts = 0;
   private source = 0;
   private lastTime = 0;
@@ -118,6 +119,7 @@ export class RadioEngine {
     if (!this.audio) {
       this.audio = new Audio();
       this.audio.preload = 'none';
+      this.audio.volume = this.volume;
       this.audio.addEventListener('error', () => this.retry());
       this.audio.addEventListener('ended', () => this.retry());
       this.audio.addEventListener('playing', () => this.progressed());
@@ -172,7 +174,19 @@ export class RadioEngine {
     this.connect();
   }
 
+  setVolume(volume: number): void {
+    this.volume = volume;
+
+    if (this.audio) {
+      this.audio.volume = volume;
+    }
+  }
+
   private sources(): Source[] {
+    if (this.format === 'direct') {
+      return [DIRECT];
+    }
+
     return this.format === 'opus' && opusPlayable() ? [OPUS, RELAY, DIRECT] : [RELAY, DIRECT];
   }
 
