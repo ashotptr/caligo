@@ -1,7 +1,31 @@
+using System.Globalization;
+using System.Text;
+
 namespace Caligo.Catalog.Infrastructure.Engine
 {
     public static class MixtapePaths
     {
+        private const string BrowserEncoded = "\"#<>?`{}";
+
+        public static string Segment(string name)
+        {
+            var builder = new StringBuilder(name.Length);
+
+            foreach (var octet in Encoding.UTF8.GetBytes(name))
+            {
+                if (octet <= 0x20 || octet >= 0x7F || BrowserEncoded.Contains((char)octet))
+                {
+                    builder.Append('%').Append(octet.ToString("X2", CultureInfo.InvariantCulture));
+                }
+                else
+                {
+                    builder.Append((char)octet);
+                }
+            }
+
+            return builder.ToString();
+        }
+
         public static string? Folder(string? uri, string prefix) =>
             Split(uri, prefix) is { } parts ? parts.Folder : null;
 

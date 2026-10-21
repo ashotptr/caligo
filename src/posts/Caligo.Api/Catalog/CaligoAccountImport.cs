@@ -165,7 +165,7 @@ public class CaligoAccountImport
             return null;
         }
 
-        var uri = _options.MixtapeUrlPrefix + path.Folder + "/" + path.File;
+        var uri = _options.MixtapeUrlPrefix + MixtapePaths.Segment(path.Folder) + "/" + MixtapePaths.Segment(path.File);
 
         return await _db.Songs.AsNoTracking()
             .Where(s => s.AudioUri == uri)

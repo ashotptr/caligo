@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Caligo.Catalog.Application.Music;
+using Caligo.Catalog.Infrastructure.Engine;
 
 namespace Caligo.Catalog.Infrastructure.Music
 {
@@ -98,7 +99,7 @@ namespace Caligo.Catalog.Infrastructure.Music
                         var track = Track(
                             folder,
                             file,
-                            _options.MixtapeUrlPrefix + name + "/" + file,
+                            _options.MixtapeUrlPrefix + MixtapePaths.Segment(name) + "/" + MixtapePaths.Segment(file),
                             Text(entry, "title") ?? Path.GetFileNameWithoutExtension(file),
                             artist,
                             $"mixtape/{name}/{file}",
@@ -117,7 +118,7 @@ namespace Caligo.Catalog.Infrastructure.Music
                             artist,
                             cover is null
                                 ? null
-                                : _options.MixtapeUrlPrefix + name + "/" + cover,
+                                : _options.MixtapeUrlPrefix + MixtapePaths.Segment(name) + "/" + MixtapePaths.Segment(cover),
                             tracks.Count == 1,
                             tracks));
                     }
@@ -169,7 +170,7 @@ namespace Caligo.Catalog.Infrastructure.Music
                     var track = Track(
                         folder,
                         file,
-                        _options.MusicUrlPrefix + file,
+                        _options.MusicUrlPrefix + MixtapePaths.Segment(file),
                         title,
                         artist,
                         $"music/{file}",
