@@ -44,7 +44,7 @@ Everything the project stores lives in folders, not in Docker volumes:
 
 ## Usage
 ### Dependencies
-**Docker** with Compose (Docker Desktop on Windows and macOS). The whole stack needs about 6 GB of free memory.
+**Docker** with Compose (Docker Desktop on Windows and macOS).
 
 The **.NET 8 SDK** and **Node.js 22** are only needed for running the tests or working on the code outside Docker.
 
