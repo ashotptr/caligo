@@ -50,7 +50,7 @@ const CatalogPage = () => {
         if (current !== request.current) return;
         setItems([]);
         setCursor(null);
-        setError(catalogError(err, 'Could not load the Thesaurarium. Is the API running?'));
+        setError(catalogError(err, 'Could not load the Thesaurarium.'));
       })
       .finally(() => {
         if (current === request.current) setLoading(false);

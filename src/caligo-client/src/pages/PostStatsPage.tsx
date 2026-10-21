@@ -78,7 +78,7 @@ const PostStatsPage = () => {
       {error && <p className="form-error">{error}</p>}
 
       {disabled ? (
-        <p className="notice">Analytics storage (ClickHouse) isn't configured, so there are no numbers to show.</p>
+        <p className="notice">Statistics aren't available right now.</p>
       ) : (
         <>
           <section className="stats-section">

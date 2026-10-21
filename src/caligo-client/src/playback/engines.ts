@@ -26,10 +26,10 @@ export interface Engine {
 }
 
 export const DELIVERY_LABELS: Record<Delivery, string> = {
-  hls: 'HLS (hls.js)',
-  'hls-native': 'HLS (built into the browser)',
-  dash: 'DASH (dash.js)',
-  progressive: 'MP4 (progressive)'
+  hls: 'HLS',
+  'hls-native': 'HLS, built in',
+  dash: 'DASH',
+  progressive: 'MP4'
 };
 
 const mediaSourceSupported = (): boolean =>

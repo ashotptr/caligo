@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import { usePlayer, usePlayerClock } from '../contexts/PlayerContext';
-import { pathLabel } from '../radio';
 import { titlePath } from '../thesaurarium';
 import ListenLog from './ListenLog';
 
@@ -62,7 +61,7 @@ const Volume = () => {
 
 const PlayerBar = () => {
   const {
-    mode, radioState, radioDetail, path, now, songId, current, queue, index, paused, trackFailed,
+    mode, radioState, now, songId, current, queue, index, paused, trackFailed,
     playRadio, stopRadio, togglePause, next, previous
   } = usePlayer();
 
@@ -108,7 +107,7 @@ const PlayerBar = () => {
   const status = STATUS[on ? radioState : 'off'] ?? STATUS.off;
   const subtitle = now
     ? [known(now.artist), known(now.album)].filter(part => part.length > 0).join(' · ') || 'Unknown artist'
-    : !on ? 'Press play to tune in' : radioState === 'failed' ? radioDetail ?? 'This way did not play' : 'Waiting for the first song';
+    : !on ? 'Press play to tune in' : radioState === 'failed' ? 'Couldn\'t play' : 'Waiting for the first song';
 
   return (
     <div className="player-bar">
@@ -140,7 +139,6 @@ const PlayerBar = () => {
       <div className="player-extra">
         <Volume />
         {on && songId !== null && <ListenLog contentId={songId} />}
-        {on && path !== null && radioState !== 'failed' && <span className="status-line">{pathLabel(path)}</span>}
         <Link to="/listen" className="player-more">Radio</Link>
       </div>
     </div>

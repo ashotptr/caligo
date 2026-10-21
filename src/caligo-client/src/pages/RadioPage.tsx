@@ -7,8 +7,7 @@ import type { RadioStatus } from '../contexts/PlayerContext';
 import { formatDateTime } from '../dates';
 import { labHere } from '../listen/ways';
 import type { Way } from '../listen/ways';
-import { pathLabel, trackLabel } from '../radio';
-import type { RadioPath } from '../radio';
+import { trackLabel } from '../radio';
 import { titlePath } from '../thesaurarium';
 import type { RadioHistory, RadioPlay } from '../types';
 
@@ -21,37 +20,30 @@ const STATE_TEXT: Record<RadioStatus, string> = {
   playing: 'Playing',
   buffering: 'Buffering…',
   retrying: 'Reconnecting…',
-  failed: 'Failed'
+  failed: 'Couldn\'t play'
 };
 
-const card = (on: boolean, state: RadioStatus, path: RadioPath | null, detail: string | null) => {
+const card = (on: boolean, state: RadioStatus) => {
   if (!on || state === 'off') {
     return { title: 'Ready', text: 'Press play to start the stream.' };
   }
 
   switch (state) {
     case 'starting':
-      return {
-        title: 'Tuning In...',
-        text: path === 'direct'
-          ? 'Establishing connection to the stream. This path needs a few seconds to fill the buffer.'
-          : 'Establishing connection to the stream.'
-      };
+      return { title: 'Tuning In...', text: 'Establishing connection to the stream.' };
     case 'buffering':
       return { title: 'Live Feed', text: 'Buffering…' };
     case 'retrying':
       return { title: 'Reconnecting...', text: 'The stream was interrupted.' };
     case 'failed':
-      return { title: 'Failed', text: detail ?? 'This way did not play.' };
+      return { title: 'Couldn\'t play', text: 'Try another way to listen below.' };
     default:
       return { title: 'Live Feed', text: 'You are listening to the broadcast.' };
   }
 };
 
 const RadioPage = () => {
-  const {
-    mode, way, ways, radioState, radioDetail, path, now, songId, canPlayOpus, canPlayMoq, playRadio, stopRadio
-  } = usePlayer();
+  const { mode, way, ways, radioState, now, songId, canPlayOpus, canPlayMoq, playRadio, stopRadio } = usePlayer();
   const lab = labHere();
   const [plays, setPlays] = useState<RadioPlay[] | null>(null);
   const [listeners, setListeners] = useState<number | null>(null);
@@ -115,7 +107,8 @@ const RadioPage = () => {
     };
   }, [radioState]);
 
-  const supported = (candidate: Way): boolean => {
+  const playable = (candidate: Way): boolean => {
+    if ((candidate.lab && !lab) || candidate.kind === 'external') return false;
     if (candidate.kind === 'stream' && candidate.format === 'opus') return canPlayOpus;
     if (candidate.kind === 'objects' || candidate.kind === 'moq-lite') {
       return canPlayMoq && (!candidate.webTransport || 'WebTransport' in window);
@@ -138,80 +131,36 @@ const RadioPage = () => {
   const playing = (candidate: Way) => on && way.id === candidate.id;
 
   const action = (candidate: Way) => {
-    if (candidate.lab && !lab) {
-      return <span className="hint">lab only</span>;
-    }
-
-    if (candidate.kind === 'external') {
+    if (candidate.kind === 'external' && lab && candidate.command) {
       return (
-        <span className="ways-action">
-          <code className="ways-command">{candidate.command}</code>
-          <button type="button" onClick={() => copy(candidate)}>{copied === candidate.id ? 'Copied' : 'Copy'}</button>
-        </span>
+        <button type="button" className="btn-secondary" title={candidate.command} onClick={() => copy(candidate)}>
+          {copied === candidate.id ? 'Copied' : 'Copy for VLC'}
+        </button>
       );
     }
 
-    if (!supported(candidate)) {
-      return <span className="hint">not in this browser</span>;
+    if (!playable(candidate)) {
+      return null;
     }
 
     return (
-      <span className="ways-action">
-        <button
-          type="button"
-          aria-pressed={playing(candidate)}
-          onClick={() => (playing(candidate) ? stopRadio() : playRadio(candidate.id))}
-        >
-          {playing(candidate) ? 'Stop' : 'Play'}
-        </button>
-      </span>
+      <button
+        type="button"
+        aria-pressed={playing(candidate)}
+        onClick={() => (playing(candidate) ? stopRadio() : playRadio(candidate.id))}
+      >
+        {playing(candidate) ? 'Stop' : 'Play'}
+      </button>
     );
   };
 
-  const statusText = (candidate: Way) => {
-    if (!playing(candidate)) {
-      return way.id === candidate.id ? 'chosen' : '';
-    }
-
-    return radioState === 'failed' && radioDetail ? `${STATE_TEXT.failed} · ${radioDetail}` : STATE_TEXT[radioState];
-  };
-
-  const table = (rows: Way[]) => (
-    <div className="data-table-wrap">
-      <table className="data-table ways-table">
-        <thead>
-          <tr>
-            <th>Way</th>
-            <th>Server</th>
-            <th>Status</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(candidate => (
-            <tr key={candidate.id} className={way.id === candidate.id ? 'chosen-way' : undefined}>
-              <td>
-                {candidate.name}
-                <div className="post-meta">{candidate.protocol}</div>
-              </td>
-              <td>{candidate.server}</td>
-              <td className="status-line">{statusText(candidate)}</td>
-              <td>{action(candidate)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-
-  const shown = card(on, radioState, path, radioDetail);
+  const shown = card(on, radioState);
 
   return (
     <div className="listen-page">
       <h1>Radio</h1>
       <p className="lede">
-        One stream for everyone, played by Caligo's radio server: 128 kbit/s MP3, and Opus while its encoder runs, the same
-        moment for every listener.
+        One stream for everyone, the same moment for every listener.
         {listeners !== null && <> {listeners} listening now.</>}
       </p>
 
@@ -234,30 +183,27 @@ const RadioPage = () => {
           <button type="button" onClick={() => (on ? stopRadio() : playRadio())} aria-pressed={on}>
             {on ? 'Stop' : 'Play'}
           </button>
-          <span className="hint">
-            {way.name}
-            {on && path !== null && radioState !== 'failed' ? ` · ${pathLabel(path)}` : ''}
-          </span>
+          <span className="hint">{way.name}</span>
         </div>
       </div>
 
       <section className="catalog-section">
-        <h2>Every way to listen</h2>
-        <p className="hint">
-          The same radio through each way the project can deliver it, closest to live first, as the lab measured them. One
-          plays at a time, and the one you pick stays chosen for the play buttons above and in the player bar.
-        </p>
-
-        <h3>On this site</h3>
-        {table(ways.filter(candidate => !candidate.lab))}
-
-        <h3>Lab</h3>
-        <p className="hint">
-          {lab
-            ? 'These come from the lab\'s servers on this machine, fed with the radio by deploy/lab/listen.sh. RTSP, RTMP and SRT don\'t play in browsers: run the command in a terminal with VLC installed.'
-            : 'These run only on the development machine: start them with deploy/lab/listen.sh and open this page on localhost.'}
-        </p>
-        {table(ways.filter(candidate => candidate.lab))}
+        <h2>Ways to listen</h2>
+        <ul className="ways-list">
+          {ways.map(candidate => (
+            <li
+              key={candidate.id}
+              className={`way${way.id === candidate.id ? ' chosen' : ''}${playable(candidate) ? '' : ' unavailable'}`}
+            >
+              <span className="way-name">
+                {candidate.name}
+                <span className="way-note">{candidate.note}</span>
+              </span>
+              <span className="way-status">{playing(candidate) ? STATE_TEXT[radioState] : ''}</span>
+              {action(candidate)}
+            </li>
+          ))}
+        </ul>
       </section>
 
       {plays !== null && (

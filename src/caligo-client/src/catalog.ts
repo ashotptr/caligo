@@ -95,9 +95,9 @@ export const catalogError = (err: unknown, fallback: string): string => {
     case 403:
       return "You don't have permission to do that.";
     case 404:
-      return 'It is not in the catalog.';
+      return 'It is not in the Thesaurarium.';
     case 503:
-      return 'The catalog is switched off on this server.';
+      return 'The Thesaurarium isn\'t available right now.';
     default:
       return fallback;
   }

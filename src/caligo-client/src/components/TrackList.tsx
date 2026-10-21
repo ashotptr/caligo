@@ -116,7 +116,7 @@ const TrackList = ({ tracks, numbered = true, album, albums, cover, download, in
                     <DownloadIcon />
                   </button>
                 )}
-                {!track.audioUri && kind === 'song' && <span className="hint">no file</span>}
+                {!track.audioUri && kind === 'song' && <span className="hint">not available</span>}
                 {onRemove && (
                   <button
                     type="button"

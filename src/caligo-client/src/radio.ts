@@ -47,15 +47,6 @@ export const parseNowPlaying = (raw: string): NowPlaying | null => {
 export const trackLabel = (now: NowPlaying): string =>
   now.artist && now.artist !== 'Unknown' ? `${now.artist} — ${now.title}` : now.title;
 
-const PATH_LABELS: Record<RadioPath, string> = {
-  moq: 'low latency through the relay',
-  opus: 'Opus through the relay',
-  relay: 'through the relay',
-  direct: 'straight from the radio'
-};
-
-export const pathLabel = (path: RadioPath): string => PATH_LABELS[path];
-
 let opusSupport: boolean | undefined;
 
 export const opusPlayable = (): boolean => {

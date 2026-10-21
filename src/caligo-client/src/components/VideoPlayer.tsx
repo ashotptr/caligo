@@ -26,7 +26,6 @@ const clock = (seconds: number): string => {
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(whole % 60)}` : `${minutes}:${pad(whole % 60)}`;
 };
 
-const megabits = (bitrate: number) => `${(bitrate / 1_000_000).toFixed(1)} Mbit/s`;
 
 const VideoPlayer = ({ contentId }: { contentId: number }) => {
   const video = useRef<HTMLVideoElement | null>(null);
@@ -48,7 +47,7 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
   const deliveriesRef = useRef<Delivery[]>([]);
   const choiceRef = useRef<DeliveryChoice>('auto');
   const subtitleRef = useRef<SubtitleTrackInfo | null>(null);
-  const recoverRef = useRef<(detail: string) => Promise<void>>(async () => undefined);
+  const recoverRef = useRef<() => Promise<void>>(async () => undefined);
   const completeRef = useRef<() => Promise<void>>(async () => undefined);
 
   const [videoKey, setVideoKey] = useState(0);
@@ -56,14 +55,11 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
   const [message, setMessage] = useState<string | null>(null);
   const [help, setHelp] = useState<Help>(null);
   const [choice, setChoice] = useState<DeliveryChoice>('auto');
-  const [delivery, setDelivery] = useState<Delivery | null>(null);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [qualities, setQualities] = useState<Quality[]>([]);
   const [quality, setQuality] = useState(-1);
   const [subtitles, setSubtitles] = useState<SubtitleTrackInfo[]>([]);
   const [subtitle, setSubtitle] = useState(-1);
-  const [startupMs, setStartupMs] = useState<number | null>(null);
-  const [size, setSize] = useState('');
   const [resumedAt, setResumedAt] = useState<number | null>(null);
   const [finished, setFinished] = useState(false);
 
@@ -146,7 +142,7 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
       const status = statusOf(err);
 
       if (status === 410 || status === 404) {
-        await recoverRef.current('the playback session ended');
+        await recoverRef.current();
       }
     }
   };
@@ -171,7 +167,7 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
       telemetry.current.record('error', {
         detail: status ? `${detail} (HTTP ${status})` : detail, position: position(), delivery: deliveryRef.current ?? undefined
       });
-      void recoverRef.current(detail);
+      void recoverRef.current();
     }
   };
 
@@ -186,10 +182,8 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
     started.current = false;
     stallAt.current = null;
     deliveryRef.current = next;
-    setDelivery(next);
     setQualities([]);
     setQuality(-1);
-    setSize('');
 
     const element = await freshVideo();
     const attached = await attachEngine(next, element, current, startAt, hooks);
@@ -207,7 +201,7 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
     }
   };
 
-  const recover = async (detail: string) => {
+  const recover = async () => {
     const kind = deliveryRef.current;
 
     if (!kind || !session.current) {
@@ -224,7 +218,7 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
       lastRecovery.current = now;
 
       if (!next) {
-        fail(`Playback stopped: ${detail}.`);
+        fail('Playback stopped.');
 
         return;
       }
@@ -314,7 +308,6 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
           const took = performance.now() - intentAt.current;
 
           intentAt.current = null;
-          setStartupMs(took);
           track.record('startup', { ...where(), duration_ms: Math.round(took) });
         }
 
@@ -368,10 +361,6 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
       void completeRef.current();
     };
 
-    const onSize = () => {
-      setSize(element.videoWidth > 0 ? `${element.videoWidth}×${element.videoHeight}` : '');
-    };
-
     const events: [string, () => void][] = [
       ['playing', onPlaying],
       ['waiting', onWaiting],
@@ -379,9 +368,7 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
       ['pause', onPause],
       ['play', onPlay],
       ['timeupdate', onTime],
-      ['ended', onEnded],
-      ['resize', onSize],
-      ['loadedmetadata', onSize]
+      ['ended', onEnded]
     ];
 
     for (const [name, handler] of events) {
@@ -481,7 +468,7 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
 
       <div className="video-choices">
         <label>
-          Delivery
+          Format
           <select value={choice} onChange={event => chooseDelivery(event.target.value as DeliveryChoice)}>
             <option value="auto">Automatic</option>
             {offered.map(item => <option key={item} value={item}>{DELIVERY_LABELS[item]}</option>)}
@@ -494,7 +481,7 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
             <select value={quality} onChange={event => chooseQuality(Number(event.target.value))}>
               <option value={-1}>Automatic</option>
               {qualities.map(item => (
-                <option key={item.index} value={item.index}>{item.height}p · {megabits(item.bitrate)}</option>
+                <option key={item.index} value={item.index}>{item.height}p</option>
               ))}
             </select>
           </label>
@@ -511,14 +498,13 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
         )}
       </div>
 
-      {phase === 'playing' && delivery && (
+      {phase === 'playing' && (resumedAt !== null || finished || message) && (
         <p className="hint video-facts">
-          {DELIVERY_LABELS[delivery]}
-          {size && ` · ${size}`}
-          {startupMs !== null && ` · first frame after ${(startupMs / 1000).toFixed(2)} s`}
-          {resumedAt !== null && ` · resumed at ${clock(resumedAt)}`}
-          {finished && ' · added to your history'}
-          {message && ` · ${message}`}
+          {[
+            resumedAt !== null ? `Resumed at ${clock(resumedAt)}` : '',
+            finished ? 'Added to your history' : '',
+            message ?? ''
+          ].filter(part => part.length > 0).join(' · ')}
         </p>
       )}
     </div>

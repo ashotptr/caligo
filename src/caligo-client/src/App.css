@@ -1893,22 +1893,52 @@ a.tag:hover {
   color: var(--accent);
 }
 
-.ways-action {
+.ways-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.way {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--hairline);
 }
 
-.ways-action button {
-  min-width: 5rem;
+.way.chosen {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.ways-command {
-  font-family: var(--code);
+.way.unavailable {
+  opacity: 0.45;
+}
+
+.way-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.way-note {
   font-size: 12px;
+  font-weight: 400;
   color: var(--text-muted);
-  word-break: break-all;
+}
+
+.way-status {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--live);
+  white-space: nowrap;
+}
+
+.way button {
+  min-width: 5rem;
 }
 
 .video-player {
@@ -2667,10 +2697,6 @@ a.tag:hover {
   margin: 24px 0 4px;
 }
 
-.chosen-way td:first-child {
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
 .ai-view {
   display: flex;
   flex-direction: column;
@@ -3187,47 +3213,8 @@ a.tag:hover {
     height: 28px;
   }
 
-  .ways-table thead {
-    display: none;
-  }
-
-  .ways-table tr {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: 12px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--hairline);
-  }
-
-  .ways-table tr.chosen-way {
-    padding-left: 10px;
-    box-shadow: inset 3px 0 0 var(--accent);
-  }
-
-  .ways-table tr.chosen-way td:first-child {
-    box-shadow: none;
-  }
-
-  .ways-table td {
-    grid-column: 1;
-    padding: 1px 0;
-    border: none;
-  }
-
-  .ways-table td:nth-child(2),
-  .ways-table td:nth-child(3) {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-
-  .ways-table td:nth-child(4) {
-    grid-column: 2;
-    grid-row: 1 / span 3;
-    align-self: center;
-  }
-
-  .ways-table .ways-action {
-    flex-direction: column;
-    align-items: flex-end;
+  .way {
+    gap: 10px;
+    padding: 10px 8px 10px 12px;
   }
 }

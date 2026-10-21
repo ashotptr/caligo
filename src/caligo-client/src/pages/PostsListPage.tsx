@@ -32,7 +32,7 @@ const PostsListPage = () => {
       }
     } catch (err) {
       console.error('Error loading posts:', err);
-      setError('Could not load posts. Is the API running?');
+      setError('Could not load posts.');
     } finally {
       setLoading(false);
     }

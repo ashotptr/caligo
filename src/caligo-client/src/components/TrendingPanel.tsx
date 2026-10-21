@@ -12,7 +12,7 @@ const TrendingPanel = () => {
     <aside className="trending-panel">
       <h2>
         Trending
-        <span className="trending-live" title="Pushed live from the analytics service">live</span>
+        <span className="trending-live" title="Updates live">live</span>
       </h2>
       <p className="trending-window">last {snapshot.windowHours}h</p>
 

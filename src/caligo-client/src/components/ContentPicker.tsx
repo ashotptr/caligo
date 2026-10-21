@@ -70,7 +70,7 @@ const ContentPicker = ({ value, onChange }: ContentPickerProps) => {
           <input
             type="search"
             value={query}
-            placeholder="Find a movie, an episode or a song in the catalog…"
+            placeholder="Find a movie, an episode or a song in the Thesaurarium…"
             maxLength={100}
             disabled={unavailable}
             onChange={e => setQuery(e.target.value)}
@@ -79,8 +79,8 @@ const ContentPicker = ({ value, onChange }: ContentPickerProps) => {
             }}
           />
 
-          {unavailable && <p className="hint">The catalog is switched off on this server.</p>}
-          {searched && results.length === 0 && <p className="hint">Nothing in the catalog matches.</p>}
+          {unavailable && <p className="hint">The Thesaurarium isn't available right now.</p>}
+          {searched && results.length === 0 && <p className="hint">Nothing in the Thesaurarium matches.</p>}
 
           {results.length > 0 && (
             <ul className="picker-results">

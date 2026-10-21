@@ -81,7 +81,7 @@ const ThesaurariumPage = () => {
 
       {!loading && !error && releases.length === 0 && (
         <p className="status-line">
-          {filtered ? 'Nothing found.' : 'No albums yet. An administrator can import the music library from the Insights page.'}
+          {filtered ? 'Nothing found.' : 'No albums yet.'}
         </p>
       )}
 

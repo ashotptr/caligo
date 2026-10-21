@@ -46,7 +46,7 @@ const ArtistsPage = () => {
 
       {!loading && !error && artists.length === 0 && (
         <p className="status-line">
-          {activeQuery ? `No artist matches “${activeQuery}”.` : 'No artists yet. An administrator can import the music library from the Insights page.'}
+          {activeQuery ? `No artist matches “${activeQuery}”.` : 'No artists yet.'}
         </p>
       )}
 

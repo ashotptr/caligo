@@ -5,8 +5,7 @@ export type WayKind = 'stream' | 'objects' | 'audio' | 'moq-lite' | 'hls' | 'das
 export interface Way {
   id: string;
   name: string;
-  protocol: string;
-  server: string;
+  note: string;
   kind: WayKind;
   url: string;
   lab: boolean;
@@ -33,9 +32,8 @@ export const allWays = (): Way[] => {
   return [
     {
       id: 'relay-moq-lite',
-      name: 'moq-lite over WebSocket',
-      protocol: 'moq-lite-06 over QMux',
-      server: 'caligo-relay',
+      name: 'MoQ',
+      note: 'Closest to live',
       kind: 'moq-lite',
       url: `${origin}/live/moq`,
       events: RELAY_EVENTS,
@@ -43,18 +41,16 @@ export const allWays = (): Way[] => {
     },
     {
       id: 'relay-objects',
-      name: 'Relay objects, low latency',
-      protocol: 'Opus objects over WebSocket, back to Relay MP3 when the relay sends nothing',
-      server: 'caligo-relay',
+      name: 'Low latency',
+      note: 'Near live',
       kind: 'objects',
       url: `${origin}/live/moq`,
       lab: false
     },
     {
       id: 'relay-mp3',
-      name: 'Relay MP3',
-      protocol: 'MP3 over HTTP, straight from the radio when the relay is down',
-      server: 'caligo-relay',
+      name: 'MP3',
+      note: 'Works everywhere',
       kind: 'stream',
       format: 'mp3',
       url: `${origin}/live/`,
@@ -62,9 +58,8 @@ export const allWays = (): Way[] => {
     },
     {
       id: 'relay-opus',
-      name: 'Relay Opus',
-      protocol: 'Ogg Opus over HTTP, MP3 when Opus is off the air',
-      server: 'caligo-relay',
+      name: 'Opus',
+      note: 'Better sound, less data',
       kind: 'stream',
       format: 'opus',
       url: `${origin}/live/opus`,
@@ -72,9 +67,8 @@ export const allWays = (): Way[] => {
     },
     {
       id: 'caligo-radio',
-      name: 'Caligo\'s radio, direct',
-      protocol: 'MP3 over HTTP, no clock in the stream, so the lab measured no delay',
-      server: 'radio_server',
+      name: 'Direct',
+      note: 'Straight from the radio',
       kind: 'stream',
       format: 'direct',
       url: `${origin}/radio/`,
@@ -83,8 +77,7 @@ export const allWays = (): Way[] => {
     {
       id: 'webrtc',
       name: 'WebRTC',
-      protocol: 'Opus over WebRTC, WHEP',
-      server: 'MediaMTX',
+      note: 'Real time',
       kind: 'whep',
       url: `http://${host}:8889/radio/whep`,
       events: RADIO_EVENTS,
@@ -93,8 +86,7 @@ export const allWays = (): Way[] => {
     {
       id: 'rtsp',
       name: 'RTSP',
-      protocol: 'RTSP over TCP, Opus',
-      server: 'MediaMTX',
+      note: 'For media players',
       kind: 'external',
       url: `rtsp://${host}:8554/radio`,
       command: `vlc --rtsp-tcp rtsp://${host}:8554/radio`,
@@ -103,8 +95,7 @@ export const allWays = (): Way[] => {
     {
       id: 'rtmp',
       name: 'RTMP',
-      protocol: 'RTMP, AAC',
-      server: 'MediaMTX',
+      note: 'For media players',
       kind: 'external',
       url: `rtmp://${host}:1935/radio-aac`,
       command: `vlc rtmp://${host}:1935/radio-aac`,
@@ -113,8 +104,7 @@ export const allWays = (): Way[] => {
     {
       id: 'srt',
       name: 'SRT',
-      protocol: 'SRT, Opus in MPEG-TS',
-      server: 'MediaMTX',
+      note: 'For media players',
       kind: 'external',
       url: `srt://${host}:8890?streamid=read:radio`,
       command: `vlc "srt://${host}:8890?streamid=read:radio"`,
@@ -123,8 +113,7 @@ export const allWays = (): Way[] => {
     {
       id: 'll-hls',
       name: 'LL-HLS',
-      protocol: 'low-latency HLS, Opus in fMP4',
-      server: 'MediaMTX',
+      note: 'Streaming, low delay',
       kind: 'hls',
       lowLatency: true,
       url: `http://${host}:8888/radio/index.m3u8`,
@@ -133,9 +122,8 @@ export const allWays = (): Way[] => {
     },
     {
       id: 'relay-quic',
-      name: 'moq-lite over QUIC',
-      protocol: 'moq-lite-06 over WebTransport',
-      server: 'caligo-relay-quic',
+      name: 'QUIC',
+      note: 'Closest to live',
       kind: 'moq-lite',
       webTransport: true,
       url: `http://${host}:8443/live/moq`,
@@ -145,8 +133,7 @@ export const allWays = (): Way[] => {
     {
       id: 'icecast',
       name: 'Icecast',
-      protocol: 'MP3 over HTTP',
-      server: 'Icecast 2',
+      note: 'Classic internet radio',
       kind: 'audio',
       url: `http://${host}:8001/stream`,
       events: RADIO_EVENTS,
@@ -155,8 +142,7 @@ export const allWays = (): Way[] => {
     {
       id: 'dash',
       name: 'DASH',
-      protocol: 'live DASH, AAC',
-      server: 'ffmpeg and nginx',
+      note: 'Streaming',
       kind: 'dash',
       url: `http://${host}:8090/dash/radio.mpd`,
       events: RADIO_EVENTS,
@@ -165,8 +151,7 @@ export const allWays = (): Way[] => {
     {
       id: 'hls',
       name: 'HLS',
-      protocol: 'HLS, AAC in MPEG-TS',
-      server: 'ffmpeg and nginx',
+      note: 'Streaming',
       kind: 'hls',
       url: `http://${host}:8090/hls/radio.m3u8`,
       events: RADIO_EVENTS,

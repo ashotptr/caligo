@@ -33,7 +33,6 @@ interface PlayerContextType {
   ways: Way[];
   way: Way;
   radioState: RadioStatus;
-  radioDetail: string | null;
   path: RadioPath | null;
   now: NowPlaying | null;
   songId: number | null;
@@ -133,7 +132,6 @@ export const PlayerProvider = ({ children }: { children: ReactNode }) => {
   const [mode, setMode] = useState<PlayerMode>('off');
   const [way, setWay] = useState<Way>(() => storedWay(ways));
   const [radioState, setRadioState] = useState<RadioStatus>('off');
-  const [radioDetail, setRadioDetail] = useState<string | null>(null);
   const [path, setPath] = useState<RadioPath | null>(null);
   const [now, setNow] = useState<NowPlaying | null>(null);
   const [songId, setSongId] = useState<number | null>(null);
@@ -257,7 +255,6 @@ export const PlayerProvider = ({ children }: { children: ReactNode }) => {
 
     setNow(null);
     setPath(null);
-    setRadioDetail(null);
 
     if (target.kind === 'stream') {
       const engine: RadioEngine = new RadioEngine(
@@ -321,12 +318,10 @@ export const PlayerProvider = ({ children }: { children: ReactNode }) => {
       }
 
       setRadioState(fromWay(status));
-      setRadioDetail(status.state === 'failed' ? status.detail ?? null : null);
     });
 
     if (!player) {
       setRadioState('failed');
-      setRadioDetail('this way plays outside the browser');
 
       return;
     }
@@ -363,7 +358,6 @@ export const PlayerProvider = ({ children }: { children: ReactNode }) => {
     dropDriver();
     setMode(previous => (previous === 'radio' ? 'off' : previous));
     setRadioState('off');
-    setRadioDetail(null);
     setNow(null);
     setPath(null);
   }, [dropDriver]);
@@ -640,7 +634,6 @@ export const PlayerProvider = ({ children }: { children: ReactNode }) => {
     ways,
     way,
     radioState,
-    radioDetail,
     path,
     now,
     songId,
@@ -665,7 +658,7 @@ export const PlayerProvider = ({ children }: { children: ReactNode }) => {
     stop,
     position
   }), [
-    mode, ways, way, radioState, radioDetail, path, now, songId, loggedId, canPlayOpus, canPlayMoq, playRadio,
+    mode, ways, way, radioState, path, now, songId, loggedId, canPlayOpus, canPlayMoq, playRadio,
     stopRadio, queue, index, current, paused, trackFailed, playTracks, togglePause, next, previous, seek, volume,
     setVolume, stop, position
   ]);
