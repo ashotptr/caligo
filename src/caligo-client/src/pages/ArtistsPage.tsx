@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import { catalogError } from '../catalog';
+import CoverCard from '../components/CoverCard';
 import ThesaurariumNav from '../components/ThesaurariumNav';
 import { artistPath } from '../thesaurarium';
 import type { ArtistSummary } from '../types';
@@ -50,14 +51,22 @@ const ArtistsPage = () => {
         </p>
       )}
 
-      <ul className="dashboard-list">
-        {artists.map(artist => (
-          <li key={artist.artistId}>
-            <Link to={artistPath(artist.artistId)}>{artist.name}</Link>
-            <span className="post-meta">{artist.songs} song{artist.songs === 1 ? '' : 's'}</span>
-          </li>
-        ))}
-      </ul>
+      {artists.length > 0 && (
+        <ul className="album-grid">
+          {artists.map(artist => (
+            <li key={artist.artistId}>
+              <CoverCard
+                to={artistPath(artist.artistId)}
+                cover={artist.coverUri}
+                kind="Artist"
+                title={artist.name}
+                sub="Artist"
+                meta={`${artist.songs} song${artist.songs === 1 ? '' : 's'}`}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 };

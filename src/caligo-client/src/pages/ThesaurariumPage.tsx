@@ -92,7 +92,7 @@ const ThesaurariumPage = () => {
               <CoverCard
                 to={releasePath(release.kind, release.id)}
                 cover={release.coverUri}
-                placeholder="No Cover"
+                kind={release.kind === 'album' ? 'Album' : 'Single'}
                 title={release.title}
                 sub={release.artists.join(', ') || 'Unknown'}
                 meta={[

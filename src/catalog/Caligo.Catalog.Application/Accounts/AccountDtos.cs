@@ -32,11 +32,7 @@ public record StreamingProfileDto(
 }
 
 public record CreateProfileCommand(
-    string? FirstName, string? LastName, DateOnly Dob, string? Gender, int SubscriptionPlanId);
-
-public record PaymentDto(int PaymentId, DateTime Date, float Amount, int SubscriptionPlanId);
-
-public record SpendingDto(float AllTimeSpending, List<PaymentDto> Payments);
+    string? FirstName, string? LastName, DateOnly Dob, string? Gender, int? SubscriptionPlanId = null);
 
 public static class PlanPricing
 {

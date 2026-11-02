@@ -141,11 +141,13 @@ const CatalogPage = () => {
       )}
 
       {items.length > 0 && (
-        <div className="card-grid">
+        <ul className="album-grid">
           {items.map(item => (
-            <ContentCard key={item.contentId} content={item} />
+            <li key={item.contentId}>
+              <ContentCard content={item} />
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       {!loading && cursor && (

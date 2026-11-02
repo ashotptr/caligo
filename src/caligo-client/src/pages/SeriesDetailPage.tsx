@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { catalogError, formatDay, formatDuration, statusOf } from '../catalog';
+import DetailHeader from '../components/DetailHeader';
 import { SERIES, titlePath } from '../thesaurarium';
 import type { SeriesDetail } from '../types';
 
@@ -50,10 +51,11 @@ const SeriesDetailPage = () => {
     <article className="post-detail">
       <Link to={SERIES} className="back-link">← All series</Link>
 
-      <h1>{series.title}</h1>
-      <p className="post-meta">
-        Series · {formatDay(series.releaseDate)} · {series.seasons.length} season{series.seasons.length === 1 ? '' : 's'}
-      </p>
+      <DetailHeader cover={null} title={series.title} kind="Series">
+        <p className="post-meta">
+          Series · {formatDay(series.releaseDate)} · {series.seasons.length} season{series.seasons.length === 1 ? '' : 's'}
+        </p>
+      </DetailHeader>
 
       <p className="content-description">{series.description}</p>
 

@@ -174,20 +174,25 @@ public class PlaybackServiceTests
     }
 
     [Fact]
-    public async Task Starting_NeedsAnAccountAProfileAnActiveSubscriptionAndAVideo()
+    public async Task AnEndedSubscriptionPeriod_DoesNotStopPlayback()
+    {
+        _user.SubscriptionEndDate = new DateOnly(2026, 10, 13);
+
+        Opens(Session());
+
+        var result = await Service().StartAsync(new StartSessionCommand(3, Device), Viewer);
+
+        Assert.True(result.IsSuccess, result.Error);
+    }
+
+    [Fact]
+    public async Task Starting_NeedsAnAccountAProfileAndAVideo()
     {
         var service = Service();
 
         Assert.Equal(ResultStatus.Unauthorized, (await service.StartAsync(new StartSessionCommand(3, Device), Caller.Anonymous)).Status);
         Assert.Equal(ResultStatus.Invalid, (await service.StartAsync(new StartSessionCommand(3, "x"), Viewer)).Status);
         Assert.Equal(ResultStatus.NotFound, (await service.StartAsync(new StartSessionCommand(4, Device), Viewer)).Status);
-
-        _user.SubscriptionEndDate = new DateOnly(2026, 10, 13);
-
-        var lapsed = await service.StartAsync(new StartSessionCommand(3, Device), Viewer);
-
-        Assert.Equal(ResultStatus.Forbidden, lapsed.Status);
-        Assert.Equal(PlaybackService.SubscriptionInactive, lapsed.Error);
 
         _accounts.Setup(a => a.FindByIdentityAsync("identity-1", It.IsAny<CancellationToken>())).ReturnsAsync((StreamingUser?)null);
 

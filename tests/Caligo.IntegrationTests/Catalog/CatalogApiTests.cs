@@ -135,54 +135,34 @@ public class CatalogApiTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AStreamingProfile_IsCreatedOnce_WithItsFirstPayment()
+    public async Task AProfile_IsCreatedOnce_OnTheFirstPlan_WithoutAPayment()
     {
         var (client, _) = await SignedInAsync();
 
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/me/streaming-profile")).StatusCode);
 
         var plans = await _anonymous.GetFromJsonAsync<List<PlanDto>>("/api/subscription/plans");
-        var plan = plans!.First();
+        var request = new { firstName = "Test", lastName = "Viewer", dateOfBirth = "1990-05-17", gender = "Other" };
 
-        var created = await client.PostAsJsonAsync("/api/me/streaming-profile", ProfileRequest(plan.SubscriptionPlanId));
+        var created = await client.PostAsJsonAsync("/api/me/streaming-profile", request);
 
         Assert.Equal(HttpStatusCode.OK, created.StatusCode);
 
         var profile = await created.Content.ReadFromJsonAsync<StreamingProfileDto>();
 
-        Assert.True(profile!.Active);
-        Assert.Equal("Other", profile.Gender);
+        Assert.Equal("Other", profile!.Gender);
+        Assert.Equal(plans!.First().SubscriptionPlanId, profile.SubscriptionPlanId);
 
-        var again = await client.PostAsJsonAsync("/api/me/streaming-profile", ProfileRequest(plan.SubscriptionPlanId));
+        var again = await client.PostAsJsonAsync("/api/me/streaming-profile", request);
 
         Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
-
-        var spending = await client.GetFromJsonAsync<SpendingDto>("/api/me/spending");
-
-        Assert.Single(spending!.Payments);
-        Assert.Equal(plan.MonthlyPrice, spending.AllTimeSpending, 2);
 
         await using var db = Db();
 
         var user = await db.Users.AsNoTracking().SingleAsync(u => u.UserId == profile.UserId);
 
         Assert.Equal(Caligo.Catalog.Domain.Users.StreamingUser.ExternalPassword, user.Password);
-    }
-
-    [Fact]
-    public async Task Renewing_AddsAPaymentAndExtendsTheSubscription()
-    {
-        var (client, profile) = await WithProfileAsync();
-
-        var response = await client.PostAsJsonAsync(
-            "/api/me/subscription", new { subscriptionPlanId = profile.SubscriptionPlanId });
-
-        var renewed = await response.Content.ReadFromJsonAsync<StreamingProfileDto>();
-        var spending = await client.GetFromJsonAsync<SpendingDto>("/api/me/spending");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(renewed!.SubscriptionEndDate > profile.SubscriptionEndDate);
-        Assert.Equal(2, spending!.Payments.Count);
+        Assert.False(await db.Payments.AnyAsync(p => p.UserId == profile.UserId));
     }
 
     [Fact]

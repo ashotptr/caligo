@@ -9,7 +9,6 @@ namespace Caligo.Catalog.Application.Media;
 public class PlaybackService
 {
     public const string NoMedia = "This title has no video yet.";
-    public const string SubscriptionInactive = "Your subscription is not active. Renew it to watch.";
     public const string SessionOver = "This playback session has ended.";
     public const string CompletedOtherwise = "This session was already completed with another completion_id.";
 
@@ -74,11 +73,6 @@ public class PlaybackService
         }
 
         var now = Now();
-
-        if (!user.IsSubscribedOn(DateOnly.FromDateTime(now)))
-        {
-            return Result<PlaybackSessionDto>.Forbidden(SubscriptionInactive);
-        }
 
         var plan = await _accounts.FindPlanAsync(user.SubscriptionPlanId, cancellationToken);
         var limit = PlanLimits.MaxStreams(plan?.PlanInfo) ?? Math.Max(_rules.DefaultMaxStreams, 1);

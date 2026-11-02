@@ -33,10 +33,5 @@ public class StreamingProfileRequest
     [Required]
     public string Gender { get; set; } = string.Empty;
 
-    public int SubscriptionPlanId { get; set; }
-}
-
-public class SubscriptionRequest
-{
-    public int SubscriptionPlanId { get; set; }
+    public int? SubscriptionPlanId { get; set; }
 }

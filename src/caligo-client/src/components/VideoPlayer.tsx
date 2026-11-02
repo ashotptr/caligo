@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PROFILE_REQUIRED, catalogError, statusOf } from '../catalog';
+import { PROFILE, PROFILE_REQUIRED, catalogError, statusOf } from '../catalog';
 import { deviceId, uuid } from '../playback/device';
 import { DELIVERY_LABELS, attachEngine, availableDeliveries } from '../playback/engines';
 import type { Delivery, DeliveryChoice, Engine, EngineHooks, Quality } from '../playback/engines';
@@ -10,7 +10,7 @@ import { Telemetry } from '../playback/telemetry';
 
 type Phase = 'idle' | 'starting' | 'playing' | 'failed';
 
-type Help = 'signin' | 'profile' | 'subscription' | null;
+type Help = 'signin' | 'profile' | null;
 
 const COMPLETE_AT = 0.95;
 const RECOVERY_GAP_MS = 15000;
@@ -115,9 +115,6 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
     }
     else if (status === 409 && text === PROFILE_REQUIRED) {
       fail(text, 'profile');
-    }
-    else if (status === 403) {
-      fail(text, 'subscription');
     }
     else if (status === 404) {
       fail('This title has no video yet.');
@@ -457,8 +454,7 @@ const VideoPlayer = ({ contentId }: { contentId: number }) => {
               <div className="video-error">
                 <p>{message}</p>
                 {help === 'signin' && <Link to="/login">Sign in</Link>}
-                {help === 'profile' && <Link to="/streaming">Create your streaming profile</Link>}
-                {help === 'subscription' && <Link to="/streaming">Renew your subscription</Link>}
+                {help === 'profile' && <Link to={PROFILE}>Set up your profile</Link>}
                 <button type="button" onClick={() => void begin()}>Try again</button>
               </div>
             )}

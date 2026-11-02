@@ -1,33 +1,26 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import Cover from './Cover';
 
 interface CoverCardProps {
   to: string;
-  cover: string | null;
-  placeholder: string;
+  cover: string | null | undefined;
+  kind: string;
   title: string;
   sub: string;
   meta?: string;
+  tags?: string[];
 }
 
-const CoverCard = ({ to, cover, placeholder, title, sub, meta }: CoverCardProps) => {
-  const [failed, setFailed] = useState<string | null>(null);
-  const shown = cover && failed !== cover ? cover : null;
-
-  return (
-    <Link to={to} className="card album-card">
-      <span className="album-cover">
-        {shown ? (
-          <img className="album-art" src={shown} alt="" loading="lazy" onError={() => setFailed(shown)} />
-        ) : (
-          <span className="cover-placeholder" aria-hidden="true">{placeholder}</span>
-        )}
-      </span>
-      <span className="card-title">{title}</span>
-      <span className="card-sub">{sub}</span>
-      {meta && <span className="card-meta">{meta}</span>}
-    </Link>
-  );
-};
+const CoverCard = ({ to, cover, kind, title, sub, meta, tags }: CoverCardProps) => (
+  <Link to={to} className="card album-card">
+    <span className="album-cover">
+      <Cover src={cover} title={title} kind={kind} className="album-art" />
+    </span>
+    <span className="card-title">{title}</span>
+    <span className="card-sub">{sub}</span>
+    {meta && <span className="card-meta">{meta}</span>}
+    {tags && tags.length > 0 && <span className="card-tags">{tags.join(' · ')}</span>}
+  </Link>
+);
 
 export default CoverCard;

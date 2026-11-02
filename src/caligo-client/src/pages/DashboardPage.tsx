@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatDateTime, parseServerDate } from '../dates';
 import type { PagedResult, PostSummary } from '../types';
 import TopNowPanel from '../components/TopNowPanel';
-import TrendingPanel from '../components/TrendingPanel';
 
 type Tab = 'all' | 'mine';
 
@@ -100,16 +99,13 @@ const DashboardPage = () => {
 
       <p className="status-line">Signed in as <strong>{user?.name}</strong> ({user?.roles.join(', ') || 'no role'})</p>
 
-      <TrendingPanel />
       {canWrite && <TopNowPanel />}
 
       {loading && <p className="status-line">Loading…</p>}
       {error && <p className="form-error">{error}</p>}
 
       {!loading && posts.length === 0 && (
-        <p className="status-line">
-          {canWrite ? 'No posts yet, write your first one!' : 'Nothing to manage, your account has read access.'}
-        </p>
+        <p className="status-line">No posts yet, write your first one!</p>
       )}
 
       <ul className="dashboard-list">

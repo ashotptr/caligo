@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { catalogError, formatCount, formatDay, formatDuration, formatRating, kindLabel, statusOf } from '../catalog';
 import CommentsSection from '../components/CommentsSection';
+import DetailHeader from '../components/DetailHeader';
 import MediaAdmin from '../components/MediaAdmin';
 import RadioQueueButton from '../components/RadioQueueButton';
 import ReviewsSection from '../components/ReviewsSection';
@@ -107,7 +108,8 @@ const ContentDetailPage = () => {
       title: content.title,
       artist: primaryArtist?.name ?? '',
       album: song.albums[0]?.title ?? song.singles[0]?.title ?? '',
-      audioUri: song.audioUri
+      audioUri: song.audioUri,
+      coverUri: content.coverUri
     }], 0);
   };
 
@@ -115,13 +117,14 @@ const ContentDetailPage = () => {
     <article className="post-detail">
       <Link to={TITLES} className="back-link">← Thesaurarium</Link>
 
-      <h1>{content.title}</h1>
-      <p className="post-meta">
-        {kindLabel(content.kind)} · {formatDay(content.releaseDate)} · {formatDuration(content.duration, content.kind)} · {formatRating(content.averageRating)}
-      </p>
-      <p className="post-meta">
-        {plural(content.views, content.kind === 'song' ? 'listen' : 'view')} · {plural(content.interactions, 'reaction')} · {plural(content.comments, 'comment')}
-      </p>
+      <DetailHeader cover={content.coverUri} title={content.title} kind={kindLabel(content.kind)}>
+        <p className="post-meta">
+          {kindLabel(content.kind)} · {formatDay(content.releaseDate)} · {formatDuration(content.duration, content.kind)} · {formatRating(content.averageRating)}
+        </p>
+        <p className="post-meta">
+          {plural(content.views, content.kind === 'song' ? 'listen' : 'view')} · {plural(content.interactions, 'reaction')} · {plural(content.comments, 'comment')}
+        </p>
+      </DetailHeader>
 
       {content.genres.length > 0 && (
         <p className="post-tags">

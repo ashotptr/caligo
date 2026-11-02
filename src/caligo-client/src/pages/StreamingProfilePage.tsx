@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
-import { catalogError, formatAmount, formatDay, kindLabel, planFacts, planName, statusOf } from '../catalog';
+import { catalogError, formatDay, kindLabel, statusOf } from '../catalog';
 import { formatDateTime } from '../dates';
 import { titlePath } from '../thesaurarium';
-import type { Plan, Recommendation, Spending, StreamingNotification, StreamingProfile, WatchEntry } from '../types';
+import type { Recommendation, StreamingNotification, StreamingProfile, WatchEntry } from '../types';
 
 const GENDERS = ['Female', 'Male', 'Other'];
+
+const REASONS: Record<string, string> = {
+  'Jaccard index': 'similar to your history'
+};
+
+const HIDDEN_NOTIFICATIONS = new Set(['Subscription about to expire']);
 
 const position = (seconds: number | null): string => {
   if (seconds == null) {
@@ -19,9 +25,7 @@ const position = (seconds: number | null): string => {
 };
 
 const StreamingProfilePage = () => {
-  const [plans, setPlans] = useState<Plan[]>([]);
   const [profile, setProfile] = useState<StreamingProfile | null>(null);
-  const [spending, setSpending] = useState<Spending | null>(null);
   const [history, setHistory] = useState<WatchEntry[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [notifications, setNotifications] = useState<StreamingNotification[]>([]);
@@ -33,20 +37,17 @@ const StreamingProfilePage = () => {
   const [lastName, setLastName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState(GENDERS[0]);
-  const [planId, setPlanId] = useState<number | null>(null);
 
   const loadActivity = useCallback(async () => {
-    const [spent, watched, recommended, notified] = await Promise.all([
-      api.get<Spending>('/api/me/spending'),
+    const [watched, recommended, notified] = await Promise.all([
       api.get<WatchEntry[]>('/api/me/history'),
       api.get<Recommendation[]>('/api/me/recommendations'),
       api.get<StreamingNotification[]>('/api/me/notifications')
     ]);
 
-    setSpending(spent.data);
     setHistory(watched.data);
     setRecommendations(recommended.data);
-    setNotifications(notified.data);
+    setNotifications(notified.data.filter(notification => !HIDDEN_NOTIFICATIONS.has(notification.reason)));
   }, []);
 
   useEffect(() => {
@@ -54,28 +55,16 @@ const StreamingProfilePage = () => {
 
     const load = async () => {
       try {
-        const available = await api.get<Plan[]>('/api/subscription/plans');
+        const mine = await api.get<StreamingProfile>('/api/me/streaming-profile');
 
         if (cancelled) return;
 
-        setPlans(available.data);
-        setPlanId(current => current ?? available.data[0]?.subscriptionPlanId ?? null);
-
-        try {
-          const mine = await api.get<StreamingProfile>('/api/me/streaming-profile');
-
-          if (cancelled) return;
-
-          setProfile(mine.data);
-          setPlanId(mine.data.subscriptionPlanId);
-          await loadActivity();
-        } catch (err) {
-          if (statusOf(err) !== 404) {
-            throw err;
-          }
-        }
+        setProfile(mine.data);
+        await loadActivity();
       } catch (err) {
-        if (!cancelled) setError(catalogError(err, 'Could not load your streaming profile.'));
+        if (!cancelled && statusOf(err) !== 404) {
+          setError(catalogError(err, 'Could not load your profile.'));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -97,30 +86,13 @@ const StreamingProfilePage = () => {
         firstName,
         lastName,
         dateOfBirth,
-        gender,
-        subscriptionPlanId: planId
+        gender
       });
 
       setProfile(response.data);
       await loadActivity();
     } catch (err) {
-      setError(catalogError(err, 'Could not create the profile.'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const renew = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
-    try {
-      const response = await api.post<StreamingProfile>('/api/me/subscription', { subscriptionPlanId: planId });
-
-      setProfile(response.data);
-      await loadActivity();
-    } catch (err) {
-      setError(catalogError(err, 'Could not renew the subscription.'));
+      setError(catalogError(err, 'Could not save your profile.'));
     } finally {
       setBusy(false);
     }
@@ -130,34 +102,13 @@ const StreamingProfilePage = () => {
     return <p className="status-line">Loading…</p>;
   }
 
-  const planPicker = (
-    <fieldset className="schedule-field">
-      <legend>Plan</legend>
-      {plans.map(plan => (
-        <label key={plan.subscriptionPlanId} className="choice plan-choice">
-          <input
-            type="radio"
-            name="plan"
-            checked={planId === plan.subscriptionPlanId}
-            onChange={() => setPlanId(plan.subscriptionPlanId)}
-          />
-          <span>
-            <strong>{planName(plan)}</strong> · {formatAmount(plan.monthlyPrice)} a month
-            <span className="hint plan-facts">{planFacts(plan).join(' · ')}</span>
-          </span>
-        </label>
-      ))}
-    </fieldset>
-  );
-
   if (!profile) {
     return (
       <div className="editor-page">
-        <h1>Streaming profile</h1>
+        <h1>Your profile</h1>
         <p className="lede">
-          Rating, commenting, history and recommendations live in the streaming catalog, which keeps its own
-          list of users. This creates yours and links it to your Caligo account. Nothing is charged: the first
-          month is only written down as a payment.
+          Set up your profile to rate and comment on titles, keep a history of what you watch and listen to,
+          and get recommendations.
         </p>
 
         {error && <p className="form-error">{error}</p>}
@@ -187,21 +138,17 @@ const StreamingProfilePage = () => {
             </select>
           </label>
 
-          {planPicker}
-
-          <button type="submit" disabled={busy || planId === null}>
-            {busy ? 'Creating…' : 'Create profile'}
+          <button type="submit" disabled={busy}>
+            {busy ? 'Saving…' : 'Set up profile'}
           </button>
         </form>
       </div>
     );
   }
 
-  const currentPlan = plans.find(plan => plan.subscriptionPlanId === profile.subscriptionPlanId);
-
   return (
     <div className="editor-page">
-      <h1>{[profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Streaming profile'}</h1>
+      <h1>{[profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Your profile'}</h1>
       <p className="post-meta">
         {profile.email} · born {formatDay(profile.dob)} · {profile.gender}
       </p>
@@ -209,54 +156,16 @@ const StreamingProfilePage = () => {
       {error && <p className="form-error">{error}</p>}
 
       <section className="catalog-section">
-        <h2>
-          Subscription{' '}
-          <span className={profile.active ? 'badge badge-scheduled' : 'badge badge-expired'}>
-            {profile.active ? 'active' : 'expired'}
-          </span>
-        </h2>
-        <p className="status-line">
-          {currentPlan ? planName(currentPlan) : `Plan ${profile.subscriptionPlanId}`} · {formatDay(profile.subscriptionStartDate)} to {formatDay(profile.subscriptionEndDate)}
-        </p>
-
-        <form onSubmit={renew} className="editor-form">
-          {planPicker}
-          <button type="submit" disabled={busy || planId === null}>
-            {busy ? 'Renewing…' : 'Renew for 30 days'}
-          </button>
-        </form>
-      </section>
-
-      <section className="catalog-section">
-        <h2>Spending</h2>
-        <p className="status-line">
-          {spending ? <>All time: <strong>{formatAmount(spending.allTimeSpending)}</strong></> : 'Loading…'}
-        </p>
-        <ul className="dashboard-list">
-          {(spending?.payments ?? []).map(payment => {
-            const plan = plans.find(candidate => candidate.subscriptionPlanId === payment.subscriptionPlanId);
-
-            return (
-              <li key={payment.paymentId}>
-                <span>{formatDateTime(payment.date)} · {plan ? planName(plan) : `plan ${payment.subscriptionPlanId}`}</span>
-                <span className="post-meta">{formatAmount(payment.amount)}</span>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      <section className="catalog-section">
         <h2>Recommended for you</h2>
         {recommendations.length === 0 && (
-          <p className="status-line">Log a watch or a listen on any title and recommendations appear here.</p>
+          <p className="status-line">Watch or listen to any title and recommendations appear here.</p>
         )}
         <ul className="dashboard-list">
           {recommendations.map(item => (
             <li key={item.contentId}>
               <Link to={titlePath(item.contentId)}>{item.title}</Link>
               <span className="post-meta">
-                {[kindLabel(item.kind), item.reason, formatDay(item.date)].filter(Boolean).join(' · ')}
+                {[kindLabel(item.kind), item.reason ? REASONS[item.reason] ?? item.reason : undefined, formatDay(item.date)].filter(Boolean).join(' · ')}
               </span>
             </li>
           ))}

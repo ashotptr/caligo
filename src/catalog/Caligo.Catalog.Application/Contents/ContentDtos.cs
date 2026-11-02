@@ -23,6 +23,7 @@ public class ContentSummaryDto
     public DateOnly ReleaseDate { get; init; }
     public float? AverageRating { get; init; }
     public List<string> Genres { get; init; } = new();
+    public string? CoverUri { get; init; }
 }
 
 public record MovieDto(int MovieId, float? Budget, float? BoxOffice);
@@ -64,6 +65,7 @@ public class ContentDetailDto
     public int Views { get; init; }
     public int Interactions { get; init; }
     public int Comments { get; init; }
+    public string? CoverUri { get; init; }
 }
 
 public record SimilarContentDto(int ContentId, string Title, string Kind, float Similarity);
@@ -86,7 +88,7 @@ public record ActorDetailDto(
     string? ProfilePictureUri,
     List<ContentSummaryDto> Contents);
 
-public record ArtistSummaryDto(int ArtistId, string Name, int Songs);
+public record ArtistSummaryDto(int ArtistId, string Name, int Songs, string? CoverUri);
 
 public record AlbumSummaryDto(int AlbumId, string Title, DateOnly? ReleaseDate, string? CoverUri, List<string> Artists, int Songs);
 

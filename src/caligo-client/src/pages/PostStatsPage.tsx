@@ -71,7 +71,7 @@ const PostStatsPage = () => {
 
   return (
     <div className="stats-page">
-      <Link to="/dashboard" className="back-link">← Dashboard</Link>
+      <Link to="/dashboard" className="back-link">← My Posts</Link>
       <h1><Link to={`/posts/${id}`}>{title}</Link></h1>
       <p className="post-meta">Statistics from the analytics store, updated within seconds</p>
 

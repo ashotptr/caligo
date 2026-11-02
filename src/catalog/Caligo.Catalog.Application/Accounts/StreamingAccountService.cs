@@ -49,7 +49,7 @@ public class StreamingAccountService
 
         if (await _accounts.FindUserIdAsync(caller.UserId!, cancellationToken) is not null)
         {
-            return Result<StreamingProfileDto>.Conflict("You already have a streaming profile.");
+            return Result<StreamingProfileDto>.Conflict("You already have a profile.");
         }
 
         if (!Enum.TryParse<Gender>(command.Gender, ignoreCase: true, out var gender) || !Enum.IsDefined(gender))
@@ -72,88 +72,36 @@ public class StreamingAccountService
             return Result<StreamingProfileDto>.Invalid(problem);
         }
 
-        var plan = await _accounts.FindPlanAsync(command.SubscriptionPlanId, cancellationToken);
+        var plan = command.SubscriptionPlanId is { } planId
+            ? await _accounts.FindPlanAsync(planId, cancellationToken)
+            : (await _accounts.GetPlansAsync(cancellationToken)).FirstOrDefault();
 
         if (plan is null)
         {
-            return Result<StreamingProfileDto>.Invalid("Unknown subscription plan.");
+            return Result<StreamingProfileDto>.Invalid("Unknown plan.");
         }
 
         if (await _accounts.EmailTakenAsync(email, cancellationToken))
         {
-            return Result<StreamingProfileDto>.Conflict("That e-mail already belongs to a streaming user.");
+            return Result<StreamingProfileDto>.Conflict(EmailTaken);
         }
 
         var user = StreamingUser.Create(
             command.FirstName!, command.LastName!, command.Dob, email, gender, plan.SubscriptionPlanId, today);
 
-        var created = await _accounts.CreateAsync(
-            user, caller.UserId!, PlanPricing.MonthlyPrice(plan.PaymentInfo), Now(), cancellationToken);
+        var created = await _accounts.CreateAsync(user, caller.UserId!, cancellationToken);
 
         return created is null
-            ? Result<StreamingProfileDto>.Conflict("That e-mail already belongs to a streaming user.")
+            ? Result<StreamingProfileDto>.Conflict(EmailTaken)
             : Result<StreamingProfileDto>.Ok(StreamingProfileDto.From(created, today));
     }
 
-    public async Task<Result<StreamingProfileDto>> RenewAsync(
-        Caller caller, int subscriptionPlanId, CancellationToken cancellationToken = default)
-    {
-        if (!caller.IsAuthenticated)
-        {
-            return Result<StreamingProfileDto>.Unauthorized();
-        }
+    public const string ProfileRequired = "Set up your profile first.";
 
-        var user = await _accounts.FindByIdentityAsync(caller.UserId!, cancellationToken);
-
-        if (user is null)
-        {
-            return Result<StreamingProfileDto>.Conflict(ProfileRequired);
-        }
-
-        var plan = await _accounts.FindPlanAsync(subscriptionPlanId, cancellationToken);
-
-        if (plan is null)
-        {
-            return Result<StreamingProfileDto>.Invalid("Unknown subscription plan.");
-        }
-
-        var today = Today();
-
-        user.Renew(plan.SubscriptionPlanId, today);
-
-        await _accounts.RenewAsync(user, PlanPricing.MonthlyPrice(plan.PaymentInfo), Now(), cancellationToken);
-
-        return Result<StreamingProfileDto>.Ok(StreamingProfileDto.From(user, today));
-    }
-
-    public async Task<Result<SpendingDto>> GetSpendingAsync(Caller caller, CancellationToken cancellationToken = default)
-    {
-        if (!caller.IsAuthenticated)
-        {
-            return Result<SpendingDto>.Unauthorized();
-        }
-
-        var userId = await _accounts.FindUserIdAsync(caller.UserId!, cancellationToken);
-
-        if (userId is null)
-        {
-            return Result<SpendingDto>.Conflict(ProfileRequired);
-        }
-
-        var total = await _accounts.GetAllTimeSpendingAsync(userId.Value, cancellationToken);
-        var payments = await _accounts.GetPaymentsAsync(userId.Value, cancellationToken);
-
-        return Result<SpendingDto>.Ok(new SpendingDto(
-            total,
-            payments.Select(p => new PaymentDto(p.PaymentId, p.Date, p.Amount, p.SubscriptionPlanId)).ToList()));
-    }
-
-    public const string ProfileRequired = "Create your streaming profile first.";
+    private const string EmailTaken = "Your e-mail address already has a profile.";
 
     private static PlanDto ToDto(SubscriptionPlan plan) => new(
         plan.SubscriptionPlanId, plan.PaymentInfo, plan.PlanInfo, PlanPricing.MonthlyPrice(plan.PaymentInfo));
 
     private DateOnly Today() => DateOnly.FromDateTime(_time.GetUtcNow().UtcDateTime);
-
-    private DateTime Now() => DateTime.SpecifyKind(_time.GetUtcNow().UtcDateTime, DateTimeKind.Unspecified);
 }

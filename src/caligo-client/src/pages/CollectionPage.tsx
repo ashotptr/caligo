@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { catalogError, statusOf } from '../catalog';
 import BackLink from '../components/BackLink';
+import DetailHeader from '../components/DetailHeader';
 import TrackList from '../components/TrackList';
 import type { TrackRow } from '../components/TrackList';
 import { useCollections } from '../contexts/CollectionsContext';
@@ -119,41 +120,45 @@ const CollectionPage = () => {
     <article className="post-detail">
       <BackLink fallback={COLLECTIONS} />
 
-      {renaming ? (
-        <form className="collection-rename" onSubmit={rename}>
-          <input
-            type="text"
-            value={name}
-            maxLength={100}
-            aria-label="Collection Name"
-            autoFocus
-            onChange={event => setName(event.target.value)}
-          />
-          <button type="submit" disabled={name.trim().length === 0}>Save</button>
-          <button type="button" className="btn-secondary" onClick={() => setRenaming(false)}>Cancel</button>
-        </form>
-      ) : (
-        <h1>{collection.name}</h1>
-      )}
-      {renameError && <p className="form-error">{renameError}</p>}
+      <DetailHeader
+        cover={collection.titles.find(title => title.coverUri)?.coverUri}
+        title={collection.name}
+        kind="Collection"
+        heading={renaming ? (
+          <form className="collection-rename" onSubmit={rename}>
+            <input
+              type="text"
+              value={name}
+              maxLength={100}
+              aria-label="Collection Name"
+              autoFocus
+              onChange={event => setName(event.target.value)}
+            />
+            <button type="submit" disabled={name.trim().length === 0}>Save</button>
+            <button type="button" className="btn-secondary" onClick={() => setRenaming(false)}>Cancel</button>
+          </form>
+        ) : undefined}
+      >
+        {renameError && <p className="form-error">{renameError}</p>}
 
-      <p className="post-meta collection-tools">
-        Collection · {collection.titles.length} title{collection.titles.length === 1 ? '' : 's'}
-        {' · '}
-        <button
-          type="button"
-          className="link-button"
-          onClick={() => {
-            setName(collection.name);
-            setRenameError(null);
-            setRenaming(true);
-          }}
-        >
-          Rename
-        </button>
-        {' · '}
-        <button type="button" className="link-button danger" onClick={remove}>Delete</button>
-      </p>
+        <p className="post-meta collection-tools">
+          Collection · {collection.titles.length} title{collection.titles.length === 1 ? '' : 's'}
+          {' · '}
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              setName(collection.name);
+              setRenameError(null);
+              setRenaming(true);
+            }}
+          >
+            Rename
+          </button>
+          {' · '}
+          <button type="button" className="link-button danger" onClick={remove}>Delete</button>
+        </p>
+      </DetailHeader>
 
       <section className="catalog-section">
         <TrackList tracks={rows} album={collection.name} download={collection.name} inCollection onRemove={removeTitle} />

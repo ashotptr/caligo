@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { catalogError, formatDay, formatDuration, statusOf } from '../catalog';
 import BackLink from '../components/BackLink';
+import DetailHeader from '../components/DetailHeader';
 import RotationButton from '../components/RotationButton';
 import TrackList from '../components/TrackList';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,14 +16,12 @@ const ReleasePage = ({ kind }: { kind: 'album' | 'single' }) => {
 
   const [release, setRelease] = useState<ReleaseDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [coverFailed, setCoverFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     setRelease(null);
     setError(null);
-    setCoverFailed(false);
 
     api
       .get<ReleaseDetail>(`/api/${kind}s/${id}`)
@@ -60,30 +59,20 @@ const ReleasePage = ({ kind }: { kind: 'album' | 'single' }) => {
     <article className="post-detail">
       <BackLink fallback={THESAURARIUM} />
 
-      <div className="portrait-header">
-        <span className="release-cover">
-          {release.coverUri && !coverFailed ? (
-            <img src={release.coverUri} alt="" onError={() => setCoverFailed(true)} />
-          ) : (
-            <span className="cover-placeholder" aria-hidden="true">No Cover</span>
-          )}
-        </span>
-        <div>
-          <h1>{release.title}</h1>
-          <p className="post-meta">
-            {kind === 'album' ? 'Album' : 'Single'}
-            {release.artists.map(artist => (
-              <span key={artist.id}>
-                {' · '}
-                <Link to={artistPath(artist.id)}>{artist.name}</Link>
-              </span>
-            ))}
-            {release.releaseDate ? ` · ${formatDay(release.releaseDate)}` : ''}
-            {` · ${release.tracks.length} song${release.tracks.length === 1 ? '' : 's'}`}
-            {minutes > 0 ? ` · ${formatDuration(minutes, 'other')}` : ''}
-          </p>
-        </div>
-      </div>
+      <DetailHeader cover={release.coverUri} title={release.title} kind={kind === 'album' ? 'Album' : 'Single'}>
+        <p className="post-meta">
+          {kind === 'album' ? 'Album' : 'Single'}
+          {release.artists.map(artist => (
+            <span key={artist.id}>
+              {' · '}
+              <Link to={artistPath(artist.id)}>{artist.name}</Link>
+            </span>
+          ))}
+          {release.releaseDate ? ` · ${formatDay(release.releaseDate)}` : ''}
+          {` · ${release.tracks.length} song${release.tracks.length === 1 ? '' : 's'}`}
+          {minutes > 0 ? ` · ${formatDuration(minutes, 'other')}` : ''}
+        </p>
+      </DetailHeader>
 
       {release.description && <p className="content-description">{release.description}</p>}
 

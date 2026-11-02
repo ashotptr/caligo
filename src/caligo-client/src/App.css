@@ -1633,12 +1633,60 @@ a.tag:hover {
   filter: grayscale(0%);
 }
 
-.artwork-missing {
+.cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-art {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
-  font-size: 2rem;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 28% 22%, hsl(var(--cover-hue) 30% 24% / 0.85), transparent 62%),
+    linear-gradient(145deg, hsl(var(--cover-hue) 24% 15%), hsl(calc(var(--cover-hue) + 45) 20% 6%));
+  color: var(--text-main);
+}
+
+.cover-initials {
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+.cover-kind {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(224, 224, 224, 0.6);
+}
+
+.release-cover .cover-art {
+  filter: grayscale(20%);
+}
+
+.release-cover .cover-initials {
+  font-size: 2.4rem;
+}
+
+.portrait-text {
+  min-width: 0;
+}
+
+.collections-toolbar {
+  display: flex;
+  margin: 4px 0 20px;
 }
 
 .portrait-header {
@@ -1650,24 +1698,6 @@ a.tag:hover {
 
 .portrait-header h1 {
   margin: 0;
-}
-
-.portrait {
-  width: 96px;
-  height: 96px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid var(--border);
-  background: #1a1a1a;
-  filter: grayscale(20%);
-}
-
-.portrait.cover {
-  width: 144px;
-  height: 144px;
-  border-radius: 4px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
 .data-table-wrap {
@@ -2384,18 +2414,6 @@ a.tag:hover {
   padding: 10px;
   color: #666;
   font-size: 13px;
-}
-
-.cover-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  background: #111;
-  color: var(--border);
-  font-size: 1.1rem;
-  font-weight: 600;
 }
 
 .card-meta {
@@ -3176,6 +3194,11 @@ a.tag:hover {
   .release-cover {
     width: 120px;
     height: 120px;
+  }
+
+  .album-cover .cover-initials,
+  .release-cover .cover-initials {
+    font-size: 2rem;
   }
 
   .radio-card {

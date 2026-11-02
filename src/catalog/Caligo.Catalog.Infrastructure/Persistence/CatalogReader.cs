@@ -74,11 +74,13 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 rows.RemoveAt(rows.Count - 1);
             }
 
-            var genres = await GenresOfAsync(rows.Select(r => r.ContentId).ToList(), cancellationToken);
+            var ids = rows.Select(r => r.ContentId).ToList();
+            var genres = await GenresOfAsync(ids, cancellationToken);
+            var covers = await CoversOfAsync(ids, cancellationToken);
 
             return new PagedResult<ContentSummaryDto>
             {
-                Items = rows.Select(r => ToSummary(r, genres)).ToList(),
+                Items = rows.Select(r => ToSummary(r, genres, covers)).ToList(),
                 NextCursor = hasMore && rows.Count > 0
                     ? new ContentCursor(rows[^1].ReleaseDate, rows[^1].ContentId).Encode()
                     : null
@@ -179,7 +181,8 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 Song = await SongOfAsync(contentId, cancellationToken),
                 Views = await _db.WatchHistory.CountAsync(w => w.ContentId == contentId, cancellationToken),
                 Interactions = await _db.Interactions.CountAsync(i => i.ContentId == contentId, cancellationToken),
-                Comments = await _db.Comments.CountAsync(c => c.ContentId == contentId, cancellationToken)
+                Comments = await _db.Comments.CountAsync(c => c.ContentId == contentId, cancellationToken),
+                CoverUri = (await CoversOfAsync(new List<int> { contentId }, cancellationToken)).GetValueOrDefault(contentId)
             };
         }
 
@@ -315,7 +318,9 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 .ThenByDescending(r => r.ContentId)
                 .ToListAsync(cancellationToken);
 
-            var genres = await GenresOfAsync(rows.Select(r => r.ContentId).ToList(), cancellationToken);
+            var ids = rows.Select(r => r.ContentId).ToList();
+            var genres = await GenresOfAsync(ids, cancellationToken);
+            var covers = await CoversOfAsync(ids, cancellationToken);
 
             return new ActorDetailDto(
                 actor.ActorId,
@@ -325,14 +330,17 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 actor.Biography,
                 actor.Gender.ToString(),
                 actor.ProfilePictureUri,
-                rows.Select(r => ToSummary(r, genres)).ToList());
+                rows.Select(r => ToSummary(r, genres, covers)).ToList());
         }
 
         public async Task<IReadOnlyList<ArtistSummaryDto>> GetArtistsAsync(
             string? search, int limit, CancellationToken cancellationToken = default)
         {
             var query = _db.Artists.AsNoTracking();
-            var hiddenSongs = (await _viewer.HiddenAsync(cancellationToken)).SongIds;
+            var hidden = await _viewer.HiddenAsync(cancellationToken);
+            var hiddenSongs = hidden.SongIds;
+            var hiddenAlbums = hidden.AlbumIds;
+            var hiddenSingles = hidden.SingleIds;
 
             if (search is not null)
             {
@@ -348,7 +356,21 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 .Select(a => new ArtistSummaryDto(
                     a.ArtistId,
                     a.Name,
-                    _db.SongArtists.Count(link => link.ArtistId == a.ArtistId && !hiddenSongs.Contains(link.SongId))))
+                    _db.SongArtists.Count(link => link.ArtistId == a.ArtistId && !hiddenSongs.Contains(link.SongId)),
+                    a.PictureUri != null && a.PictureUri != ""
+                        ? a.PictureUri
+                        : (from link in _db.AlbumArtists
+                           join album in _db.Albums on link.AlbumId equals album.AlbumId
+                           where link.ArtistId == a.ArtistId && !hiddenAlbums.Contains(album.AlbumId)
+                                 && album.CoverUri != null && album.CoverUri != ""
+                           orderby album.ReleaseDate descending, album.AlbumId descending
+                           select album.CoverUri).FirstOrDefault()
+                          ?? (from link in _db.SingleArtists
+                              join single in _db.Singles on link.SingleId equals single.SingleId
+                              where link.ArtistId == a.ArtistId && !hiddenSingles.Contains(single.SingleId)
+                                    && single.CoverUri != null && single.CoverUri != ""
+                              orderby single.ReleaseDate descending, single.SingleId descending
+                              select single.CoverUri).FirstOrDefault()))
                 .ToListAsync(cancellationToken);
         }
 
@@ -627,7 +649,8 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 .Select(l => new NamedDto(l.LanguageId, l.Name))
                 .ToListAsync(cancellationToken);
 
-        private static ContentSummaryDto ToSummary(ContentRow row, ILookup<int, string> genres) => new()
+        private static ContentSummaryDto ToSummary(
+            ContentRow row, ILookup<int, string> genres, IReadOnlyDictionary<int, string> covers) => new()
         {
             ContentId = row.ContentId,
             Title = row.Title,
@@ -635,8 +658,48 @@ namespace Caligo.Catalog.Infrastructure.Persistence
             Duration = row.Duration,
             ReleaseDate = row.ReleaseDate,
             AverageRating = row.AverageRating,
-            Genres = genres[row.ContentId].ToList()
+            Genres = genres[row.ContentId].ToList(),
+            CoverUri = covers.GetValueOrDefault(row.ContentId)
         };
+
+        private async Task<Dictionary<int, string>> CoversOfAsync(List<int> contentIds, CancellationToken cancellationToken)
+        {
+            var covers = new Dictionary<int, string>();
+
+            if (contentIds.Count == 0)
+            {
+                return covers;
+            }
+
+            var hidden = await _viewer.HiddenAsync(cancellationToken);
+            var hiddenAlbums = hidden.AlbumIds;
+            var hiddenSingles = hidden.SingleIds;
+
+            var albumCovers = await (
+                from s in _db.Songs.AsNoTracking()
+                join link in _db.AlbumSongs on s.SongId equals link.SongId
+                join album in _db.Albums on link.AlbumId equals album.AlbumId
+                where contentIds.Contains(s.ContentId) && !hiddenAlbums.Contains(album.AlbumId)
+                      && album.CoverUri != null && album.CoverUri != ""
+                orderby album.AlbumId
+                select new { s.ContentId, Cover = album.CoverUri! }).ToListAsync(cancellationToken);
+
+            var singleCovers = await (
+                from s in _db.Songs.AsNoTracking()
+                join link in _db.SingleSongs on s.SongId equals link.SongId
+                join single in _db.Singles on link.SingleId equals single.SingleId
+                where contentIds.Contains(s.ContentId) && !hiddenSingles.Contains(single.SingleId)
+                      && single.CoverUri != null && single.CoverUri != ""
+                orderby single.SingleId
+                select new { s.ContentId, Cover = single.CoverUri! }).ToListAsync(cancellationToken);
+
+            foreach (var row in albumCovers.Concat(singleCovers))
+            {
+                covers.TryAdd(row.ContentId, row.Cover);
+            }
+
+            return covers;
+        }
 
         private async Task<ILookup<int, string>> GenresOfAsync(List<int> contentIds, CancellationToken cancellationToken)
         {

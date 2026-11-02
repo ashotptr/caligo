@@ -128,6 +128,7 @@ export interface ContentSummary {
   releaseDate: string;
   averageRating: number | null;
   genres: string[];
+  coverUri: string | null;
 }
 
 export interface SongArtist {
@@ -175,6 +176,7 @@ export interface ContentDetail {
   views: number;
   interactions: number;
   comments: number;
+  coverUri: string | null;
 }
 
 export interface SimilarContent {
@@ -236,6 +238,7 @@ export interface ArtistSummary {
   artistId: number;
   name: string;
   songs: number;
+  coverUri: string | null;
 }
 
 export interface AlbumSummary {
@@ -268,13 +271,6 @@ export interface ReleaseDetail {
   tracks: Track[];
 }
 
-export interface Plan {
-  subscriptionPlanId: number;
-  paymentInfo: string;
-  planInfo: string;
-  monthlyPrice: number;
-}
-
 export interface StreamingProfile {
   userId: number;
   firstName: string | null;
@@ -282,15 +278,6 @@ export interface StreamingProfile {
   dob: string;
   email: string;
   gender: string;
-  subscriptionPlanId: number;
-  subscriptionStartDate: string;
-  subscriptionEndDate: string;
-  active: boolean;
-}
-
-export interface Spending {
-  allTimeSpending: number;
-  payments: { paymentId: number; date: string; amount: number; subscriptionPlanId: number }[];
 }
 
 export interface Interaction {

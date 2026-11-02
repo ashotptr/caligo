@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
-import { statusOf } from '../catalog';
+import { PROFILE, statusOf } from '../catalog';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 
@@ -36,7 +36,7 @@ const ListenLog = ({ contentId }: { contentId: number }) => {
   }
 
   if (status === 'profile') {
-    return <Link to="/streaming">create a streaming profile to keep history</Link>;
+    return <Link to={PROFILE}>set up your profile to keep history</Link>;
   }
 
   return (

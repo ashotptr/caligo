@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { catalogError, formatDay, statusOf } from '../catalog';
-import Artwork from '../components/Artwork';
 import ContentCard from '../components/ContentCard';
+import DetailHeader from '../components/DetailHeader';
 import { TITLES } from '../thesaurarium';
 import type { ActorDetail } from '../types';
 
@@ -52,15 +52,11 @@ const ActorPage = () => {
     <article className="post-detail">
       <Link to={TITLES} className="back-link">← Thesaurarium</Link>
 
-      <div className="portrait-header">
-        <Artwork src={actor.profilePictureUri} className="portrait" />
-        <div>
-          <h1>{actor.name}</h1>
-          <p className="post-meta">
-            Born {formatDay(actor.dob)} · {actor.nationality} · {actor.gender}
-          </p>
-        </div>
-      </div>
+      <DetailHeader cover={actor.profilePictureUri} title={actor.name} kind="Actor">
+        <p className="post-meta">
+          Born {formatDay(actor.dob)} · {actor.nationality} · {actor.gender}
+        </p>
+      </DetailHeader>
 
       <p className="content-description">{actor.biography}</p>
 
@@ -68,11 +64,13 @@ const ActorPage = () => {
         <h2>In the Thesaurarium</h2>
         {actor.contents.length === 0 && <p className="status-line">Nothing yet.</p>}
         {actor.contents.length > 0 && (
-          <div className="card-grid">
+          <ul className="album-grid">
             {actor.contents.map(content => (
-              <ContentCard key={content.contentId} content={content} />
+              <li key={content.contentId}>
+                <ContentCard content={content} />
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
     </article>

@@ -4,6 +4,7 @@ import api from '../api/axios';
 import PostCard from '../components/PostCard';
 import type { PagedResult, PostStats, PostStatsResponse, PostSummary } from '../types';
 import SubscribeForm from '../components/SubscribeForm';
+import TrendingPanel from '../components/TrendingPanel';
 
 const PostsListPage = () => {
   const [posts, setPosts] = useState<PostSummary[]>([]);
@@ -92,6 +93,8 @@ const PostsListPage = () => {
           Posts matching “{activeQuery}” · <Link to="/">Clear</Link>
         </p>
       )}
+
+      {!activeQuery && <TrendingPanel />}
 
       {loading && <p className="status-line">Loading posts…</p>}
       {error && <p className="form-error">{error}</p>}

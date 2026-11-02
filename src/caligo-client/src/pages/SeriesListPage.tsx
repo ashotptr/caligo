@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import { catalogError, yearOf } from '../catalog';
+import CoverCard from '../components/CoverCard';
 import ThesaurariumNav from '../components/ThesaurariumNav';
 import { seriesPath } from '../thesaurarium';
 import type { SeriesSummary } from '../types';
@@ -35,15 +36,20 @@ const SeriesListPage = () => {
       )}
 
       {shown.length > 0 && (
-        <div className="card-grid">
+        <ul className="album-grid">
           {shown.map(item => (
-            <Link key={item.seriesId} to={seriesPath(item.seriesId)} className="card content-card">
-              <span className="card-kind">Series · {yearOf(item.releaseDate)}</span>
-              <span className="card-title">{item.title}</span>
-              <span className="card-sub">{item.seasons} season{item.seasons === 1 ? '' : 's'}</span>
-            </Link>
+            <li key={item.seriesId}>
+              <CoverCard
+                to={seriesPath(item.seriesId)}
+                cover={null}
+                kind="Series"
+                title={item.title}
+                sub={['Series', yearOf(item.releaseDate)].filter(part => part.length > 0).join(' · ')}
+                meta={`${item.seasons} season${item.seasons === 1 ? '' : 's'}`}
+              />
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

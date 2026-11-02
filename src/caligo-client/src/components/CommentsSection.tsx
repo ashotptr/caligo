@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
-import { catalogError, statusOf } from '../catalog';
+import { PROFILE, catalogError, statusOf } from '../catalog';
 import { useAuth } from '../contexts/AuthContext';
 import type { ContentComment } from '../types';
 
@@ -101,7 +101,7 @@ const CommentsSection = ({ contentId, onPosted }: { contentId: number; onPosted:
 
       {needsProfile && (
         <p className="notice">
-          Comments need a streaming profile. <Link to="/streaming">Create yours</Link> and come back.
+          Comments need a profile. <Link to={PROFILE}>Set yours up</Link> and come back.
         </p>
       )}
 

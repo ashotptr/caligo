@@ -12,7 +12,7 @@ const titleCount = (titles: number, songs: number): string =>
   `${titles} ${titles === songs ? 'track' : 'title'}${titles === 1 ? '' : 's'}`;
 
 const CollectionsPage = () => {
-  const { version } = useCollections();
+  const { version, createCollection } = useCollections();
   const [params] = useSearchParams();
   const query = (params.get('query') ?? '').toLowerCase();
 
@@ -47,9 +47,15 @@ const CollectionsPage = () => {
     <div>
       <ThesaurariumNav title="My Collections" />
 
+      <div className="collections-toolbar">
+        <button type="button" onClick={createCollection}>＋ Create Playlist</button>
+      </div>
+
       {collections === null && <p className="status-line">Loading...</p>}
       {error && <p className="form-error">{error}</p>}
-      {collections !== null && !error && shown.length === 0 && <p className="status-line">Nothing found.</p>}
+      {collections !== null && !error && shown.length === 0 && (
+        <p className="status-line">{query ? 'Nothing found.' : 'No collections yet.'}</p>
+      )}
 
       {shown.length > 0 && (
         <ul className="album-grid">
@@ -58,7 +64,7 @@ const CollectionsPage = () => {
               <CoverCard
                 to={collectionPath(collection.collectionId)}
                 cover={collection.coverUri}
-                placeholder="PL"
+                kind="Collection"
                 title={collection.name}
                 sub={titleCount(collection.titles, collection.songs)}
               />

@@ -312,7 +312,7 @@ public class PlaybackApiTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ALapsedSubscription_CannotStartAndSaysWhy()
+    public async Task AnEndedSubscriptionPeriod_StillStarts()
     {
         await EnsurePackagedAsync();
 
@@ -324,10 +324,9 @@ public class PlaybackApiTests : IAsyncLifetime
                 .ExecuteUpdateAsync(set => set.SetProperty(u => u.SubscriptionEndDate, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1)));
         }
 
-        var refused = await StartAsync(viewer, "device-a-0001");
+        var started = await StartAsync(viewer, "device-a-0001");
 
-        Assert.Equal(HttpStatusCode.Forbidden, refused.Status);
-        Assert.Equal(PlaybackService.SubscriptionInactive, refused.Text);
+        Assert.Equal(HttpStatusCode.OK, started.Status);
     }
 
     [Fact]

@@ -10,7 +10,7 @@ const AlbumGrid = ({ albums }: { albums: AlbumSummary[] }) => (
         <CoverCard
           to={albumPath(album.albumId)}
           cover={album.coverUri}
-          placeholder="No Cover"
+          kind="Album"
           title={album.title}
           sub={album.artists.join(', ') || 'Unknown'}
           meta={[yearOf(album.releaseDate), `${album.songs} song${album.songs === 1 ? '' : 's'}`]

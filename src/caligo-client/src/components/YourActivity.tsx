@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
-import { catalogError, statusOf, watchVerb } from '../catalog';
+import { PROFILE, catalogError, statusOf, watchVerb } from '../catalog';
 import { useAuth } from '../contexts/AuthContext';
 import type { ContentDetail, Interaction } from '../types';
 
@@ -67,7 +67,7 @@ const YourActivity = ({ content, onChanged, position }: YourActivityProps) => {
   if (needsProfile) {
     return (
       <p className="notice">
-        Rating, commenting and history need a streaming profile. <Link to="/streaming">Create yours</Link>, it takes a minute.
+        Rating, commenting and history need a profile. <Link to={PROFILE}>Set yours up</Link>, it takes a minute.
       </p>
     );
   }

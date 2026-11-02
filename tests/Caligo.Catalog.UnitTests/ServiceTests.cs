@@ -60,27 +60,29 @@ public class ServiceTests
     }
 
     [Fact]
-    public async Task CreatingAProfile_WritesTheUserWithThePlanPriceAsItsFirstPayment()
+    public async Task CreatingAProfile_UsesTheFirstPlan_AndRecordsNoPayment()
     {
         _blog.Setup(b => b.GetEmailAsync("identity-1", It.IsAny<CancellationToken>())).ReturnsAsync("ada@example.test");
-        _accounts.Setup(a => a.FindPlanAsync(4, It.IsAny<CancellationToken>()))
-                 .ReturnsAsync(new SubscriptionPlan { SubscriptionPlanId = 4, PaymentInfo = "{\"monthly_price\": \"€7.99\"}" });
-        _accounts.Setup(a => a.CreateAsync(
-                     It.IsAny<StreamingUser>(), "identity-1", It.IsAny<float>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-                 .ReturnsAsync((StreamingUser user, string _, float _, DateTime _, CancellationToken _) => user);
+        _accounts.Setup(a => a.GetPlansAsync(It.IsAny<CancellationToken>()))
+                 .ReturnsAsync(new List<SubscriptionPlan>
+                 {
+                     new() { SubscriptionPlanId = 4, PaymentInfo = "{\"monthly_price\": \"€7.99\"}" },
+                     new() { SubscriptionPlanId = 5, PaymentInfo = "{\"monthly_price\": \"€9.99\"}" }
+                 });
+        _accounts.Setup(a => a.CreateAsync(It.IsAny<StreamingUser>(), "identity-1", It.IsAny<CancellationToken>()))
+                 .ReturnsAsync((StreamingUser user, string _, CancellationToken _) => user);
 
         var result = await Accounts().CreateProfileAsync(
-            Reader, new CreateProfileCommand("Ada", "Lovelace", new DateOnly(1990, 1, 1), "female", 4));
+            Reader, new CreateProfileCommand("Ada", "Lovelace", new DateOnly(1990, 1, 1), "female"));
 
         Assert.True(result.IsSuccess);
         Assert.Equal("Female", result.Value!.Gender);
-        Assert.True(result.Value.Active);
+        Assert.Equal(4, result.Value.SubscriptionPlanId);
 
         _accounts.Verify(a => a.CreateAsync(
-            It.Is<StreamingUser>(u => u.Email == "ada@example.test" && u.Password == StreamingUser.ExternalPassword),
+            It.Is<StreamingUser>(u =>
+                u.Email == "ada@example.test" && u.Password == StreamingUser.ExternalPassword && u.SubscriptionPlanId == 4),
             "identity-1",
-            It.Is<float>(amount => Math.Abs(amount - 7.99f) < 0.001f),
-            It.Is<DateTime>(paid => paid.Kind == DateTimeKind.Unspecified),
             It.IsAny<CancellationToken>()));
     }
 

@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { catalogError, formatDay, statusOf } from '../catalog';
 import AlbumGrid from '../components/AlbumGrid';
-import Artwork from '../components/Artwork';
+import DetailHeader from '../components/DetailHeader';
 import TrackList from '../components/TrackList';
 import { ARTISTS, singlePath } from '../thesaurarium';
 import type { ArtistDetail } from '../types';
@@ -56,15 +56,15 @@ const ArtistDetailPage = () => {
     <article className="post-detail">
       <Link to={ARTISTS} className="back-link">← All artists</Link>
 
-      <div className="portrait-header">
-        <Artwork src={artist.pictureUri} className="portrait" />
-        <div>
-          <h1>{artist.name}</h1>
-          <p className="post-meta">
-            {['Artist', ...facts, `${artist.songs.length} song${artist.songs.length === 1 ? '' : 's'}`].join(' · ')}
-          </p>
-        </div>
-      </div>
+      <DetailHeader
+        cover={artist.pictureUri || artist.albums.find(album => album.coverUri)?.coverUri}
+        title={artist.name}
+        kind="Artist"
+      >
+        <p className="post-meta">
+          {['Artist', ...facts, `${artist.songs.length} song${artist.songs.length === 1 ? '' : 's'}`].join(' · ')}
+        </p>
+      </DetailHeader>
 
       {artist.biography && <p className="content-description">{artist.biography}</p>}
 

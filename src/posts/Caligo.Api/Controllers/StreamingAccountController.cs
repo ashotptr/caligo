@@ -42,14 +42,6 @@ public class StreamingAccountController : ApiControllerBase
         return Respond(await _accounts.CreateProfileAsync(CurrentCaller(), command, cancellationToken));
     }
 
-    [HttpPost("subscription")]
-    public async Task<IActionResult> Renew(SubscriptionRequest request, CancellationToken cancellationToken) =>
-        Respond(await _accounts.RenewAsync(CurrentCaller(), request.SubscriptionPlanId, cancellationToken));
-
-    [HttpGet("spending")]
-    public async Task<IActionResult> GetSpending(CancellationToken cancellationToken) =>
-        Respond(await _accounts.GetSpendingAsync(CurrentCaller(), cancellationToken));
-
     [HttpGet("history")]
     public async Task<IActionResult> GetHistory(CancellationToken cancellationToken) =>
         Respond(await _activity.GetHistoryAsync(CurrentCaller(), cancellationToken));

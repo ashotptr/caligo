@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ContentKind, Plan } from './types';
+import type { ContentKind } from './types';
 
 export const KINDS: { value: ContentKind | ''; label: string }[] = [
   { value: '', label: 'Everything' },
@@ -54,32 +54,8 @@ export const formatDuration = (minutes: number, kind: ContentKind): string => {
 export const formatRating = (rating: number | null | undefined): string =>
   rating == null || rating <= 0 ? 'not rated yet' : `${rating.toFixed(1)} / 10`;
 
-export const formatAmount = (amount: number): string => `€${amount.toFixed(2)}`;
-
 export const formatCount = (value: number | null | undefined): string =>
   value == null ? '' : Math.round(value).toLocaleString();
-
-export const planName = (plan: Plan): string => {
-  try {
-    const info = JSON.parse(plan.planInfo) as { name?: string };
-
-    return info.name ?? `Plan ${plan.subscriptionPlanId}`;
-  } catch {
-    return `Plan ${plan.subscriptionPlanId}`;
-  }
-};
-
-export const planFacts = (plan: Plan): string[] => {
-  try {
-    const info = JSON.parse(plan.planInfo) as Record<string, unknown>;
-
-    return Object.entries(info)
-      .filter(([key]) => key !== 'name')
-      .map(([key, value]) => `${key.replace(/_/g, ' ')}: ${Array.isArray(value) ? value.join(', ') : String(value)}`);
-  } catch {
-    return [];
-  }
-};
 
 export const statusOf = (err: unknown): number | undefined =>
   axios.isAxiosError(err) ? err.response?.status : undefined;
@@ -103,4 +79,6 @@ export const catalogError = (err: unknown, fallback: string): string => {
   }
 };
 
-export const PROFILE_REQUIRED = 'Create your streaming profile first.';
+export const PROFILE_REQUIRED = 'Set up your profile first.';
+
+export const PROFILE = '/profile';

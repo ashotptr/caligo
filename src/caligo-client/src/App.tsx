@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
-import { useCollections } from './contexts/CollectionsContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import RequireRole from './components/RequireRole';
 import PostsListPage from './pages/PostsListPage';
@@ -32,17 +31,16 @@ import FogGate from './components/FogGate';
 import IngestPanel from './components/IngestPanel';
 import PlayerBar from './components/PlayerBar';
 import TopBar from './components/TopBar';
+import { PROFILE } from './catalog';
 import { ARTISTS, COLLECTIONS, SERIES, THESAURARIUM, TITLES, inThesaurarium } from './thesaurarium';
 import './App.css';
 
 const App = () => {
   const { isAuthenticated, hasRole } = useAuth();
-  const { createCollection } = useCollections();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const inCollections = location.pathname.startsWith(COLLECTIONS);
-  const thesaurariumActive = inThesaurarium(location.pathname) && !inCollections;
+  const thesaurariumActive = inThesaurarium(location.pathname);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -60,27 +58,11 @@ const App = () => {
           <NavLink to="/" end className="nav-btn">Posts</NavLink>
           <Link to={THESAURARIUM} className={`nav-btn${thesaurariumActive ? ' active' : ''}`}>Thesaurarium</Link>
           <NavLink to="/listen" className="nav-btn">Radio</NavLink>
-
-          <div className="nav-divider" />
-          {isAuthenticated && <NavLink to={COLLECTIONS} className="nav-btn">My Collections</NavLink>}
-          {isAuthenticated && (
-            <button
-              type="button"
-              className="nav-btn"
-              onClick={() => {
-                setMenuOpen(false);
-                createCollection();
-              }}
-            >
-              <span>＋</span> Create Playlist
-            </button>
-          )}
-          <NavLink to="/chat-rooms" className="nav-btn">Chat Rooms</NavLink>
           <NavLink to="/omniscient" className="nav-btn">Omniscient AI</NavLink>
 
           {isAuthenticated && <div className="nav-divider" />}
-          {isAuthenticated && <NavLink to="/streaming" className="nav-btn">Streaming</NavLink>}
-          {isAuthenticated && <NavLink to="/dashboard" className="nav-btn">Dashboard</NavLink>}
+          {isAuthenticated && <NavLink to={PROFILE} className="nav-btn">Profile</NavLink>}
+          {hasRole('Admin', 'Writer') && <NavLink to="/dashboard" className="nav-btn">My Posts</NavLink>}
           {hasRole('Admin') && <NavLink to="/insights" className="nav-btn">Insights</NavLink>}
           {hasRole('Admin') && <NavLink to="/lab" className="nav-btn">Lab</NavLink>}
           {hasRole('Admin', 'Writer') && <NavLink to="/posts/new" className="nav-btn">Write</NavLink>}
@@ -119,8 +101,7 @@ const App = () => {
             <Route element={<ProtectedRoute />}>
               <Route path={COLLECTIONS} element={<CollectionsPage />} />
               <Route path={`${COLLECTIONS}/:id`} element={<CollectionPage />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/streaming" element={<StreamingProfilePage />} />
+              <Route path={PROFILE} element={<StreamingProfilePage />} />
             </Route>
 
             <Route element={<RequireRole roles={['Admin']} />}>
@@ -130,6 +111,7 @@ const App = () => {
             </Route>
 
             <Route element={<RequireRole roles={['Admin', 'Writer']} />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/posts/new" element={<PostEditorPage />} />
               <Route path="/posts/:id/edit" element={<PostEditorPage />} />
               <Route path="/posts/:id/stats" element={<PostStatsPage />} />
