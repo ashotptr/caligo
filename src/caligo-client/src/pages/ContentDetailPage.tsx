@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { catalogError, formatCount, formatDay, formatDuration, formatRating, kindLabel, statusOf } from '../catalog';
+import CastPayAdmin from '../components/CastPayAdmin';
 import CommentsSection from '../components/CommentsSection';
 import DetailHeader from '../components/DetailHeader';
 import MediaAdmin from '../components/MediaAdmin';
@@ -231,6 +232,7 @@ const ContentDetailPage = () => {
                 <span key={actor.actorId}>
                   {index > 0 && ', '}
                   <Link to={actorPath(actor.actorId)}>{actor.name}</Link>
+                  {actor.payment != null && ` (paid ${formatCount(actor.payment)})`}
                 </span>
               ))}
             </dd>
@@ -305,6 +307,10 @@ const ContentDetailPage = () => {
       )}
 
       {isAdmin && content.kind !== 'song' && <MediaAdmin contentId={content.contentId} onChanged={mediaChanged} />}
+
+      {isAdmin && content.actors.length > 0 && (
+        <CastPayAdmin key={content.contentId} contentId={content.contentId} cast={content.actors} onChanged={load} />
+      )}
 
       <ReviewsSection contentId={content.contentId} />
       <CommentsSection contentId={content.contentId} onPosted={load} />

@@ -42,7 +42,7 @@ public record SongArtistDto(int ArtistId, string Name, string? Role);
 
 public record SongReleaseDto(int Id, string Title, int? TrackNumber);
 
-public record ContentActorDto(int ActorId, string Name);
+public record ContentActorDto(int ActorId, string Name, float? Payment);
 
 public class ContentDetailDto
 {

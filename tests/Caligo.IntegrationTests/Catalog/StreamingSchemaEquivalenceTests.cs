@@ -76,7 +76,7 @@ public class StreamingSchemaEquivalenceTests : IAsyncLifetime
             Database = database
         }.ConnectionString;
 
-        StreamingSchema.Apply(connectionString, NullLogger.Instance);
+        StreamingSchema.Apply(connectionString, NullLogger.Instance, StreamingSchema.TranslationPrefix);
 
         _postgresSource = NpgsqlDataSource.Create(CatalogServices.WithSearchPath(connectionString));
         _postgres = await _postgresSource.OpenConnectionAsync();

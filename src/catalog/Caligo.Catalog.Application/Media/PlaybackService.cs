@@ -9,6 +9,7 @@ namespace Caligo.Catalog.Application.Media;
 public class PlaybackService
 {
     public const string NoMedia = "This title has no video yet.";
+    public const string SubscriptionInactive = "Your subscription is not active.";
     public const string SessionOver = "This playback session has ended.";
     public const string CompletedOtherwise = "This session was already completed with another completion_id.";
 
@@ -70,6 +71,11 @@ public class PlaybackService
         if (media is null || !media.IsPlayable)
         {
             return Result<PlaybackSessionDto>.NotFound(NoMedia);
+        }
+
+        if (!await _accounts.IsSubscribedAsync(user.UserId, cancellationToken))
+        {
+            return Result<PlaybackSessionDto>.Forbidden(SubscriptionInactive);
         }
 
         var now = Now();

@@ -226,20 +226,28 @@ public class PlaybackApiTests : IAsyncLifetime
     {
         await EnsurePackagedAsync();
 
+        var plans = await _anonymous.GetFromJsonAsync<List<PlanDto>>("/api/subscription/plans");
+        var limit = PlanLimits.MaxStreams(plans!.Single().PlanInfo)!.Value;
         var (viewer, _) = await WithProfileAsync();
-        var first = await StartAsync(viewer, "device-a-0001");
-        var second = await StartAsync(viewer, "device-b-0002");
+        var opened = new List<Reply>();
 
-        Assert.Equal(HttpStatusCode.OK, first.Status);
-        Assert.Equal(HttpStatusCode.Conflict, second.Status);
-        Assert.Equal(PlaybackService.LimitReached(1, 1), second.Text);
+        for (var device = 0; device < limit; device++)
+        {
+            opened.Add(await StartAsync(viewer, $"device-{device}-000{device}"));
+        }
 
-        var session = first.Body.GetProperty("session_id").GetGuid();
+        var extra = await StartAsync(viewer, "device-x-0009");
+
+        Assert.All(opened, reply => Assert.Equal(HttpStatusCode.OK, reply.Status));
+        Assert.Equal(HttpStatusCode.Conflict, extra.Status);
+        Assert.Equal(PlaybackService.LimitReached(limit, limit), extra.Text);
+
+        var session = opened[0].Body.GetProperty("session_id").GetGuid();
 
         Assert.Equal(HttpStatusCode.NoContent, (await viewer.DeleteAsync($"/api/v1/sessions/{session}")).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await viewer.DeleteAsync($"/api/v1/sessions/{session}")).StatusCode);
         Assert.Equal(HttpStatusCode.Gone, (await _internal.GetAsync($"/internal/v1/media/sessions/{session}")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await StartAsync(viewer, "device-b-0002")).Status);
+        Assert.Equal(HttpStatusCode.OK, (await StartAsync(viewer, "device-x-0009")).Status);
     }
 
     [Fact]
@@ -312,11 +320,12 @@ public class PlaybackApiTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AnEndedSubscriptionPeriod_StillStarts()
+    public async Task AnEndedSubscription_StopsPlayback_EvenWhileOthersAreSubscribed()
     {
         await EnsurePackagedAsync();
 
         var (viewer, profile) = await WithProfileAsync();
+        var (other, _) = await WithProfileAsync();
 
         await using (var db = Db())
         {
@@ -326,7 +335,10 @@ public class PlaybackApiTests : IAsyncLifetime
 
         var started = await StartAsync(viewer, "device-a-0001");
 
-        Assert.Equal(HttpStatusCode.OK, started.Status);
+        Assert.Equal(HttpStatusCode.Forbidden, started.Status);
+        Assert.Equal(PlaybackService.SubscriptionInactive, started.Text);
+        Assert.False((await viewer.GetFromJsonAsync<StreamingProfileDto>("/api/me/streaming-profile"))!.Active);
+        Assert.True((await other.GetFromJsonAsync<StreamingProfileDto>("/api/me/streaming-profile"))!.Active);
     }
 
     [Fact]
@@ -462,15 +474,12 @@ public class PlaybackApiTests : IAsyncLifetime
     private async Task<(HttpClient Client, StreamingProfileDto Profile)> WithProfileAsync()
     {
         var (client, _) = await SignedInClientAsync();
-        var plans = await _anonymous.GetFromJsonAsync<List<PlanDto>>("/api/subscription/plans");
-        var basic = plans!.Single(p => PlanLimits.MaxStreams(p.PlanInfo) == 1);
         var response = await client.PostAsJsonAsync("/api/me/streaming-profile", new
         {
             firstName = "Test",
             lastName = "Viewer",
             dateOfBirth = "1990-05-17",
-            gender = "Other",
-            subscriptionPlanId = basic.SubscriptionPlanId
+            gender = "Other"
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

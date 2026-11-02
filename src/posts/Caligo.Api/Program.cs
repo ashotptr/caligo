@@ -135,6 +135,7 @@ builder.Services.AddHttpClient<ICaligoEngine, CaligoEngineClient>((provider, htt
 builder.Services.AddSingleton<MusicSyncService>();
 builder.Services.AddSingleton<IMusicSync>(provider => provider.GetRequiredService<MusicSyncService>());
 builder.Services.AddHostedService(provider => provider.GetRequiredService<MusicSyncService>());
+builder.Services.AddHostedService<SubscriptionRenewalService>();
 builder.Services.AddScoped<CaligoAccountImport>();
 
 builder.Services.AddScoped<IBlogAccounts, IdentityBlogAccounts>();

@@ -50,6 +50,7 @@ namespace Caligo.Catalog.Infrastructure
 
             services.AddScoped<ICatalogReader, CatalogReader>();
             services.AddScoped<IStreamingAccounts, StreamingAccounts>();
+            services.AddScoped<ICastStore, CastStore>();
             services.AddScoped<IActivityStore, ActivityStore>();
             services.AddScoped<IInsights, InsightsReader>();
             services.AddScoped<IMusicImportStore, MusicImportStore>();
@@ -69,6 +70,7 @@ namespace Caligo.Catalog.Infrastructure
             services.AddSingleton<MixtapeVisibilityCache>();
 
             services.AddScoped<CatalogService>();
+            services.AddScoped<CastService>();
             services.AddScoped<StreamingAccountService>();
             services.AddScoped<ActivityService>();
             services.AddScoped<InsightsService>();

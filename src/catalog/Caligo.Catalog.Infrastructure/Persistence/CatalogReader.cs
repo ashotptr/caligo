@@ -144,7 +144,7 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 join a in _db.Actors on link.ActorId equals a.ActorId
                 where link.ContentId == contentId
                 orderby a.LastName, a.FirstName
-                select new { a.ActorId, a.FirstName, a.LastName }).ToListAsync(cancellationToken);
+                select new { a.ActorId, a.FirstName, a.LastName, link.Payment }).ToListAsync(cancellationToken);
 
             var movie = await _db.Movies.AsNoTracking()
                 .Where(m => m.ContentId == contentId)
@@ -175,7 +175,7 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 Genres = genres,
                 Languages = languages,
                 Subtitles = subtitles,
-                Actors = actors.Select(a => new ContentActorDto(a.ActorId, ContentRows.FullName(a.FirstName, a.LastName))).ToList(),
+                Actors = actors.Select(a => new ContentActorDto(a.ActorId, ContentRows.FullName(a.FirstName, a.LastName), a.Payment)).ToList(),
                 Movie = movie,
                 Episode = episode,
                 Song = await SongOfAsync(contentId, cancellationToken),

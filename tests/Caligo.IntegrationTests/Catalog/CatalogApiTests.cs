@@ -135,13 +135,19 @@ public class CatalogApiTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AProfile_IsCreatedOnce_OnTheFirstPlan_WithoutAPayment()
+    public async Task AProfile_IsCreatedOnce_OnTheOnlyPlan_AndPaysForItsFirstPeriod()
     {
         var (client, _) = await SignedInAsync();
 
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/me/streaming-profile")).StatusCode);
 
         var plans = await _anonymous.GetFromJsonAsync<List<PlanDto>>("/api/subscription/plans");
+        var free = Assert.Single(plans!);
+
+        Assert.Contains("\"name\": \"Free\"", free.PlanInfo);
+        Assert.Equal(0f, free.MonthlyPrice);
+        Assert.Equal(4, PlanLimits.MaxStreams(free.PlanInfo));
+
         var request = new { firstName = "Test", lastName = "Viewer", dateOfBirth = "1990-05-17", gender = "Other" };
 
         var created = await client.PostAsJsonAsync("/api/me/streaming-profile", request);
@@ -151,18 +157,144 @@ public class CatalogApiTests : IAsyncLifetime
         var profile = await created.Content.ReadFromJsonAsync<StreamingProfileDto>();
 
         Assert.Equal("Other", profile!.Gender);
-        Assert.Equal(plans!.First().SubscriptionPlanId, profile.SubscriptionPlanId);
+        Assert.Equal(free.SubscriptionPlanId, profile.SubscriptionPlanId);
+        Assert.Equal(
+            profile.SubscriptionStartDate.AddDays(Caligo.Catalog.Domain.Users.StreamingUser.SubscriptionDays),
+            profile.SubscriptionEndDate);
+        Assert.True(profile.Active);
 
         var again = await client.PostAsJsonAsync("/api/me/streaming-profile", request);
 
         Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+
+        var spending = await client.GetFromJsonAsync<SpendingDto>("/api/me/spending");
+
+        Assert.Equal(0f, spending!.AllTimeSpending);
+        Assert.Equal(free.SubscriptionPlanId, Assert.Single(spending.Payments).SubscriptionPlanId);
 
         await using var db = Db();
 
         var user = await db.Users.AsNoTracking().SingleAsync(u => u.UserId == profile.UserId);
 
         Assert.Equal(Caligo.Catalog.Domain.Users.StreamingUser.ExternalPassword, user.Password);
-        Assert.False(await db.Payments.AnyAsync(p => p.UserId == profile.UserId));
+    }
+
+    [Fact]
+    public async Task ADueSubscription_RenewsForAnotherPeriod_WithAFreePayment()
+    {
+        var (client, profile) = await WithProfileAsync();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        await using (var db = Db())
+        {
+            await db.Users.Where(u => u.UserId == profile.UserId)
+                .ExecuteUpdateAsync(set => set
+                    .SetProperty(u => u.SubscriptionStartDate, today.AddDays(-30))
+                    .SetProperty(u => u.SubscriptionEndDate, today));
+        }
+
+        using (var scope = _factory.CreateScope())
+        {
+            Assert.True(await scope.ServiceProvider.GetRequiredService<StreamingAccountService>().RenewDueAsync() >= 1);
+        }
+
+        var renewed = await client.GetFromJsonAsync<StreamingProfileDto>("/api/me/streaming-profile");
+        var spending = await client.GetFromJsonAsync<SpendingDto>("/api/me/spending");
+
+        Assert.Equal(today.AddDays(-30), renewed!.SubscriptionStartDate);
+        Assert.Equal(today.AddDays(Caligo.Catalog.Domain.Users.StreamingUser.SubscriptionDays), renewed.SubscriptionEndDate);
+        Assert.True(renewed.Active);
+        Assert.Equal(2, spending!.Payments.Count);
+        Assert.All(spending.Payments, p => Assert.Equal(0f, p.Amount));
+    }
+
+    [Fact]
+    public async Task ANewTitleInAGenreYouWatched_NotifiesYouOnceADay()
+    {
+        var (client, _) = await WithProfileAsync();
+
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/api/content/3/watch", new { timestamp = 60f })).StatusCode);
+
+        await using (var db = Db())
+        {
+            var genreId = await db.ContentGenres.AsNoTracking()
+                .Where(g => g.ContentId == 3)
+                .OrderBy(g => g.GenreId)
+                .Select(g => g.GenreId)
+                .FirstAsync();
+
+            foreach (var title in new[] { "Arrival in your genre", "Second arrival in it" })
+            {
+                var content = new Caligo.Catalog.Domain.Contents.Content
+                {
+                    Title = title, Duration = 90f, ReleaseDate = new DateOnly(2026, 11, 1), ProductionCompanyId = 1
+                };
+
+                db.Contents.Add(content);
+                await db.SaveChangesAsync();
+
+                db.Movies.Add(new Caligo.Catalog.Domain.Contents.Movie { ContentId = content.ContentId });
+                db.ContentGenres.Add(new Caligo.Catalog.Domain.Contents.ContentGenre { ContentId = content.ContentId, GenreId = genreId });
+                await db.SaveChangesAsync();
+            }
+        }
+
+        var notifications = await client.GetFromJsonAsync<List<NotificationDto>>("/api/me/notifications");
+
+        Assert.Equal("New content added to a preferred genre", Assert.Single(notifications!).Reason);
+    }
+
+    [Fact]
+    public async Task WatchingFiftyDifferentTitles_IsNotedOnce_EvenAfterAReplay()
+    {
+        var (client, profile) = await WithProfileAsync();
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        await using (var db = Db())
+        {
+            var titles = Enumerable.Range(1, 50)
+                .Select(i => new Caligo.Catalog.Domain.Contents.Content
+                {
+                    Title = $"Milestone title {i}", Duration = 3f, ReleaseDate = new DateOnly(2026, 11, 1), ProductionCompanyId = 1
+                })
+                .ToList();
+
+            db.Contents.AddRange(titles);
+            await db.SaveChangesAsync();
+
+            db.Movies.AddRange(titles.Select(t => new Caligo.Catalog.Domain.Contents.Movie { ContentId = t.ContentId }));
+            db.WatchHistory.AddRange(titles.Select(t =>
+                new Caligo.Catalog.Domain.Activity.WatchHistory { ContentId = t.ContentId, UserId = profile.UserId, Date = now }));
+            await db.SaveChangesAsync();
+
+            db.WatchHistory.Add(
+                new Caligo.Catalog.Domain.Activity.WatchHistory { ContentId = titles[0].ContentId, UserId = profile.UserId, Date = now });
+            await db.SaveChangesAsync();
+        }
+
+        var notifications = await client.GetFromJsonAsync<List<NotificationDto>>("/api/me/notifications");
+
+        Assert.Equal("You've watched 50 titles", Assert.Single(notifications!).Reason);
+    }
+
+    [Fact]
+    public async Task AdminsRecordWhatEachCastMemberWasPaid()
+    {
+        var (reader, _) = await SignedInAsync();
+        var (admin, _) = await SignedInAsync("Admin");
+        var title = await _anonymous.GetFromJsonAsync<ContentDetailDto>("/api/content/1");
+        var actorId = title!.Actors[0].ActorId;
+        var path = $"/api/content/1/cast/{actorId}";
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.PutAsJsonAsync(path, new { payment = 5f })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync(path, new { payment = -5f })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.PutAsJsonAsync("/api/content/1/cast/999999", new { payment = 5f })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.PutAsJsonAsync(path, new { payment = 2_500_000f })).StatusCode);
+
+        var paid = await _anonymous.GetFromJsonAsync<ContentDetailDto>("/api/content/1");
+
+        Assert.Equal(2_500_000f, paid!.Actors.Single(a => a.ActorId == actorId).Payment);
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.PutAsJsonAsync(path, new { payment = (float?)null })).StatusCode);
     }
 
     [Fact]
@@ -249,6 +381,8 @@ public class CatalogApiTests : IAsyncLifetime
     [Fact]
     public async Task TheViews_AreOpen_AndTheTenQueriesAreForAdministrators()
     {
+        await WithProfileAsync();
+
         var (reader, _) = await SignedInAsync();
         var (admin, _) = await SignedInAsync("Admin");
 
@@ -275,7 +409,7 @@ public class CatalogApiTests : IAsyncLifetime
         var highest = await admin.GetFromJsonAsync<QueryResultDto>("/api/insights/queries/3");
 
         Assert.Equal(new[] { "user_name", "highest_payment" }, highest!.Columns);
-        Assert.True(highest.Rows.Count >= 20);
+        Assert.NotEmpty(highest.Rows);
         Assert.Equal(10, (await admin.GetFromJsonAsync<List<ActiveUserDto>>("/api/insights/active-users"))!.Count);
         Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/insights/queries/99")).StatusCode);
     }

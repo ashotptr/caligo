@@ -20,6 +20,11 @@ public class WatchRequest
     public float? Timestamp { get; set; }
 }
 
+public class CastPaymentRequest
+{
+    public float? Payment { get; set; }
+}
+
 public class StreamingProfileRequest
 {
     [Required]

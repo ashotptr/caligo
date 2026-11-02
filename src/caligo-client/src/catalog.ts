@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ContentKind } from './types';
+import type { ContentKind, Plan } from './types';
 
 export const KINDS: { value: ContentKind | ''; label: string }[] = [
   { value: '', label: 'Everything' },
@@ -76,6 +76,18 @@ export const catalogError = (err: unknown, fallback: string): string => {
       return 'The Thesaurarium isn\'t available right now.';
     default:
       return fallback;
+  }
+};
+
+export const formatAmount = (amount: number): string => `€${amount.toFixed(2)}`;
+
+export const planName = (plan: Plan): string => {
+  try {
+    const info = JSON.parse(plan.planInfo) as { name?: string };
+
+    return info.name ?? `Plan ${plan.subscriptionPlanId}`;
+  } catch {
+    return `Plan ${plan.subscriptionPlanId}`;
   }
 };
 

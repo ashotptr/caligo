@@ -18,7 +18,7 @@ public record StreamingProfileDto(
     DateOnly SubscriptionEndDate,
     bool Active)
 {
-    public static StreamingProfileDto From(StreamingUser user, DateOnly today) => new(
+    public static StreamingProfileDto From(StreamingUser user, bool active) => new(
         user.UserId,
         user.FirstName,
         user.LastName,
@@ -28,11 +28,15 @@ public record StreamingProfileDto(
         user.SubscriptionPlanId,
         user.SubscriptionStartDate,
         user.SubscriptionEndDate,
-        user.IsSubscribedOn(today));
+        active);
 }
 
 public record CreateProfileCommand(
     string? FirstName, string? LastName, DateOnly Dob, string? Gender, int? SubscriptionPlanId = null);
+
+public record PaymentDto(int PaymentId, DateTime Date, float Amount, int SubscriptionPlanId);
+
+public record SpendingDto(float AllTimeSpending, List<PaymentDto> Payments);
 
 public static class PlanPricing
 {

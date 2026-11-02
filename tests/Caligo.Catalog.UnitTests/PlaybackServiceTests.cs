@@ -42,6 +42,7 @@ public class PlaybackServiceTests
     {
         _accounts.Setup(a => a.FindByIdentityAsync("identity-1", It.IsAny<CancellationToken>())).ReturnsAsync(_user);
         _accounts.Setup(a => a.FindUserIdAsync("identity-1", It.IsAny<CancellationToken>())).ReturnsAsync(21);
+        _accounts.Setup(a => a.IsSubscribedAsync(21, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _accounts.Setup(a => a.FindPlanAsync(5, It.IsAny<CancellationToken>()))
                  .ReturnsAsync(new SubscriptionPlan
                  {
@@ -174,15 +175,15 @@ public class PlaybackServiceTests
     }
 
     [Fact]
-    public async Task AnEndedSubscriptionPeriod_DoesNotStopPlayback()
+    public async Task AnInactiveSubscription_StopsPlaybackBeforeASessionOpens()
     {
-        _user.SubscriptionEndDate = new DateOnly(2026, 10, 13);
-
-        Opens(Session());
+        _accounts.Setup(a => a.IsSubscribedAsync(21, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var result = await Service().StartAsync(new StartSessionCommand(3, Device), Viewer);
 
-        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(ResultStatus.Forbidden, result.Status);
+        Assert.Equal(PlaybackService.SubscriptionInactive, result.Error);
+        _playback.Verify(p => p.OpenAsync(It.IsAny<OpenSession>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

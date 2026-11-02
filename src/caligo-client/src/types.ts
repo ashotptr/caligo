@@ -143,6 +143,12 @@ export interface SongRelease {
   trackNumber: number | null;
 }
 
+export interface CastMember {
+  actorId: number;
+  name: string;
+  payment: number | null;
+}
+
 export interface ContentDetail {
   contentId: number;
   title: string;
@@ -156,7 +162,7 @@ export interface ContentDetail {
   genres: Named[];
   languages: Named[];
   subtitles: Named[];
-  actors: { actorId: number; name: string }[];
+  actors: CastMember[];
   movie: { movieId: number; budget: number | null; boxOffice: number | null } | null;
   episode: {
     seriesId: number;
@@ -271,6 +277,13 @@ export interface ReleaseDetail {
   tracks: Track[];
 }
 
+export interface Plan {
+  subscriptionPlanId: number;
+  paymentInfo: string;
+  planInfo: string;
+  monthlyPrice: number;
+}
+
 export interface StreamingProfile {
   userId: number;
   firstName: string | null;
@@ -278,6 +291,15 @@ export interface StreamingProfile {
   dob: string;
   email: string;
   gender: string;
+  subscriptionPlanId: number;
+  subscriptionStartDate: string;
+  subscriptionEndDate: string;
+  active: boolean;
+}
+
+export interface Spending {
+  allTimeSpending: number;
+  payments: { paymentId: number; date: string; amount: number; subscriptionPlanId: number }[];
 }
 
 export interface Interaction {

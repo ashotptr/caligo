@@ -44,7 +44,8 @@ namespace Caligo.Catalog.Infrastructure.Persistence
             _db.Users.AnyAsync(u => u.Email == email, cancellationToken);
 
         public async Task<StreamingUser?> CreateAsync(
-            StreamingUser user, string identityId, CancellationToken cancellationToken = default)
+            StreamingUser user, string identityId, float amount, DateTime paidAt,
+            CancellationToken cancellationToken = default)
         {
             await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
 
@@ -55,6 +56,7 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 await _db.SaveChangesAsync(cancellationToken);
 
                 _db.BlogUsers.Add(new BlogUser { UserId = user.UserId, IdentityId = identityId });
+                _db.Payments.Add(NewPayment(user, amount, paidAt));
 
                 await _db.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
@@ -70,5 +72,48 @@ namespace Caligo.Catalog.Infrastructure.Persistence
                 return null;
             }
         }
+
+        public async Task<IReadOnlyList<StreamingUser>> GetDueAsync(DateOnly today, CancellationToken cancellationToken = default) =>
+            await (from link in _db.BlogUsers
+                   join user in _db.Users on link.UserId equals user.UserId
+                   where user.SubscriptionEndDate <= today
+                   orderby user.UserId
+                   select user).ToListAsync(cancellationToken);
+
+        public async Task RenewAsync(
+            StreamingUser user, float amount, DateTime paidAt, CancellationToken cancellationToken = default)
+        {
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+            _db.Payments.Add(NewPayment(user, amount, paidAt));
+
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        public Task<bool> IsSubscribedAsync(int userId, CancellationToken cancellationToken = default) =>
+            _db.Database
+                .SqlQuery<bool>($"SELECT streamingservice.checkactivesubscription({userId}) = B'1' AS \"Value\"")
+                .SingleAsync(cancellationToken);
+
+        public Task<float> GetAllTimeSpendingAsync(int userId, CancellationToken cancellationToken = default) =>
+            _db.Database
+                .SqlQuery<float>($"SELECT streamingservice.calculatealltimespending({userId}) AS \"Value\"")
+                .SingleAsync(cancellationToken);
+
+        public async Task<IReadOnlyList<Payment>> GetPaymentsAsync(int userId, CancellationToken cancellationToken = default) =>
+            await _db.Payments.AsNoTracking()
+                .Where(p => p.UserId == userId)
+                .OrderByDescending(p => p.Date)
+                .ThenByDescending(p => p.PaymentId)
+                .ToListAsync(cancellationToken);
+
+        private static Payment NewPayment(StreamingUser user, float amount, DateTime paidAt) => new()
+        {
+            UserId = user.UserId,
+            Date = paidAt,
+            Amount = amount,
+            SubscriptionPlanId = user.SubscriptionPlanId
+        };
     }
 }

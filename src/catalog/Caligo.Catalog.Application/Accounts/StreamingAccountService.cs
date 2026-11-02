@@ -36,7 +36,7 @@ public class StreamingAccountService
 
         return user is null
             ? Result<StreamingProfileDto>.NotFound()
-            : Result<StreamingProfileDto>.Ok(StreamingProfileDto.From(user, Today()));
+            : Result<StreamingProfileDto>.Ok(await ProfileAsync(user, cancellationToken));
     }
 
     public async Task<Result<StreamingProfileDto>> CreateProfileAsync(
@@ -89,19 +89,64 @@ public class StreamingAccountService
         var user = StreamingUser.Create(
             command.FirstName!, command.LastName!, command.Dob, email, gender, plan.SubscriptionPlanId, today);
 
-        var created = await _accounts.CreateAsync(user, caller.UserId!, cancellationToken);
+        var created = await _accounts.CreateAsync(
+            user, caller.UserId!, PlanPricing.MonthlyPrice(plan.PaymentInfo), Now(), cancellationToken);
 
         return created is null
             ? Result<StreamingProfileDto>.Conflict(EmailTaken)
-            : Result<StreamingProfileDto>.Ok(StreamingProfileDto.From(created, today));
+            : Result<StreamingProfileDto>.Ok(await ProfileAsync(created, cancellationToken));
+    }
+
+    public async Task<Result<SpendingDto>> GetSpendingAsync(Caller caller, CancellationToken cancellationToken = default)
+    {
+        if (!caller.IsAuthenticated)
+        {
+            return Result<SpendingDto>.Unauthorized();
+        }
+
+        var userId = await _accounts.FindUserIdAsync(caller.UserId!, cancellationToken);
+
+        if (userId is null)
+        {
+            return Result<SpendingDto>.Conflict(ProfileRequired);
+        }
+
+        var total = await _accounts.GetAllTimeSpendingAsync(userId.Value, cancellationToken);
+        var payments = await _accounts.GetPaymentsAsync(userId.Value, cancellationToken);
+
+        return Result<SpendingDto>.Ok(new SpendingDto(
+            total,
+            payments.Select(p => new PaymentDto(p.PaymentId, p.Date, p.Amount, p.SubscriptionPlanId)).ToList()));
+    }
+
+    public async Task<int> RenewDueAsync(CancellationToken cancellationToken = default)
+    {
+        var today = Today();
+        var due = await _accounts.GetDueAsync(today, cancellationToken);
+        var plans = (await _accounts.GetPlansAsync(cancellationToken)).ToDictionary(plan => plan.SubscriptionPlanId);
+
+        foreach (var user in due)
+        {
+            user.Renew(user.SubscriptionPlanId, today);
+
+            await _accounts.RenewAsync(
+                user, PlanPricing.MonthlyPrice(plans[user.SubscriptionPlanId].PaymentInfo), Now(), cancellationToken);
+        }
+
+        return due.Count;
     }
 
     public const string ProfileRequired = "Set up your profile first.";
 
     private const string EmailTaken = "Your e-mail address already has a profile.";
 
+    private async Task<StreamingProfileDto> ProfileAsync(StreamingUser user, CancellationToken cancellationToken) =>
+        StreamingProfileDto.From(user, await _accounts.IsSubscribedAsync(user.UserId, cancellationToken));
+
     private static PlanDto ToDto(SubscriptionPlan plan) => new(
         plan.SubscriptionPlanId, plan.PaymentInfo, plan.PlanInfo, PlanPricing.MonthlyPrice(plan.PaymentInfo));
 
     private DateOnly Today() => DateOnly.FromDateTime(_time.GetUtcNow().UtcDateTime);
+
+    private DateTime Now() => DateTime.SpecifyKind(_time.GetUtcNow().UtcDateTime, DateTimeKind.Unspecified);
 }

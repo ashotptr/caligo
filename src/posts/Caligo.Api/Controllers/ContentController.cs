@@ -16,11 +16,13 @@ public class ContentController : ApiControllerBase
 {
     private readonly CatalogService _catalog;
     private readonly ActivityService _activity;
+    private readonly CastService _cast;
 
-    public ContentController(CatalogService catalog, ActivityService activity)
+    public ContentController(CatalogService catalog, ActivityService activity, CastService cast)
     {
         _catalog = catalog;
         _activity = activity;
+        _cast = cast;
     }
 
     [HttpGet]
@@ -74,4 +76,10 @@ public class ContentController : ApiControllerBase
     [Authorize]
     public async Task<IActionResult> Watch(int id, WatchRequest request, CancellationToken cancellationToken) =>
         Respond(await _activity.LogWatchAsync(id, new WatchCommand(request.Timestamp), CurrentCaller(), cancellationToken));
+
+    [HttpPut("{id:int}/cast/{actorId:int}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> SetCastPayment(
+        int id, int actorId, CastPaymentRequest request, CancellationToken cancellationToken) =>
+        Respond(await _cast.SetPaymentAsync(id, actorId, request.Payment, cancellationToken));
 }

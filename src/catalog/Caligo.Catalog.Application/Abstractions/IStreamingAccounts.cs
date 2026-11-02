@@ -14,7 +14,19 @@ public interface IStreamingAccounts
 
     Task<bool> EmailTakenAsync(string email, CancellationToken cancellationToken = default);
 
-    Task<StreamingUser?> CreateAsync(StreamingUser user, string identityId, CancellationToken cancellationToken = default);
+    Task<StreamingUser?> CreateAsync(
+        StreamingUser user, string identityId, float amount, DateTime paidAt,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<StreamingUser>> GetDueAsync(DateOnly today, CancellationToken cancellationToken = default);
+
+    Task RenewAsync(StreamingUser user, float amount, DateTime paidAt, CancellationToken cancellationToken = default);
+
+    Task<bool> IsSubscribedAsync(int userId, CancellationToken cancellationToken = default);
+
+    Task<float> GetAllTimeSpendingAsync(int userId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Payment>> GetPaymentsAsync(int userId, CancellationToken cancellationToken = default);
 }
 
 public interface IBlogAccounts

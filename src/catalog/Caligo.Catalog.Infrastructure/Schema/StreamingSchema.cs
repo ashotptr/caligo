@@ -10,6 +10,7 @@ namespace Caligo.Catalog.Infrastructure.Schema
         public const string Name = "streamingservice";
         public const string JournalTable = "schemaversions";
         public const string ScriptPrefix = "StreamingService.";
+        public const string TranslationPrefix = ScriptPrefix + "0";
 
         private readonly CatalogOptions _options;
         private readonly ILogger<StreamingSchema> _logger;
@@ -30,7 +31,7 @@ namespace Caligo.Catalog.Infrastructure.Schema
             Apply(_options.ConnectionString, _logger);
         }
 
-        public static void Apply(string connectionString, ILogger logger)
+        public static void Apply(string connectionString, ILogger logger, string scripts = ScriptPrefix)
         {
             using (var connection = new NpgsqlConnection(connectionString))
             {
@@ -45,7 +46,7 @@ namespace Caligo.Catalog.Infrastructure.Schema
                 .PostgresqlDatabase(connectionString)
                 .WithScriptsEmbeddedInAssembly(
                     typeof(StreamingSchema).Assembly,
-                    name => name.StartsWith(ScriptPrefix, StringComparison.Ordinal))
+                    name => name.StartsWith(scripts, StringComparison.Ordinal))
                 .WithVariablesDisabled()
                 .WithTransactionPerScript()
                 .JournalToPostgresqlTable(Name, JournalTable)

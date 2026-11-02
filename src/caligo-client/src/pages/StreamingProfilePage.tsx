@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
-import { catalogError, formatDay, kindLabel, statusOf } from '../catalog';
+import { catalogError, formatAmount, formatDay, kindLabel, planName, statusOf } from '../catalog';
 import { formatDateTime } from '../dates';
 import { titlePath } from '../thesaurarium';
-import type { Recommendation, StreamingNotification, StreamingProfile, WatchEntry } from '../types';
+import type { Plan, Recommendation, Spending, StreamingNotification, StreamingProfile, WatchEntry } from '../types';
 
 const GENDERS = ['Female', 'Male', 'Other'];
 
 const REASONS: Record<string, string> = {
   'Jaccard index': 'similar to your history'
 };
-
-const HIDDEN_NOTIFICATIONS = new Set(['Subscription about to expire']);
 
 const position = (seconds: number | null): string => {
   if (seconds == null) {
@@ -26,6 +24,8 @@ const position = (seconds: number | null): string => {
 
 const StreamingProfilePage = () => {
   const [profile, setProfile] = useState<StreamingProfile | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [spending, setSpending] = useState<Spending | null>(null);
   const [history, setHistory] = useState<WatchEntry[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [notifications, setNotifications] = useState<StreamingNotification[]>([]);
@@ -39,15 +39,19 @@ const StreamingProfilePage = () => {
   const [gender, setGender] = useState(GENDERS[0]);
 
   const loadActivity = useCallback(async () => {
-    const [watched, recommended, notified] = await Promise.all([
+    const [available, spent, watched, recommended, notified] = await Promise.all([
+      api.get<Plan[]>('/api/subscription/plans'),
+      api.get<Spending>('/api/me/spending'),
       api.get<WatchEntry[]>('/api/me/history'),
       api.get<Recommendation[]>('/api/me/recommendations'),
       api.get<StreamingNotification[]>('/api/me/notifications')
     ]);
 
+    setPlans(available.data);
+    setSpending(spent.data);
     setHistory(watched.data);
     setRecommendations(recommended.data);
-    setNotifications(notified.data.filter(notification => !HIDDEN_NOTIFICATIONS.has(notification.reason)));
+    setNotifications(notified.data);
   }, []);
 
   useEffect(() => {
@@ -146,6 +150,8 @@ const StreamingProfilePage = () => {
     );
   }
 
+  const plan = plans.find(candidate => candidate.subscriptionPlanId === profile.subscriptionPlanId);
+
   return (
     <div className="editor-page">
       <h1>{[profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Your profile'}</h1>
@@ -154,6 +160,40 @@ const StreamingProfilePage = () => {
       </p>
 
       {error && <p className="form-error">{error}</p>}
+
+      <section className="catalog-section">
+        <h2>
+          Subscription{' '}
+          <span className={profile.active ? 'badge badge-scheduled' : 'badge badge-expired'}>
+            {profile.active ? 'active' : 'expired'}
+          </span>
+        </h2>
+        {plan && (
+          <p className="status-line">
+            {planName(plan)} · {formatAmount(plan.monthlyPrice)} a month ·{' '}
+            {profile.active ? 'renews on' : 'ended on'} {formatDay(profile.subscriptionEndDate)}
+          </p>
+        )}
+      </section>
+
+      <section className="catalog-section">
+        <h2>Payments</h2>
+        <p className="status-line">
+          {spending ? <>All time: <strong>{formatAmount(spending.allTimeSpending)}</strong></> : 'Loading…'}
+        </p>
+        <ul className="dashboard-list">
+          {(spending?.payments ?? []).map(payment => {
+            const paidFor = plans.find(candidate => candidate.subscriptionPlanId === payment.subscriptionPlanId);
+
+            return (
+              <li key={payment.paymentId}>
+                <span>{formatDateTime(payment.date)} · {paidFor ? planName(paidFor) : `Plan ${payment.subscriptionPlanId}`}</span>
+                <span className="post-meta">{formatAmount(payment.amount)}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
 
       <section className="catalog-section">
         <h2>Recommended for you</h2>
