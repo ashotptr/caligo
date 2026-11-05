@@ -188,6 +188,8 @@ public class PlaybackApiTests : IAsyncLifetime
     {
         await EnsurePackagedAsync();
 
+        var plans = await _anonymous.GetFromJsonAsync<List<PlanDto>>("/api/subscription/plans");
+        var limit = PlanLimits.MaxStreams(plans!.Single().PlanInfo)!.Value;
         var (viewer, _) = await WithProfileAsync();
         var first = await StartAsync(viewer, "device-a-0001");
         var again = await StartAsync(viewer, "device-a-0001");
@@ -208,7 +210,7 @@ public class PlaybackApiTests : IAsyncLifetime
         Assert.Equal($"/vod/{token}/subs/2.vtt", first.Body.GetProperty("subtitles")[0].GetProperty("url").GetString());
         Assert.Equal(60, first.Body.GetProperty("lease_seconds").GetInt32());
         Assert.Equal(20, first.Body.GetProperty("heartbeat_seconds").GetInt32());
-        Assert.Equal(1, first.Body.GetProperty("max_streams").GetInt32());
+        Assert.Equal(limit, first.Body.GetProperty("max_streams").GetInt32());
 
         Assert.True(MediaToken.TryRead(System.Text.Encoding.UTF8.GetBytes(SigningKey), token, out var grant));
         Assert.Equal(session, grant.SessionId);
