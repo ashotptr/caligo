@@ -21,6 +21,7 @@ jobs:
       analytics: ${{ steps.filter.outputs.analytics }}
       notifications: ${{ steps.filter.outputs.notifications }}
       client: ${{ steps.filter.outputs.client }}
+      share: ${{ steps.filter.outputs.share }}
       caligo: ${{ steps.filter.outputs.caligo }}
       streaming: ${{ steps.filter.outputs.streaming }}
       liquidsoap: ${{ steps.filter.outputs.liquidsoap }}
@@ -49,6 +50,8 @@ jobs:
               - 'src/notifications/**'
             client:
               - 'src/caligo-client/**'
+            share:
+              - 'src/caligo-share/**'
             caligo:
               - 'src/caligo/**'
               - 'deploy/caligo/**'
@@ -123,6 +126,27 @@ jobs:
 
       - run: npm ci
       - run: npm run lint
+      - run: npm run build
+
+  share:
+    name: Share - test and build
+    needs: changes
+    if: needs.changes.outputs.share == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/caligo-share
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/caligo-share/package-lock.json
+
+      - run: npm ci
+      - run: npm test
       - run: npm run build
 
   caligo:
@@ -308,6 +332,10 @@ jobs:
             changed: client
             context: src/caligo-client
             dockerfile: src/caligo-client/Dockerfile
+          - service: caligo-share
+            changed: share
+            context: src/caligo-share
+            dockerfile: src/caligo-share/Dockerfile
 
     steps:
       - uses: actions/checkout@v5

@@ -30,6 +30,9 @@ Streaming servers in C: the radio relay (MP3, Opus and low latency) and the vide
 ### `src/analytics` and `src/notifications`
 Background services. Analytics counts post views, claps, video playback and radio listeners (Kafka, ClickHouse and MongoDB). Notifications sends emails about new posts (RabbitMQ).
 
+### `src/caligo-share`
+Link previews, in Node.js. When a link to the site is shared in a chat app or on social media, the preview shows that page's title, a short description and a card image. The service answers link crawlers with Open Graph tags, draws the cards with Puppeteer, keeps them in its own PostgreSQL database through Prisma, and redraws a post's card when Kafka reports that it was published, edited or deleted.
+
 ### `deploy`
 Docker Compose files for development, production and the lab, and the images for Caligo and Liquidsoap.
 

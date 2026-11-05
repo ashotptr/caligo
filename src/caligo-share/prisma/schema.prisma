@@ -1,0 +1,23 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ShareCard {
+  path            String   @id
+  key             String   @unique
+  kind            String
+  label           String
+  title           String
+  description     String
+  imagePath       String?  @map("image_path")
+  version         String
+  renderedVersion String?  @map("rendered_version")
+  checkedAt       DateTime @map("checked_at")
+
+  @@map("share_card")
+}

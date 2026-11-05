@@ -243,6 +243,31 @@ services:
       kafka:
         condition: service_healthy
 
+  caligo-share:
+    build:
+      context: ../../src/caligo-share
+    init: true
+    environment:
+      PORT: "8080"
+      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/caligoshare"
+      SITE_URL: "http://localhost:8080"
+      SITE_ORIGIN: "http://caligo-client"
+      KAFKA_BROKERS: "kafka:29092"
+      CARDS_DIR: "/data/cards"
+    volumes:
+      - ../../data/dev/share:/data/cards
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
   caligo-client:
     build:
       context: ../../src/caligo-client
