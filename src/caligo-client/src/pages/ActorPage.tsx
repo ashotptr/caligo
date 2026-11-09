@@ -1,39 +1,17 @@
-import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import api from '../api/axios';
+import { useGetActorQuery } from '../api/catalogApi';
 import { catalogError, formatDay, statusOf } from '../catalog';
 import ContentCard from '../components/ContentCard';
 import DetailHeader from '../components/DetailHeader';
 import { TITLES } from '../thesaurarium';
-import type { ActorDetail } from '../types';
 
 const ActorPage = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id = '' } = useParams<{ id: string }>();
 
-  const [actor, setActor] = useState<ActorDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    setActor(null);
-    setError(null);
-
-    api
-      .get<ActorDetail>(`/api/actors/${id}`)
-      .then(response => {
-        if (!cancelled) setActor(response.data);
-      })
-      .catch(err => {
-        if (!cancelled) {
-          setError(statusOf(err) === 404 ? 'This actor is not in the Thesaurarium.' : catalogError(err, 'Could not load the actor.'));
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+  const { currentData: actor, error: loadError } = useGetActorQuery(id);
+  const error = loadError
+    ? statusOf(loadError) === 404 ? 'This actor is not in the Thesaurarium.' : catalogError(loadError, 'Could not load the actor.')
+    : null;
 
   if (error) {
     return (

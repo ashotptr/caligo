@@ -1,28 +1,27 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Provider } from 'react-redux';
 import { BrowserRouter } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
-import { AuthProvider } from './contexts/AuthContext';
-import { CollectionsProvider } from './contexts/CollectionsContext';
+import CollectionDialogs from './components/CollectionDialogs';
+import Toaster from './components/Toaster';
 import { PlayerProvider } from './contexts/PlayerContext';
-import { ToastProvider } from './contexts/ToastContext';
+import { store } from './store/store';
 import App from './App';
 import './index.css';
 
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
 const app = (
-  <BrowserRouter>
-    <AuthProvider>
-      <ToastProvider>
-        <PlayerProvider>
-          <CollectionsProvider>
-            <App />
-          </CollectionsProvider>
-        </PlayerProvider>
-      </ToastProvider>
-    </AuthProvider>
-  </BrowserRouter>
+  <Provider store={store}>
+    <BrowserRouter>
+      <PlayerProvider>
+        <App />
+        <CollectionDialogs />
+      </PlayerProvider>
+      <Toaster />
+    </BrowserRouter>
+  </Provider>
 );
 
 createRoot(document.getElementById('root')!).render(

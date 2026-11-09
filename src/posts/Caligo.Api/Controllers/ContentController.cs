@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Caligo.Api.Catalog;
 using Caligo.Api.Dtos;
+using Caligo.Api.MachineLearning;
 using Caligo.Catalog.Application.Activity;
 using Caligo.Catalog.Application.Contents;
 
@@ -17,12 +18,14 @@ public class ContentController : ApiControllerBase
     private readonly CatalogService _catalog;
     private readonly ActivityService _activity;
     private readonly CastService _cast;
+    private readonly MachineLearningClient _ml;
 
-    public ContentController(CatalogService catalog, ActivityService activity, CastService cast)
+    public ContentController(CatalogService catalog, ActivityService activity, CastService cast, MachineLearningClient ml)
     {
         _catalog = catalog;
         _activity = activity;
         _cast = cast;
+        _ml = ml;
     }
 
     [HttpGet]
@@ -53,8 +56,17 @@ public class ContentController : ApiControllerBase
 
     [HttpPost("{id:int}/comments")]
     [Authorize]
-    public async Task<IActionResult> AddComment(int id, CommentRequest request, CancellationToken cancellationToken) =>
-        Respond(await _activity.AddCommentAsync(id, request.Comment, CurrentCaller(), cancellationToken));
+    public async Task<IActionResult> AddComment(int id, CommentRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _activity.AddCommentAsync(id, request.Comment, CurrentCaller(), cancellationToken);
+
+        if (result.Value is { } comment)
+        {
+            await _ml.ScoreCommentAsync(comment, cancellationToken);
+        }
+
+        return Respond(result);
+    }
 
     [HttpGet("{id:int}/interaction")]
     [Authorize]

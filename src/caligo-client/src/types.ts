@@ -559,3 +559,87 @@ export interface AskAnswer {
   text: string | null;
   songs: AskSong[] | null;
 }
+
+export interface SongGenre {
+  genre: string;
+  probability: number;
+}
+
+export interface SimilarSong {
+  path: string;
+  uri: string;
+  title: string | null;
+  artist: string | null;
+  score: number;
+}
+
+export interface SongAnalysis {
+  path: string;
+  uri: string;
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  genre: string | null;
+  genres: SongGenre[] | null;
+  genreLabel: string | null;
+  energy: number | null;
+  valence: number | null;
+  danceability: number | null;
+  instrumental: number | null;
+  soundGroup: number | null;
+  similar?: SimilarSong[];
+}
+
+export interface AlbumAnalysis {
+  folder: string;
+  colors: { color: string; share: number }[];
+  accent: string | null;
+  songs: SongAnalysis[];
+}
+
+export interface FlaggedComment {
+  commentId: number;
+  contentId: number;
+  text: string;
+  scoredAt: string;
+  spam: number | null;
+  toxicity: number | null;
+  reasons: string[];
+}
+
+export interface MlModel {
+  task: string;
+  version: number;
+  candidate: string;
+  metric: string;
+  test: number | null;
+}
+
+export interface DriftCheck {
+  task: string;
+  kind: 'input' | 'prediction' | 'prediction_week';
+  name: string;
+  psi: number;
+  status: 'ok' | 'watch' | 'drift';
+  rows: number;
+  createdAt: string;
+}
+
+export interface MlJobRun {
+  id: number;
+  job: string;
+  startedAt: string;
+  finishedAt: string | null;
+  status: string;
+  detail: Record<string, unknown> | null;
+}
+
+export interface MlMonitoring {
+  models: MlModel[];
+  drift: DriftCheck[];
+  predictions: { task: string; source: string; count: number }[];
+  rejected: Record<string, number>;
+  moderation: { labelled: number; precision: number | null; recall: number | null };
+  genre: { labelled: number; accuracy: number | null };
+  jobs: MlJobRun[];
+}

@@ -1,83 +1,43 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
+import { useAddCommentMutation, useGetCommentsInfiniteQuery } from '../api/socialApi';
 import { PROFILE, catalogError, statusOf } from '../catalog';
-import { useAuth } from '../contexts/AuthContext';
-import type { ContentComment } from '../types';
-
-const PAGE = 20;
+import { useAuth } from '../store/hooks';
 
 const MAX_LENGTH = 4000;
 
-const CommentsSection = ({ contentId, onPosted }: { contentId: number; onPosted: () => void }) => {
+const CommentsSection = ({ contentId }: { contentId: number }) => {
   const { isAuthenticated } = useAuth();
+  const { data, hasNextPage, fetchNextPage, isFetchNextPageError, error: loadError } = useGetCommentsInfiniteQuery(contentId);
+  const [addComment, { isLoading: busy }] = useAddCommentMutation();
 
-  const [comments, setComments] = useState<ContentComment[]>([]);
-  const [hasMore, setHasMore] = useState(false);
   const [text, setText] = useState('');
   const [needsProfile, setNeedsProfile] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-
-    setComments([]);
-    setHasMore(false);
     setNeedsProfile(false);
     setError(null);
-
-    api
-      .get<ContentComment[]>(`/api/content/${contentId}/comments`, { params: { limit: PAGE } })
-      .then(response => {
-        if (cancelled) return;
-        setComments(response.data);
-        setHasMore(response.data.length === PAGE);
-      })
-      .catch(() => undefined);
-
-    return () => {
-      cancelled = true;
-    };
   }, [contentId]);
 
-  const loadOlder = async () => {
-    const last = comments[comments.length - 1];
-
-    if (!last) {
-      return;
-    }
-
-    try {
-      const response = await api.get<ContentComment[]>(`/api/content/${contentId}/comments`, {
-        params: { limit: PAGE, before: last.commentId }
-      });
-      setComments(previous => [...previous, ...response.data]);
-      setHasMore(response.data.length === PAGE);
-    } catch (err) {
-      setError(catalogError(err, 'Could not load older comments.'));
-    }
-  };
+  const comments = data?.pages.flat() ?? [];
 
   const post = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setBusy(true);
     try {
-      const response = await api.post<ContentComment>(`/api/content/${contentId}/comments`, { comment: text });
-      setComments(previous => [response.data, ...previous]);
+      await addComment({ contentId, comment: text }).unwrap();
       setText('');
-      onPosted();
     } catch (err) {
       if (statusOf(err) === 409) {
         setNeedsProfile(true);
       } else {
         setError(catalogError(err, 'Could not post the comment.'));
       }
-    } finally {
-      setBusy(false);
     }
   };
+
+  const shownError = error ?? (isFetchNextPageError ? catalogError(loadError, 'Could not load older comments.') : null);
 
   return (
     <section className="catalog-section">
@@ -105,7 +65,7 @@ const CommentsSection = ({ contentId, onPosted }: { contentId: number; onPosted:
         </p>
       )}
 
-      {error && <p className="form-error">{error}</p>}
+      {shownError && <p className="form-error">{shownError}</p>}
 
       {comments.length === 0 && <p className="status-line">No comments yet.</p>}
 
@@ -118,9 +78,9 @@ const CommentsSection = ({ contentId, onPosted }: { contentId: number; onPosted:
         ))}
       </ul>
 
-      {hasMore && (
+      {hasNextPage && (
         <div className="load-more">
-          <button type="button" onClick={loadOlder}>Older comments</button>
+          <button type="button" onClick={() => void fetchNextPage()}>Older comments</button>
         </div>
       )}
     </section>

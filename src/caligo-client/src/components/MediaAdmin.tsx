@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
-import api from '../api/axios';
+import { useEffect, useState } from 'react';
+import { useGetMediaInboxQuery, useGetMediaQuery, useQueueMediaMutation } from '../api/catalogApi';
 import { catalogError, statusOf } from '../catalog';
-import type { InboxFile, MediaInfo } from '../types';
+import type { MediaInfo } from '../types';
 
 const POLL_MS = 3000;
 
@@ -10,62 +10,39 @@ const sizeOf = (bytes: number): string =>
 
 const busy = (media: MediaInfo | null | undefined) => media?.status === 'queued' || media?.status === 'packaging';
 
-const MediaAdmin = ({ contentId, onChanged }: { contentId: number; onChanged: (media: MediaInfo | null) => void }) => {
-  const [media, setMedia] = useState<MediaInfo | null | undefined>(undefined);
-  const [inbox, setInbox] = useState<InboxFile[] | null>(null);
+const MediaAdmin = ({ contentId }: { contentId: number }) => {
+  const [polling, setPolling] = useState(false);
+  const { data, error: mediaError, isLoading } = useGetMediaQuery(contentId, { pollingInterval: polling ? POLL_MS : 0 });
+  const { data: inbox, error: inboxError } = useGetMediaInboxQuery();
+  const [queueMedia, { isLoading: sending }] = useQueueMediaMutation();
   const [source, setSource] = useState('');
   const [note, setNote] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
 
-  const loadMedia = useCallback(async () => {
-    try {
-      const response = await api.get<MediaInfo>(`/api/content/${contentId}/media`);
-
-      setMedia(response.data);
-      onChanged(response.data);
-    } catch (err) {
-      if (statusOf(err) === 404) {
-        setMedia(null);
-        onChanged(null);
-      } else {
-        setNote(catalogError(err, 'Could not read the media status.'));
-      }
-    }
-  }, [contentId, onChanged]);
+  const media: MediaInfo | null | undefined = isLoading
+    ? undefined
+    : statusOf(mediaError) === 404 ? null : data ?? null;
 
   useEffect(() => {
-    void loadMedia();
-
-    api.get<InboxFile[]>('/api/media/inbox')
-      .then(response => {
-        setInbox(response.data);
-        setSource(current => current || response.data[0]?.file || '');
-      })
-      .catch(err => setNote(catalogError(err, 'Could not list the incoming folder.')));
-  }, [loadMedia]);
+    setPolling(busy(media));
+  }, [media]);
 
   useEffect(() => {
-    if (!busy(media)) {
-      return;
+    if (inbox && inbox.length > 0) {
+      setSource(current => current || inbox[0].file);
     }
+  }, [inbox]);
 
-    const timer = window.setInterval(() => void loadMedia(), POLL_MS);
-
-    return () => window.clearInterval(timer);
-  }, [media, loadMedia]);
+  const failure = note
+    ?? (mediaError && statusOf(mediaError) !== 404 ? catalogError(mediaError, 'Could not read the media status.') : null)
+    ?? (inboxError ? catalogError(inboxError, 'Could not list the incoming folder.') : null);
 
   const queue = async () => {
-    setSending(true);
     setNote(null);
 
     try {
-      const response = await api.post<MediaInfo>(`/api/content/${contentId}/media`, { sourceFile: source });
-
-      setMedia(response.data);
+      await queueMedia({ contentId, sourceFile: source }).unwrap();
     } catch (err) {
       setNote(catalogError(err, 'Could not queue the video.'));
-    } finally {
-      setSending(false);
     }
   };
 
@@ -89,9 +66,9 @@ const MediaAdmin = ({ contentId, onChanged }: { contentId: number; onChanged: (m
         </p>
       )}
 
-      {inbox !== null && inbox.length === 0 && <p className="hint">The incoming folder has no video files.</p>}
+      {inbox !== undefined && inbox.length === 0 && <p className="hint">The incoming folder has no video files.</p>}
 
-      {inbox !== null && inbox.length > 0 && (
+      {inbox !== undefined && inbox.length > 0 && (
         <div className="media-admin-form">
           <select value={source} onChange={event => setSource(event.target.value)} disabled={busy(media)}>
             {inbox.map(file => (
@@ -111,7 +88,7 @@ const MediaAdmin = ({ contentId, onChanged }: { contentId: number; onChanged: (m
         </p>
       )}
 
-      {note && <p className="form-error">{note}</p>}
+      {failure && <p className="form-error">{failure}</p>}
     </section>
   );
 };

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import api from '../api/axios';
 import { apiError } from '../api/errors';
+import { useGetLabRunQuery, useGetLabRunsQuery } from '../api/insightsApi';
 import BarLineChart from '../components/BarLineChart';
 import DataTable from '../components/DataTable';
 import { formatDateTime, parseServerDate } from '../dates';
-import type { LabContestant, LabRunDetail, LabRunsResponse } from '../types';
+import type { LabContestant } from '../types';
 
 const milliseconds = (value: number | null) => (value === null ? null : Math.round(value));
 
@@ -20,57 +20,28 @@ const describe = (row: LabContestant) =>
 const LabRunPage = () => {
   const { runId } = useParams<{ runId: string }>();
   const navigate = useNavigate();
-  const [runs, setRuns] = useState<LabRunsResponse | null>(null);
-  const [detail, setDetail] = useState<LabRunDetail | null>(null);
+  const { data: runs = null, error: runsError } = useGetLabRunsQuery();
+  const { currentData: loadedDetail, error: detailError } = useGetLabRunQuery(runId ?? '', { skip: !runId });
   const [focus, setFocus] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
+
+  const detail = runId ? loadedDetail ?? null : null;
+  const error = runsError
+    ? apiError(runsError, 'Could not load the lab runs.')
+    : detailError
+      ? apiError(detailError, 'Could not load this run.')
+      : null;
 
   useEffect(() => {
-    let cancelled = false;
-
-    api.get<LabRunsResponse>('/api/lab/runs')
-      .then(response => {
-        if (cancelled) return;
-
-        setRuns(response.data);
-
-        if (!runId && response.data.runs.length > 0) {
-          navigate(`/lab/${response.data.runs[0].runId}`, { replace: true });
-        }
-      })
-      .catch(err => {
-        if (!cancelled) setError(apiError(err, 'Could not load the lab runs.'));
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [runId, navigate]);
-
-  useEffect(() => {
-    if (!runId) {
-      setDetail(null);
-
-      return;
+    if (!runId && runs && runs.runs.length > 0) {
+      navigate(`/lab/${runs.runs[0].runId}`, { replace: true });
     }
+  }, [runId, runs, navigate]);
 
-    let cancelled = false;
-
-    api.get<LabRunDetail>(`/api/lab/runs/${runId}`)
-      .then(response => {
-        if (cancelled) return;
-
-        setDetail(response.data);
-        setFocus(current => current || response.data.contestants.find(row => row.latencyP50Ms !== null)?.contestant || '');
-      })
-      .catch(err => {
-        if (!cancelled) setError(apiError(err, 'Could not load this run.'));
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [runId]);
+  useEffect(() => {
+    if (detail) {
+      setFocus(current => current || detail.contestants.find(row => row.latencyP50Ms !== null)?.contestant || '');
+    }
+  }, [detail]);
 
   const ranked = useMemo(
     () => [...(detail?.contestants ?? [])].sort((left, right) =>

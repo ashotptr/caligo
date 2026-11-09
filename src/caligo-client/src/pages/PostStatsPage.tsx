@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import api from '../api/axios';
+import { useGetPostFunnelQuery, useGetPostSeriesQuery } from '../api/analyticsApi';
 import { apiError } from '../api/errors';
 import SeriesChart from '../components/SeriesChart';
-import type { FunnelResponse, SeriesBucket, SeriesResponse } from '../types';
+import type { SeriesBucket } from '../types';
 
 const RANGES: { bucket: SeriesBucket; label: string }[] = [
   { bucket: 'minute', label: 'Last hour' },
@@ -14,48 +14,21 @@ const RANGES: { bucket: SeriesBucket; label: string }[] = [
 const FUNNEL_DAYS = [7, 30];
 
 const PostStatsPage = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id = '' } = useParams<{ id: string }>();
   const location = useLocation();
   const title = (location.state as { title?: string } | null)?.title ?? `Post #${id}`;
 
   const [bucket, setBucket] = useState<SeriesBucket>('hour');
-  const [series, setSeries] = useState<SeriesResponse | null>(null);
   const [days, setDays] = useState(FUNNEL_DAYS[0]);
-  const [funnel, setFunnel] = useState<FunnelResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
+  const { currentData: series, error: seriesError } = useGetPostSeriesQuery({ id, bucket });
+  const { data: funnel, error: funnelError } = useGetPostFunnelQuery({ id, days });
 
-    setSeries(null);
-    api.get<SeriesResponse>(`/api/analytics/posts/${id}/series`, { params: { bucket } })
-      .then(response => {
-        if (active) setSeries(response.data);
-      })
-      .catch(err => {
-        if (active) setError(apiError(err, 'Could not load the chart.'));
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [id, bucket]);
-
-  useEffect(() => {
-    let active = true;
-
-    api.get<FunnelResponse>(`/api/analytics/posts/${id}/funnel`, { params: { days } })
-      .then(response => {
-        if (active) setFunnel(response.data);
-      })
-      .catch(err => {
-        if (active) setError(apiError(err, 'Could not load the engagement numbers.'));
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [id, days]);
+  const error = seriesError
+    ? apiError(seriesError, 'Could not load the chart.')
+    : funnelError
+      ? apiError(funnelError, 'Could not load the engagement numbers.')
+      : null;
 
   const disabled = series?.enabled === false || funnel?.enabled === false;
 

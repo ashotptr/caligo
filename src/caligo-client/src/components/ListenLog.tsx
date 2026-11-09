@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
+import { useLogWatchMutation } from '../api/socialApi';
 import { PROFILE, statusOf } from '../catalog';
-import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import { useAuth } from '../store/hooks';
 
 type Status = 'idle' | 'saving' | 'profile' | 'failed';
 
 const ListenLog = ({ contentId }: { contentId: number }) => {
   const { isAuthenticated } = useAuth();
   const { loggedId, markLogged } = usePlayer();
+  const [logWatch] = useLogWatchMutation();
   const [status, setStatus] = useState<Status>('idle');
 
   useEffect(() => {
@@ -23,7 +24,7 @@ const ListenLog = ({ contentId }: { contentId: number }) => {
   const log = async () => {
     setStatus('saving');
     try {
-      await api.post(`/api/content/${contentId}/watch`, { timestamp: null });
+      await logWatch({ contentId, timestamp: null }).unwrap();
       setStatus('idle');
       markLogged(contentId);
     } catch (err) {

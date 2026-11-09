@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import api from '../api/axios';
+import { useLookupSongQuery } from '../api/catalogApi';
 import { createPlayer } from '../listen/players';
 import type { PlayerStatus } from '../listen/players';
 import { DEFAULT_WAY, FALLBACK_WAY, allWays } from '../listen/ways';
@@ -8,7 +8,7 @@ import type { Way } from '../listen/ways';
 import { RadioEngine, opusPlayable, parseNowPlaying } from '../radio';
 import type { NowPlaying, RadioPath, RadioState } from '../radio';
 import { MoqRadio, moqPlayable } from '../radio/moq/player';
-import { useToast } from './ToastContext';
+import { useToast } from '../store/hooks';
 
 export type PlayerMode = 'off' | 'radio' | 'track';
 
@@ -143,7 +143,6 @@ export const PlayerProvider = ({ children }: { children: ReactNode }) => {
   const [radioState, setRadioState] = useState<RadioStatus>('off');
   const [path, setPath] = useState<RadioPath | null>(null);
   const [now, setNow] = useState<NowPlaying | null>(null);
-  const [songId, setSongId] = useState<number | null>(null);
   const [loggedId, setLoggedId] = useState<number | null>(null);
   const [canPlayOpus] = useState<boolean>(opusPlayable);
   const [canPlayMoq, setCanPlayMoq] = useState(false);
@@ -615,26 +614,8 @@ export const PlayerProvider = ({ children }: { children: ReactNode }) => {
   const artist = mode === 'radio' ? now?.artist ?? '' : '';
   const title = mode === 'radio' ? now?.title ?? '' : '';
 
-  useEffect(() => {
-    setSongId(null);
-
-    if (!artist || !title) {
-      return;
-    }
-
-    let cancelled = false;
-
-    api
-      .get<{ contentId: number }>('/api/songs/lookup', { params: { artist, title } })
-      .then(response => {
-        if (!cancelled) setSongId(response.data.contentId);
-      })
-      .catch(() => undefined);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [artist, title]);
+  const { currentData: lookedUp } = useLookupSongQuery({ artist, title }, { skip: !artist || !title });
+  const songId = artist && title ? lookedUp?.contentId ?? null : null;
 
   const value = useMemo<PlayerContextType>(() => ({
     mode,

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
+import { useGetLiveNowQuery, useGetRadioRecentQuery } from '../api/radioApi';
 import ListenLog from '../components/ListenLog';
 import { usePlayer } from '../contexts/PlayerContext';
 import type { RadioStatus } from '../contexts/PlayerContext';
@@ -9,7 +9,7 @@ import { labHere } from '../listen/ways';
 import type { Way } from '../listen/ways';
 import { trackLabel } from '../radio';
 import { titlePath } from '../thesaurarium';
-import type { RadioHistory, RadioPlay } from '../types';
+import type { RadioPlay } from '../types';
 
 const REFRESH_MS = 60000;
 const LISTENERS_MS = 15000;
@@ -45,8 +45,6 @@ const card = (on: boolean, state: RadioStatus) => {
 const RadioPage = () => {
   const { mode, way, ways, radioState, now, songId, canPlayOpus, canPlayMoq, playRadio, stopRadio } = usePlayer();
   const lab = labHere();
-  const [plays, setPlays] = useState<RadioPlay[] | null>(null);
-  const [listeners, setListeners] = useState<number | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const started = useRef(false);
 
@@ -61,51 +59,23 @@ const RadioPage = () => {
     started.current = true;
   }, [mode, playRadio]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const recent = useGetRadioRecentQuery(20, { pollingInterval: REFRESH_MS });
+  const live = useGetLiveNowQuery(undefined, { pollingInterval: LISTENERS_MS });
+  const { refetch: refetchRecent } = recent;
+  const { refetch: refetchLive } = live;
 
-    const load = () => {
-      api
-        .get<RadioHistory>('/api/radio/recent', { params: { limit: 20 } })
-        .then(response => {
-          if (!cancelled) setPlays(response.data.enabled ? response.data.plays : null);
-        })
-        .catch(() => undefined);
-    };
-
-    load();
-
-    const timer = window.setInterval(load, REFRESH_MS);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [current]);
+  const plays: RadioPlay[] | null = recent.data?.enabled ? recent.data.plays : null;
+  const listeners = !live.isError && typeof live.data?.listeners === 'number' ? live.data.listeners : null;
 
   useEffect(() => {
-    let cancelled = false;
+    if (current) {
+      void refetchRecent();
+    }
+  }, [current, refetchRecent]);
 
-    const load = () => {
-      fetch('/live/now')
-        .then(response => (response.ok ? response.json() : null))
-        .then((data: { listeners?: number } | null) => {
-          if (!cancelled) setListeners(typeof data?.listeners === 'number' ? data.listeners : null);
-        })
-        .catch(() => {
-          if (!cancelled) setListeners(null);
-        });
-    };
-
-    load();
-
-    const timer = window.setInterval(load, LISTENERS_MS);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [radioState]);
+  useEffect(() => {
+    void refetchLive();
+  }, [radioState, refetchLive]);
 
   const playable = (candidate: Way): boolean => {
     if ((candidate.lab && !lab) || candidate.kind === 'external') return false;

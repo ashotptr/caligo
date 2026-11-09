@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import api from '../api/axios';
-import { useAuth } from '../contexts/AuthContext';
+import { useGetReleaseArtistsQuery } from '../api/catalogApi';
 import { usePlayer } from '../contexts/PlayerContext';
-import { useToast } from '../contexts/ToastContext';
+import { useAuth, useToast } from '../store/hooks';
 import { THESAURARIUM, inThesaurarium } from '../thesaurarium';
-import type { Named } from '../types';
 
 type Scope = 'posts' | 'thesaurarium';
 
@@ -28,7 +26,7 @@ const TopBar = ({ onMenu }: { onMenu: () => void }) => {
 
   const [scope, setScope] = useState<Scope>(inside ? 'thesaurarium' : 'posts');
   const [text, setText] = useState(current);
-  const [artists, setArtists] = useState<Named[]>([]);
+  const { data: artists = [] } = useGetReleaseArtistsQuery(undefined, { skip: !onGrid });
   const typing = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -40,25 +38,6 @@ const TopBar = ({ onMenu }: { onMenu: () => void }) => {
   }, [current]);
 
   useEffect(() => () => window.clearTimeout(typing.current), []);
-
-  useEffect(() => {
-    if (!onGrid) {
-      return;
-    }
-
-    let cancelled = false;
-
-    api
-      .get<Named[]>('/api/releases/artists')
-      .then(response => {
-        if (!cancelled) setArtists(response.data);
-      })
-      .catch(() => undefined);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [onGrid, isAuthenticated]);
 
   const filter = (changes: Record<string, string>) => {
     setParams(previous => {

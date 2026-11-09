@@ -149,6 +149,17 @@ namespace Caligo.Api.Services
             }
         }
 
+        public async Task<string?> OwnerOfAsync(string refreshToken, CancellationToken cancellationToken = default)
+        {
+            var hash = Hash(refreshToken);
+
+            return await _context.UserSessions
+                .AsNoTracking()
+                .Where(s => s.TokenHash == hash)
+                .Select(s => s.UserId)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         private static string CreateToken()
         {
             var bytes = RandomNumberGenerator.GetBytes(32);

@@ -22,5 +22,7 @@ namespace Caligo.Api.Services
         Task<RefreshResult> RotateAsync(string refreshToken, string? ip, string? userAgent, CancellationToken cancellationToken = default);
 
         Task RevokeAllAsync(string userId, CancellationToken cancellationToken = default);
+
+        Task<string?> OwnerOfAsync(string refreshToken, CancellationToken cancellationToken = default);
     }
 }

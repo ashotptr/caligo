@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { statusOf, textOf } from './api/errors';
 import type { ContentKind, Plan } from './types';
 
 export const KINDS: { value: ContentKind | ''; label: string }[] = [
@@ -57,12 +57,13 @@ export const formatRating = (rating: number | null | undefined): string =>
 export const formatCount = (value: number | null | undefined): string =>
   value == null ? '' : Math.round(value).toLocaleString();
 
-export const statusOf = (err: unknown): number | undefined =>
-  axios.isAxiosError(err) ? err.response?.status : undefined;
+export { statusOf };
 
 export const catalogError = (err: unknown, fallback: string): string => {
-  if (axios.isAxiosError(err) && typeof err.response?.data === 'string' && err.response.data.trim().length > 0) {
-    return err.response.data;
+  const text = textOf(err);
+
+  if (text) {
+    return text;
   }
 
   switch (statusOf(err)) {

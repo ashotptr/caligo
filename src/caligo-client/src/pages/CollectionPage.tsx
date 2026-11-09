@@ -1,48 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import api from '../api/axios';
+import {
+  useDeleteCollectionMutation,
+  useGetCollectionQuery,
+  useRemoveTitleMutation,
+  useRenameCollectionMutation
+} from '../api/collectionsApi';
 import { catalogError, statusOf } from '../catalog';
 import BackLink from '../components/BackLink';
 import DetailHeader from '../components/DetailHeader';
 import TrackList from '../components/TrackList';
 import type { TrackRow } from '../components/TrackList';
-import { useCollections } from '../contexts/CollectionsContext';
-import { useToast } from '../contexts/ToastContext';
+import { useToast } from '../store/hooks';
 import { COLLECTIONS } from '../thesaurarium';
-import type { CollectionDetail } from '../types';
 
 const CollectionPage = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
-  const { version, changed } = useCollections();
 
-  const [collection, setCollection] = useState<CollectionDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { currentData: collection, error: loadError } = useGetCollectionQuery(id);
+  const [renameCollection] = useRenameCollectionMutation();
+  const [deleteCollection] = useDeleteCollectionMutation();
+  const [removeTitleCall] = useRemoveTitleMutation();
+
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    setError(null);
-
-    api
-      .get<CollectionDetail>(`/api/collections/${id}`)
-      .then(response => {
-        if (!cancelled) setCollection(response.data);
-      })
-      .catch(err => {
-        if (!cancelled) {
-          setError(statusOf(err) === 404 ? 'This collection does not exist.' : catalogError(err, 'Could not load the collection.'));
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id, version]);
+  const error = loadError
+    ? statusOf(loadError) === 404 ? 'This collection does not exist.' : catalogError(loadError, 'Could not load the collection.')
+    : null;
 
   if (error) {
     return (
@@ -80,10 +68,9 @@ const CollectionPage = () => {
     }
 
     try {
-      await api.put(`/api/collections/${collection.collectionId}`, { name: cleaned });
+      await renameCollection({ collectionId: collection.collectionId, name: cleaned }).unwrap();
       setRenaming(false);
       setRenameError(null);
-      changed();
     } catch (err) {
       setRenameError(catalogError(err, 'Could not rename the collection.'));
     }
@@ -95,8 +82,7 @@ const CollectionPage = () => {
     }
 
     try {
-      await api.delete(`/api/collections/${collection.collectionId}`);
-      changed();
+      await deleteCollection(collection.collectionId).unwrap();
       navigate(COLLECTIONS);
     } catch (err) {
       toast(catalogError(err, 'Could not delete the collection.'));
@@ -105,11 +91,7 @@ const CollectionPage = () => {
 
   const removeTitle = async (row: TrackRow) => {
     try {
-      await api.delete(`/api/collections/${collection.collectionId}/titles/${row.contentId}`);
-      setCollection(previous => previous && {
-        ...previous,
-        titles: previous.titles.filter(title => title.contentId !== row.contentId)
-      });
+      await removeTitleCall({ collectionId: collection.collectionId, contentId: row.contentId }).unwrap();
       toast(`Removed from ${collection.name}`);
     } catch (err) {
       toast(catalogError(err, 'Could not remove the title.'));

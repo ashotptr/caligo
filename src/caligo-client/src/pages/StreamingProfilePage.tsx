@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
+import {
+  useCreateStreamingProfileMutation,
+  useGetHistoryQuery,
+  useGetNotificationsQuery,
+  useGetPlansQuery,
+  useGetRecommendationsQuery,
+  useGetSpendingQuery,
+  useGetStreamingProfileQuery
+} from '../api/profileApi';
 import { catalogError, formatAmount, formatDay, kindLabel, planName, statusOf } from '../catalog';
 import { formatDateTime } from '../dates';
 import { titlePath } from '../thesaurarium';
-import type { Plan, Recommendation, Spending, StreamingNotification, StreamingProfile, WatchEntry } from '../types';
 
 const GENDERS = ['Female', 'Male', 'Other'];
 
@@ -23,82 +30,33 @@ const position = (seconds: number | null): string => {
 };
 
 const StreamingProfilePage = () => {
-  const [profile, setProfile] = useState<StreamingProfile | null>(null);
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [spending, setSpending] = useState<Spending | null>(null);
-  const [history, setHistory] = useState<WatchEntry[]>([]);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
-  const [notifications, setNotifications] = useState<StreamingNotification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { data: found, error: profileError, isLoading: loading } = useGetStreamingProfileQuery();
+  const profile = found ?? null;
+  const skip = { skip: !profile };
+
+  const { data: plans = [] } = useGetPlansQuery(undefined, skip);
+  const { data: spending = null } = useGetSpendingQuery(undefined, skip);
+  const { data: history = [] } = useGetHistoryQuery(undefined, skip);
+  const { data: recommendations = [] } = useGetRecommendationsQuery(undefined, skip);
+  const { data: notifications = [] } = useGetNotificationsQuery(undefined, skip);
+  const [createProfile, { isLoading: busy }] = useCreateStreamingProfileMutation();
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState(GENDERS[0]);
 
-  const loadActivity = useCallback(async () => {
-    const [available, spent, watched, recommended, notified] = await Promise.all([
-      api.get<Plan[]>('/api/subscription/plans'),
-      api.get<Spending>('/api/me/spending'),
-      api.get<WatchEntry[]>('/api/me/history'),
-      api.get<Recommendation[]>('/api/me/recommendations'),
-      api.get<StreamingNotification[]>('/api/me/notifications')
-    ]);
-
-    setPlans(available.data);
-    setSpending(spent.data);
-    setHistory(watched.data);
-    setRecommendations(recommended.data);
-    setNotifications(notified.data);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const mine = await api.get<StreamingProfile>('/api/me/streaming-profile');
-
-        if (cancelled) return;
-
-        setProfile(mine.data);
-        await loadActivity();
-      } catch (err) {
-        if (!cancelled && statusOf(err) !== 404) {
-          setError(catalogError(err, 'Could not load your profile.'));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loadActivity]);
+  const error = saveError
+    ?? (profileError && statusOf(profileError) !== 404 ? catalogError(profileError, 'Could not load your profile.') : null);
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setBusy(true);
+    setSaveError(null);
     try {
-      const response = await api.post<StreamingProfile>('/api/me/streaming-profile', {
-        firstName,
-        lastName,
-        dateOfBirth,
-        gender
-      });
-
-      setProfile(response.data);
-      await loadActivity();
+      await createProfile({ firstName, lastName, dateOfBirth, gender }).unwrap();
     } catch (err) {
-      setError(catalogError(err, 'Could not save your profile.'));
-    } finally {
-      setBusy(false);
+      setSaveError(catalogError(err, 'Could not save your profile.'));
     }
   };
 

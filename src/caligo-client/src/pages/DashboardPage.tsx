@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
-import { useAuth } from '../contexts/AuthContext';
-import { formatDateTime, parseServerDate } from '../dates';
-import type { PagedResult, PostSummary } from '../types';
+import { useDeletePostMutation, useGetPostsInfiniteQuery } from '../api/postsApi';
 import TopNowPanel from '../components/TopNowPanel';
+import { formatDateTime, parseServerDate } from '../dates';
+import { useAuth } from '../store/hooks';
 
 type Tab = 'all' | 'mine';
 
@@ -13,69 +12,22 @@ const DashboardPage = () => {
   const isAdmin = hasRole('Admin');
 
   const [tab, setTab] = useState<Tab>(isAdmin ? 'all' : 'mine');
-  const [posts, setPosts] = useState<PostSummary[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const request = useRef(0);
+  const list = useGetPostsInfiniteQuery(tab === 'all' ? {} : { mine: true });
+  const [deletePost] = useDeletePostMutation();
 
-  const scope = useCallback(() => (tab === 'all' ? {} : { mine: true }), [tab]);
-
-  const fetchPosts = useCallback(async () => {
-    const current = ++request.current;
-
-    setLoading(true);
-    setError(null);
-    setPosts([]);
-    setCursor(null);
-    try {
-      const response = await api.get<PagedResult<PostSummary>>('/api/blogposts', {
-        params: scope()
-      });
-      if (current !== request.current) return;
-      setPosts(response.data.items);
-      setCursor(response.data.nextCursor);
-    } catch {
-      if (current !== request.current) return;
-      setError('Could not load posts.');
-    } finally {
-      if (current === request.current) setLoading(false);
-    }
-  }, [scope]);
-
-  const loadMore = async () => {
-    if (!cursor || loadingMore) {
-      return;
-    }
-
-    const current = request.current;
-
-    setLoadingMore(true);
-    try {
-      const response = await api.get<PagedResult<PostSummary>>('/api/blogposts', {
-        params: { ...scope(), cursor }
-      });
-      if (current !== request.current) return;
-      setPosts(previous => [...previous, ...response.data.items]);
-      setCursor(response.data.nextCursor);
-    } catch {
-      setError('Could not load more posts.');
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchPosts();
-  }, [fetchPosts]);
+  const posts = list.currentData?.pages.flatMap(page => page.items) ?? [];
+  const loading = list.isFetching && !list.currentData;
+  const failed = list.isError && !list.isFetchNextPageError;
 
   const handleDelete = async (id: number) => {
     if (!window.confirm('Delete this post permanently?')) return;
+
+    setError(null);
+
     try {
-      await api.delete(`/api/blogposts/${id}`);
-      setPosts(prev => prev.filter(post => post.id !== id));
+      await deletePost({ id }).unwrap();
     } catch {
       setError('Could not delete the post.');
     }
@@ -102,9 +54,11 @@ const DashboardPage = () => {
       {canWrite && <TopNowPanel />}
 
       {loading && <p className="status-line">Loading…</p>}
+      {failed && <p className="form-error">Could not load posts.</p>}
+      {list.isFetchNextPageError && <p className="form-error">Could not load more posts.</p>}
       {error && <p className="form-error">{error}</p>}
 
-      {!loading && posts.length === 0 && (
+      {!loading && !failed && posts.length === 0 && (
         <p className="status-line">No posts yet, write your first one!</p>
       )}
 
@@ -136,10 +90,10 @@ const DashboardPage = () => {
         ))}
       </ul>
 
-      {!loading && cursor && (
+      {!loading && list.hasNextPage && (
         <div className="load-more">
-          <button type="button" onClick={loadMore} disabled={loadingMore}>
-            {loadingMore ? 'Loading…' : 'Load more'}
+          <button type="button" onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage}>
+            {list.isFetchingNextPage ? 'Loading…' : 'Load more'}
           </button>
         </div>
       )}

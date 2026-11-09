@@ -1,84 +1,55 @@
-import { useEffect, useState } from 'react';
-import api from '../api/axios';
+import { useState } from 'react';
+import { useGetPlaybackQualityQuery } from '../api/analyticsApi';
+import { useImportMusicMutation } from '../api/catalogApi';
+import {
+  useGetActiveUsersQuery,
+  useGetEngagingQuery,
+  useGetPopularQuery,
+  useGetSavedQueriesQuery,
+  useLazyRunSavedQueryQuery
+} from '../api/insightsApi';
 import { catalogError } from '../catalog';
 import DataTable from '../components/DataTable';
-import type {
-  ActiveUser,
-  EngagingContent,
-  MusicImportResult,
-  PlaybackQuality,
-  PopularContent,
-  QueryResult,
-  SavedQuery
-} from '../types';
+import MlPanels from '../components/MlPanels';
+import ModerationQueue from '../components/ModerationQueue';
+import type { MusicImportResult, QueryResult } from '../types';
 
 const InsightsPage = () => {
-  const [popular, setPopular] = useState<PopularContent[]>([]);
-  const [engaging, setEngaging] = useState<EngagingContent[]>([]);
-  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
-  const [queries, setQueries] = useState<SavedQuery[]>([]);
+  const { data: popular = [], error: popularError } = useGetPopularQuery();
+  const { data: engaging = [], error: engagingError } = useGetEngagingQuery();
+  const { data: activeUsers = [], error: usersError } = useGetActiveUsersQuery();
+  const { data: queries = [], error: queriesError } = useGetSavedQueriesQuery();
+  const { data: playback = null } = useGetPlaybackQualityQuery(7);
+  const [runQuery] = useLazyRunSavedQueryQuery();
+  const [importMusicCall, { isLoading: importing }] = useImportMusicMutation();
+
   const [result, setResult] = useState<QueryResult | null>(null);
   const [running, setRunning] = useState<number | null>(null);
-  const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState<MusicImportResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [playback, setPlayback] = useState<PlaybackQuality | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    Promise.all([
-      api.get<PopularContent[]>('/api/insights/popular'),
-      api.get<EngagingContent[]>('/api/insights/engaging'),
-      api.get<ActiveUser[]>('/api/insights/active-users'),
-      api.get<SavedQuery[]>('/api/insights/queries')
-    ])
-      .then(([watched, engaged, users, saved]) => {
-        if (cancelled) return;
-        setPopular(watched.data);
-        setEngaging(engaged.data);
-        setActiveUsers(users.data);
-        setQueries(saved.data);
-      })
-      .catch(err => {
-        if (!cancelled) setError(catalogError(err, 'Could not load the insights.'));
-      });
-
-    api.get<PlaybackQuality>('/api/analytics/playback?days=7')
-      .then(response => {
-        if (!cancelled) setPlayback(response.data);
-      })
-      .catch(() => undefined);
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const loadError = popularError ?? engagingError ?? usersError ?? queriesError;
+  const error = actionError ?? (loadError ? catalogError(loadError, 'Could not load the insights.') : null);
 
   const run = async (number: number) => {
-    setError(null);
+    setActionError(null);
     setRunning(number);
     try {
-      const response = await api.get<QueryResult>(`/api/insights/queries/${number}`);
-      setResult(response.data);
+      setResult(await runQuery(number).unwrap());
     } catch (err) {
-      setError(catalogError(err, `Query ${number} failed.`));
+      setActionError(catalogError(err, `Query ${number} failed.`));
     } finally {
       setRunning(null);
     }
   };
 
   const importMusic = async () => {
-    setError(null);
+    setActionError(null);
     setImported(null);
-    setImporting(true);
     try {
-      const response = await api.post<MusicImportResult>('/api/music/import');
-      setImported(response.data);
+      setImported(await importMusicCall().unwrap());
     } catch (err) {
-      setError(catalogError(err, 'The import failed.'));
-    } finally {
-      setImporting(false);
+      setActionError(catalogError(err, 'The import failed.'));
     }
   };
 
@@ -198,6 +169,16 @@ const InsightsPage = () => {
             )}
           </div>
         )}
+      </section>
+
+      <section className="stats-section">
+        <h2>Song and comment models</h2>
+        <MlPanels />
+      </section>
+
+      <section className="stats-section">
+        <h2>Flagged comments</h2>
+        <ModerationQueue />
       </section>
     </div>
   );

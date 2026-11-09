@@ -1,88 +1,31 @@
-import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import api from '../api/axios';
+import { useGetPostStatsBatchQuery } from '../api/analyticsApi';
+import { useGetPostsInfiniteQuery, useSearchPostsQuery } from '../api/postsApi';
 import PostCard from '../components/PostCard';
-import type { PagedResult, PostStats, PostStatsResponse, PostSummary } from '../types';
 import SubscribeForm from '../components/SubscribeForm';
 import TrendingPanel from '../components/TrendingPanel';
+import type { PostStats } from '../types';
 
 const PostsListPage = () => {
-  const [posts, setPosts] = useState<PostSummary[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
   const [params] = useSearchParams();
   const activeQuery = (params.get('q') ?? '').trim();
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<Record<number, PostStats>>({});
 
-  const fetchPosts = useCallback(async (searchTerm: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (searchTerm) {
-        const response = await api.get<PostSummary[]>('/api/blogposts/search', {
-          params: { query: searchTerm }
-        });
-        setPosts(response.data);
-        setCursor(null);
-      } else {
-        const response = await api.get<PagedResult<PostSummary>>('/api/blogposts');
-        setPosts(response.data.items);
-        setCursor(response.data.nextCursor);
-      }
-    } catch (err) {
-      console.error('Error loading posts:', err);
-      setError('Could not load posts.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const search = useSearchPostsQuery(activeQuery, { skip: !activeQuery });
+  const list = useGetPostsInfiniteQuery({}, { skip: !!activeQuery });
 
-  const loadMore = async () => {
-    if (!cursor || loadingMore) {
-      return;
-    }
+  const posts = activeQuery
+    ? search.currentData ?? []
+    : list.data?.pages.flatMap(page => page.items) ?? [];
 
-    setLoadingMore(true);
-    try {
-      const response = await api.get<PagedResult<PostSummary>>('/api/blogposts', {
-        params: { cursor }
-      });
-      setPosts(previous => [...previous, ...response.data.items]);
-      setCursor(response.data.nextCursor);
-    } catch (err) {
-      console.error('Error loading more posts:', err);
-      setError('Could not load more posts.');
-    } finally {
-      setLoadingMore(false);
-    }
-  };
+  const loading = activeQuery ? search.isFetching && !search.currentData : list.isLoading;
+  const failed = activeQuery ? search.isError : list.isError && !list.isFetchNextPageError;
 
-  useEffect(() => {
-    fetchPosts(activeQuery);
-  }, [activeQuery, fetchPosts]);
+  const ids = posts.map(post => post.id);
+  const { data: statsResponse } = useGetPostStatsBatchQuery(ids, { skip: ids.length === 0 });
 
-  useEffect(() => {
-    if (posts.length === 0) {
-      return;
-    }
-
-    const ids = posts.map(p => p.id).join(',');
-
-    api
-      .get<PostStatsResponse>('/api/analytics/posts', { params: { ids } })
-      .then(response => {
-        if (!response.data.enabled) {
-          return;
-        }
-        setStats(previous => ({
-          ...previous,
-          ...Object.fromEntries(response.data.posts.map(s => [s.postId, s]))
-        }));
-      })
-      .catch(() => undefined);
-  }, [posts]);
+  const stats: Record<number, PostStats> = statsResponse?.enabled
+    ? Object.fromEntries(statsResponse.posts.map(entry => [entry.postId, entry]))
+    : {};
 
   return (
     <div>
@@ -97,9 +40,10 @@ const PostsListPage = () => {
       {!activeQuery && <TrendingPanel />}
 
       {loading && <p className="status-line">Loading posts…</p>}
-      {error && <p className="form-error">{error}</p>}
+      {failed && <p className="form-error">Could not load posts.</p>}
+      {list.isFetchNextPageError && <p className="form-error">Could not load more posts.</p>}
 
-      {!loading && !error && posts.length === 0 && (
+      {!loading && !failed && posts.length === 0 && (
         <p className="status-line">
           {activeQuery ? `No posts match “${activeQuery}”.` : 'No posts yet.'}
         </p>
@@ -111,10 +55,10 @@ const PostsListPage = () => {
 
       {!loading && !activeQuery && posts.length > 0 && <SubscribeForm />}
 
-      {!loading && cursor && (
+      {!loading && !activeQuery && list.hasNextPage && (
         <div className="load-more">
-          <button type="button" onClick={loadMore} disabled={loadingMore}>
-            {loadingMore ? 'Loading…' : 'Load more'}
+          <button type="button" onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage}>
+            {list.isFetchingNextPage ? 'Loading…' : 'Load more'}
           </button>
         </div>
       )}

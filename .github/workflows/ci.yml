@@ -22,6 +22,7 @@ jobs:
       notifications: ${{ steps.filter.outputs.notifications }}
       client: ${{ steps.filter.outputs.client }}
       share: ${{ steps.filter.outputs.share }}
+      ml: ${{ steps.filter.outputs.ml }}
       caligo: ${{ steps.filter.outputs.caligo }}
       streaming: ${{ steps.filter.outputs.streaming }}
       liquidsoap: ${{ steps.filter.outputs.liquidsoap }}
@@ -52,6 +53,8 @@ jobs:
               - 'src/caligo-client/**'
             share:
               - 'src/caligo-share/**'
+            ml:
+              - 'src/caligo-ml/**'
             caligo:
               - 'src/caligo/**'
               - 'deploy/caligo/**'
@@ -108,7 +111,7 @@ jobs:
           retention-days: 7
 
   client:
-    name: Client - lint and build
+    name: Client - lint, test and build
     needs: changes
     if: needs.changes.outputs.client == 'true'
     runs-on: ubuntu-latest
@@ -126,6 +129,7 @@ jobs:
 
       - run: npm ci
       - run: npm run lint
+      - run: npm test
       - run: npm run build
 
   share:
@@ -148,6 +152,62 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+
+  ml:
+    name: ML - lint, test, quality gate and image
+    needs: changes
+    if: needs.changes.outputs.ml == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/caligo-ml
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ML_TEST_DATABASE_URL: postgresql+psycopg://postgres:test@localhost:5432
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            src/caligo-ml/requirements.txt
+            src/caligo-ml/requirements-serve.txt
+
+      - run: pip install -r requirements.txt
+      - run: ruff check .
+
+      - name: Algorithms, features, registry and service
+        run: pytest -q --ignore tests/test_quality_gate.py
+
+      - name: Quality gate
+        run: pytest -q -rP tests/test_quality_gate.py
+
+      - name: Build the image
+        run: docker build -t caligo-ml:${{ github.sha }} .
+
+      - name: Smoke test the container
+        run: |
+          docker run -d --name ml --network host -e ML_SCHEDULE=off -e ML_ROOT=/tmp/ml \
+            -e ML_DATABASE_URL=postgresql+psycopg://postgres:test@localhost:5432/caligoml caligo-ml:${{ github.sha }}
+          for attempt in $(seq 1 60); do
+            if curl -fs localhost:8080/health && curl -fs localhost:8080/ready; then exit 0; fi
+            sleep 2
+          done
+          docker logs ml
+          exit 1
 
   caligo:
     name: Caligo - build
@@ -336,6 +396,10 @@ jobs:
             changed: share
             context: src/caligo-share
             dockerfile: src/caligo-share/Dockerfile
+          - service: caligo-ml
+            changed: ml
+            context: src/caligo-ml
+            dockerfile: src/caligo-ml/Dockerfile
 
     steps:
       - uses: actions/checkout@v5

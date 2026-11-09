@@ -1,12 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import api from '../api/axios';
+import { useGetContentListInfiniteQuery, useGetGenresQuery } from '../api/catalogApi';
 import { KINDS, catalogError } from '../catalog';
 import ContentCard from '../components/ContentCard';
 import InsightPanels from '../components/InsightPanels';
 import ThesaurariumNav from '../components/ThesaurariumNav';
 import { TITLES } from '../thesaurarium';
-import type { ContentSummary, Named, PagedResult } from '../types';
+import type { ContentKind } from '../types';
 
 const CatalogPage = () => {
   const [params, setParams] = useSearchParams();
@@ -15,47 +14,20 @@ const CatalogPage = () => {
   const genreId = params.get('genreId') ?? '';
   const activeQuery = params.get('query') ?? '';
 
-  const [items, setItems] = useState<ContentSummary[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [genres, setGenres] = useState<Named[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { data: genres = [] } = useGetGenresQuery();
+  const list = useGetContentListInfiniteQuery({
+    kind: (kind || undefined) as ContentKind | undefined,
+    genreId: genreId || undefined,
+    query: activeQuery || undefined
+  });
 
-  const request = useRef(0);
-
-  useEffect(() => {
-    api
-      .get<Named[]>('/api/genres')
-      .then(response => setGenres(response.data))
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    const current = ++request.current;
-
-    setLoading(true);
-    setError(null);
-
-    api
-      .get<PagedResult<ContentSummary>>('/api/content', {
-        params: { kind: kind || undefined, genreId: genreId || undefined, query: activeQuery || undefined }
-      })
-      .then(response => {
-        if (current !== request.current) return;
-        setItems(response.data.items);
-        setCursor(response.data.nextCursor);
-      })
-      .catch(err => {
-        if (current !== request.current) return;
-        setItems([]);
-        setCursor(null);
-        setError(catalogError(err, 'Could not load the Thesaurarium.'));
-      })
-      .finally(() => {
-        if (current === request.current) setLoading(false);
-      });
-  }, [kind, genreId, activeQuery]);
+  const items = list.currentData?.pages.flatMap(page => page.items) ?? [];
+  const loading = list.isFetching && !list.currentData;
+  const error = list.isFetchNextPageError
+    ? catalogError(list.error, 'Could not load more titles.')
+    : list.isError
+      ? catalogError(list.error, 'Could not load the Thesaurarium.')
+      : null;
 
   const change = (changes: Record<string, string>) => {
     const next = new URLSearchParams(params);
@@ -69,28 +41,6 @@ const CatalogPage = () => {
     }
 
     setParams(next);
-  };
-
-  const loadMore = async () => {
-    if (!cursor || loadingMore) {
-      return;
-    }
-
-    const current = request.current;
-
-    setLoadingMore(true);
-    try {
-      const response = await api.get<PagedResult<ContentSummary>>('/api/content', {
-        params: { kind: kind || undefined, genreId: genreId || undefined, query: activeQuery || undefined, cursor }
-      });
-      if (current !== request.current) return;
-      setItems(previous => [...previous, ...response.data.items]);
-      setCursor(response.data.nextCursor);
-    } catch (err) {
-      setError(catalogError(err, 'Could not load more titles.'));
-    } finally {
-      setLoadingMore(false);
-    }
   };
 
 
@@ -150,10 +100,10 @@ const CatalogPage = () => {
         </ul>
       )}
 
-      {!loading && cursor && (
+      {!loading && list.hasNextPage && (
         <div className="load-more">
-          <button type="button" onClick={loadMore} disabled={loadingMore}>
-            {loadingMore ? 'Loading…' : 'Load more'}
+          <button type="button" onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage}>
+            {list.isFetchingNextPage ? 'Loading…' : 'Load more'}
           </button>
         </div>
       )}

@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
-import axios from 'axios';
-import api from '../api/axios';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../contexts/ToastContext';
+import { useGoogleLoginMutation, useLoginMutation } from '../api/accountApi';
+import { statusOf } from '../api/errors';
+import { useAuth, useToast } from '../store/hooks';
 
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
@@ -12,7 +11,8 @@ const LoginPage = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [signIn, { isLoading: submitting }] = useLoginMutation();
+  const [googleSignIn] = useGoogleLoginMutation();
   const { login } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
@@ -28,21 +28,20 @@ const LoginPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSubmitting(true);
     try {
-      const response = await api.post('/api/account/login', { username, password });
-      welcome(login(response.data.accessToken, response.data.refreshToken)?.name);
+      const tokens = await signIn({ username, password }).unwrap();
+      welcome(login(tokens.accessToken, tokens.refreshToken)?.name);
       navigate('/');
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.status === 401) {
+      const status = statusOf(err);
+
+      if (status === 401) {
         setError('Invalid username or password.');
-      } else if (axios.isAxiosError(err) && err.response?.status === 429) {
+      } else if (status === 429) {
         setError('Too many attempts, please wait a moment and try again.');
       } else {
         setError('Could not sign in. Please try again.');
       }
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -50,10 +49,8 @@ const LoginPage = () => {
     if (!credential) return;
     setError(null);
     try {
-      const response = await api.post('/api/account/google-login', JSON.stringify(credential), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-      welcome(login(response.data.accessToken, response.data.refreshToken)?.name);
+      const tokens = await googleSignIn(credential).unwrap();
+      welcome(login(tokens.accessToken, tokens.refreshToken)?.name);
       navigate('/');
     } catch {
       setError('Google sign-in failed. Please try again.');

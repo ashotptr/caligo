@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Modal from '../components/Modal';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../store/hooks';
 import { XmppChat, roomName } from '../chat/xmpp';
 import type { XmppStatus } from '../chat/xmpp';
 

@@ -1,23 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import api from '../api/axios';
+import { useGetContentQuery, useGetMediaQuery, useGetSimilarQuery } from '../api/catalogApi';
+import { useGetSongAnalysisQuery } from '../api/mlApi';
 import { catalogError, formatCount, formatDay, formatDuration, formatRating, kindLabel, statusOf } from '../catalog';
 import CastPayAdmin from '../components/CastPayAdmin';
 import CommentsSection from '../components/CommentsSection';
 import DetailHeader from '../components/DetailHeader';
+import GenreFix from '../components/GenreFix';
 import MediaAdmin from '../components/MediaAdmin';
+import MoreLikeThis from '../components/MoreLikeThis';
 import RadioQueueButton from '../components/RadioQueueButton';
 import ReviewsSection from '../components/ReviewsSection';
 import RotationButton from '../components/RotationButton';
+import SongSound from '../components/SongSound';
 import { DownloadIcon } from '../components/TrackList';
 import VideoPlayer from '../components/VideoPlayer';
 import YourActivity from '../components/YourActivity';
-import { useAuth } from '../contexts/AuthContext';
-import { useCollections } from '../contexts/CollectionsContext';
+import { useAuth, useCollections } from '../store/hooks';
 import { usePlayer } from '../contexts/PlayerContext';
 import { downloadTrack } from '../downloads';
+import { mixtapeFolder } from '../ml';
 import { TITLES, actorPath, albumPath, artistPath, seriesPath, singlePath, titlePath } from '../thesaurarium';
-import type { ContentDetail, MediaInfo, SimilarContent } from '../types';
 
 const plural = (count: number, word: string) => `${count.toLocaleString()} ${word}${count === 1 ? '' : 's'}`;
 
@@ -28,59 +30,19 @@ const ContentDetailPage = () => {
   const { mode, current, playTracks, position } = usePlayer();
   const isAdmin = hasRole('Admin');
 
-  const [content, setContent] = useState<ContentDetail | null>(null);
-  const [similar, setSimilar] = useState<SimilarContent[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [media, setMedia] = useState<MediaInfo | null>(null);
+  const contentId = Number(id);
+  const { currentData: content, error: loadError } = useGetContentQuery(contentId);
+  const { currentData: similarTitles } = useGetSimilarQuery(contentId);
+  const { currentData: media } = useGetMediaQuery(contentId);
+  const audioUri = content?.song?.audioUri ?? null;
+  const { currentData: sound } = useGetSongAnalysisQuery(audioUri ?? '', { skip: !audioUri });
 
-  const request = useRef(0);
-
-  const load = useCallback(async () => {
-    const current = ++request.current;
-
-    try {
-      const response = await api.get<ContentDetail>(`/api/content/${id}`);
-      if (current !== request.current) return;
-      setContent(response.data);
-      setError(null);
-    } catch (err) {
-      if (current !== request.current) return;
-      setError(statusOf(err) === 404
-        ? 'This title is not in the Thesaurarium.'
-        : catalogError(err, 'Could not load the title.'));
-    }
-  }, [id]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    setContent(null);
-    setSimilar([]);
-    setError(null);
-    setMedia(null);
-
-    load();
-
-    api
-      .get<SimilarContent[]>(`/api/content/${id}/similar`)
-      .then(response => {
-        if (!cancelled) setSimilar(response.data.filter(item => item.similarity > 0));
-      })
-      .catch(() => undefined);
-
-    api
-      .get<MediaInfo>(`/api/content/${id}/media`)
-      .then(response => {
-        if (!cancelled) setMedia(response.data);
-      })
-      .catch(() => undefined);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id, load]);
-
-  const mediaChanged = useCallback((next: MediaInfo | null) => setMedia(next), []);
+  const similar = (similarTitles ?? []).filter(item => item.similarity > 0);
+  const error = loadError
+    ? statusOf(loadError) === 404
+      ? 'This title is not in the Thesaurarium.'
+      : catalogError(loadError, 'Could not load the title.')
+    : null;
 
   if (error) {
     return (
@@ -168,6 +130,20 @@ const ContentDetailPage = () => {
       )}
 
       {isAdmin && song?.audioUri && <RotationButton contentId={content.contentId} />}
+
+      {sound && (
+        <section className="catalog-section">
+          <h2>Sound</h2>
+          <SongSound song={sound} />
+          {isAdmin && <GenreFix song={sound} folder={mixtapeFolder(sound.uri)} />}
+          {sound.similar && sound.similar.length > 0 && (
+            <>
+              <h3>More like this</h3>
+              <MoreLikeThis songs={sound.similar} />
+            </>
+          )}
+        </section>
+      )}
 
       <dl className="facts">
         {episode && (
@@ -287,7 +263,7 @@ const ContentDetailPage = () => {
 
       <section className="catalog-section">
         <h2>Yours</h2>
-        <YourActivity content={content} onChanged={load} position={() => (playingThis ? position() : null)} />
+        <YourActivity content={content} position={() => (playingThis ? position() : null)} />
       </section>
 
       {similar.length > 0 && (
@@ -306,14 +282,14 @@ const ContentDetailPage = () => {
         </section>
       )}
 
-      {isAdmin && content.kind !== 'song' && <MediaAdmin contentId={content.contentId} onChanged={mediaChanged} />}
+      {isAdmin && content.kind !== 'song' && <MediaAdmin contentId={content.contentId} />}
 
       {isAdmin && content.actors.length > 0 && (
-        <CastPayAdmin key={content.contentId} contentId={content.contentId} cast={content.actors} onChanged={load} />
+        <CastPayAdmin key={content.contentId} contentId={content.contentId} cast={content.actors} />
       )}
 
       <ReviewsSection contentId={content.contentId} />
-      <CommentsSection contentId={content.contentId} onPosted={load} />
+      <CommentsSection contentId={content.contentId} />
     </article>
   );
 };

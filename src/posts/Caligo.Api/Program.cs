@@ -11,6 +11,7 @@ using Microsoft.IdentityModel.Tokens;
 using Caligo.Api.Catalog;
 using Caligo.Api.Composition;
 using Caligo.Api.Lab;
+using Caligo.Api.MachineLearning;
 using Caligo.Api.Media;
 using Caligo.Api.Radio;
 using Caligo.Api.Services;
@@ -132,11 +133,26 @@ builder.Services.AddHttpClient<ICaligoEngine, CaligoEngineClient>((provider, htt
 
     http.Timeout = Timeout.InfiniteTimeSpan;
 });
+builder.Services.Configure<MachineLearningOptions>(builder.Configuration.GetSection(MachineLearningOptions.SectionName));
+builder.Services.AddHttpClient<MachineLearningClient>((provider, http) =>
+{
+    var service = provider.GetRequiredService<IOptions<MachineLearningOptions>>().Value.BaseUrl;
+
+    if (!string.IsNullOrWhiteSpace(service))
+    {
+        http.BaseAddress = new Uri(service.EndsWith('/') ? service : service + "/");
+    }
+
+    http.Timeout = Timeout.InfiniteTimeSpan;
+});
 builder.Services.AddSingleton<MusicSyncService>();
 builder.Services.AddSingleton<IMusicSync>(provider => provider.GetRequiredService<MusicSyncService>());
 builder.Services.AddHostedService(provider => provider.GetRequiredService<MusicSyncService>());
 builder.Services.AddHostedService<SubscriptionRenewalService>();
 builder.Services.AddScoped<CaligoAccountImport>();
+builder.Services.AddScoped<DemoActivity>();
+builder.Services.Configure<DemoOptions>(builder.Configuration.GetSection(DemoOptions.SectionName));
+builder.Services.AddHostedService<DemoTrickleService>();
 
 builder.Services.AddScoped<IBlogAccounts, IdentityBlogAccounts>();
 builder.Services.AddScoped<IContentLookup, CatalogContentLookup>();
@@ -305,6 +321,15 @@ if (args.Contains(CaligoAccountImport.Command))
     using var importScope = app.Services.CreateScope();
 
     Console.WriteLine(await importScope.ServiceProvider.GetRequiredService<CaligoAccountImport>().RunAsync());
+
+    return;
+}
+
+if (DemoActivity.Requested(args))
+{
+    using var demoScope = app.Services.CreateScope();
+
+    Console.WriteLine(await demoScope.ServiceProvider.GetRequiredService<DemoActivity>().RunAsync(args));
 
     return;
 }

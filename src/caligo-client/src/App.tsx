@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { useAuth } from './contexts/AuthContext';
+import { useAuth } from './store/hooks';
 import ProtectedRoute from './components/ProtectedRoute';
 import RequireRole from './components/RequireRole';
 import PostsListPage from './pages/PostsListPage';

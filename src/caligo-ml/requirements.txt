@@ -1,0 +1,7 @@
+-r requirements-serve.txt
+mlflow==3.17.2
+kaggle==2.2.5
+httpx2==2.16.0
+pytest==9.2.0
+ruff==0.17.4
+onnx==1.23.2

@@ -1,0 +1,13 @@
+-r requirements-train.txt
+fastapi==0.162.0
+uvicorn==0.54.0
+pydantic==2.14.3
+sqlalchemy==2.1.8
+alembic==1.20.1
+psycopg[binary]==3.3.8
+prefect==3.8.8
+onnxruntime==1.31.1
+tokenizers==0.23.3
+opentelemetry-sdk==1.45.2
+opentelemetry-exporter-otlp-proto-http==1.45.2
+opentelemetry-instrumentation-fastapi==0.66b2

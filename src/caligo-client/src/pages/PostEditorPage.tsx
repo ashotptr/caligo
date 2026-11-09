@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import api from '../api/axios';
+import { useGetContentQuery } from '../api/catalogApi';
 import { apiError, isEditConflict } from '../api/errors';
-import { etagOf } from '../api/etag';
+import { useCreatePostMutation, useLazyGetPostQuery, useUpdatePostMutation } from '../api/postsApi';
 import ContentPicker from '../components/ContentPicker';
 import type { PickedContent } from '../components/ContentPicker';
 import Markdown from '../components/Markdown';
 import { formatDateTime, fromLocalInput, parseServerDate, toLocalInput } from '../dates';
-import type { ContentDetail, PostDetail, PostStatus } from '../types';
+import type { PostStatus } from '../types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -35,9 +35,13 @@ const PostEditorPage = () => {
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
 
+  const [fetchPost] = useLazyGetPostQuery();
+  const [createPost] = useCreatePostMutation();
+  const [updatePost] = useUpdatePostMutation();
+  const { data: reviewedContent } = useGetContentQuery(Number(reviewOf), { skip: isEditing || !reviewOf });
+
   const load = useCallback(async () => {
-    const response = await api.get<PostDetail>(`/api/blogposts/${id}`);
-    const post = response.data;
+    const { post, etag: current } = await fetchPost(id ?? '').unwrap();
 
     setTitle(post.title);
     setTagsInput(post.tags.join(', '));
@@ -47,13 +51,13 @@ const PostEditorPage = () => {
       : { contentId: post.contentId, title: post.contentTitle ?? `Title ${post.contentId}` });
     setStatus(post.status);
     setScheduledFor(post.scheduledFor);
-    setEtag(etagOf(response));
+    setEtag(current);
 
     if (post.status === 'scheduled' && post.scheduledFor) {
       setWhen('schedule');
       setPublishAt(toLocalInput(parseServerDate(post.scheduledFor)));
     }
-  }, [id]);
+  }, [id, fetchPost]);
 
   useEffect(() => {
     if (!isEditing) return;
@@ -71,13 +75,10 @@ const PostEditorPage = () => {
   }, [isEditing, load]);
 
   useEffect(() => {
-    if (isEditing || !reviewOf) return;
-
-    api
-      .get<ContentDetail>(`/api/content/${reviewOf}`)
-      .then(response => setReviewed({ contentId: response.data.contentId, title: response.data.title }))
-      .catch(() => undefined);
-  }, [isEditing, reviewOf]);
+    if (reviewedContent) {
+      setReviewed({ contentId: reviewedContent.contentId, title: reviewedContent.title });
+    }
+  }, [reviewedContent]);
 
   const canSchedule = !isEditing || status === 'scheduled';
 
@@ -124,12 +125,12 @@ const PostEditorPage = () => {
     try {
       const body = { title, content, tags, publishAt: schedule, contentId: reviewed?.contentId ?? null };
 
-      if (isEditing) {
-        await api.put(`/api/blogposts/${id}`, body, { headers: etag ? { 'If-Match': etag } : {} });
+      if (isEditing && id) {
+        await updatePost({ id, body, etag }).unwrap();
         navigate(`/posts/${id}`);
       } else {
-        const response = await api.post<PostDetail>('/api/blogposts', body);
-        navigate(`/posts/${response.data.id}`);
+        const created = await createPost(body).unwrap();
+        navigate(`/posts/${created.id}`);
       }
     } catch (err) {
       if (isEditing && isEditConflict(err)) {

@@ -1,26 +1,15 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
+import { useGetEngagingQuery, useGetPopularQuery } from '../api/insightsApi';
 import { titlePath } from '../thesaurarium';
-import type { EngagingContent, PopularContent } from '../types';
 
 const SHOWN = 5;
 
 const InsightPanels = () => {
-  const [popular, setPopular] = useState<PopularContent[]>([]);
-  const [engaging, setEngaging] = useState<EngagingContent[]>([]);
+  const { data: allPopular = [] } = useGetPopularQuery();
+  const { data: allEngaging = [] } = useGetEngagingQuery();
 
-  useEffect(() => {
-    api
-      .get<PopularContent[]>('/api/insights/popular')
-      .then(response => setPopular(response.data.slice(0, SHOWN)))
-      .catch(() => undefined);
-
-    api
-      .get<EngagingContent[]>('/api/insights/engaging')
-      .then(response => setEngaging(response.data.slice(0, SHOWN)))
-      .catch(() => undefined);
-  }, []);
+  const popular = allPopular.slice(0, SHOWN);
+  const engaging = allEngaging.slice(0, SHOWN);
 
   if (popular.length === 0 && engaging.length === 0) {
     return null;

@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http.Json;
 using Caligo.Posts.Domain.Posts;
 using Caligo.Posts.Infrastructure.Identity;
 using Caligo.Api.Services;
@@ -123,6 +125,57 @@ public class RefreshSessionTests : IClassFixture<SqliteApiFactory>
 
         Assert.Equal(RefreshOutcome.Expired, (await sessions.RotateAsync(first, null, null)).Outcome);
         Assert.Equal(RefreshOutcome.Expired, (await sessions.RotateAsync(second, null, null)).Outcome);
+    }
+
+    [Fact]
+    public async Task Logout_WithoutAnAccessToken_EndsTheSessionsOfItsRefreshToken()
+    {
+        using var scope = _factory.Services.CreateScope();
+
+        var user = await CreateUserAsync(scope.ServiceProvider);
+        var sessions = scope.ServiceProvider.GetRequiredService<IRefreshSessionService>();
+
+        var token = await sessions.IssueAsync(user, null, null);
+
+        var response = await _factory.CreateClient().PostAsJsonAsync("/api/account/logout", new { RefreshToken = token });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(RefreshOutcome.Expired, (await sessions.RotateAsync(token, null, null)).Outcome);
+    }
+
+    [Fact]
+    public async Task Logout_WithAnUnknownRefreshToken_LeavesOtherSessionsAlone()
+    {
+        using var scope = _factory.Services.CreateScope();
+
+        var user = await CreateUserAsync(scope.ServiceProvider);
+        var sessions = scope.ServiceProvider.GetRequiredService<IRefreshSessionService>();
+
+        var token = await sessions.IssueAsync(user, null, null);
+
+        var response = await _factory.CreateClient()
+            .PostAsJsonAsync("/api/account/logout", new { RefreshToken = "not-a-token-anyone-ever-issued" });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(RefreshOutcome.Success, (await sessions.RotateAsync(token, null, null)).Outcome);
+    }
+
+    [Fact]
+    public async Task Logout_WithAnAccessToken_EndsEverySessionOfThatUser()
+    {
+        var (client, userId) = await Authenticated.ClientAsync(_factory);
+
+        using var scope = _factory.Services.CreateScope();
+
+        var user = await scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>().FindByIdAsync(userId);
+        var sessions = scope.ServiceProvider.GetRequiredService<IRefreshSessionService>();
+
+        var token = await sessions.IssueAsync(user!, null, null);
+
+        var response = await client.PostAsync("/api/account/logout", null);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(RefreshOutcome.Expired, (await sessions.RotateAsync(token, null, null)).Outcome);
     }
 
     private static async Task<ApplicationUser> CreateUserAsync(IServiceProvider services)

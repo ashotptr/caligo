@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
 import { apiError } from '../api/errors';
-import { useAuth } from '../contexts/AuthContext';
-import type { ClapResult, ClapTally } from '../types';
+import { postsApi, useClapPostMutation, useGetClapsQuery } from '../api/postsApi';
+import { useAppDispatch, useAuth } from '../store/hooks';
 
 const MAX_CLAPS = 50;
 
@@ -16,28 +15,13 @@ interface ClapButtonProps {
 
 const ClapButton = ({ postId, authorId }: ClapButtonProps) => {
   const { user, isAuthenticated } = useAuth();
-  const [tally, setTally] = useState<ClapTally | null>(null);
+  const dispatch = useAppDispatch();
+  const { data: tally, isError } = useGetClapsQuery(postId);
+  const [clapPost] = useClapPostMutation();
   const [error, setError] = useState<string | null>(null);
 
   const pending = useRef(0);
-  const inFlight = useRef(0);
   const timer = useRef<number | undefined>(undefined);
-
-  useEffect(() => {
-    let active = true;
-
-    api.get<ClapTally>(`/api/blogposts/${postId}/claps`)
-      .then(response => {
-        if (active) setTally(response.data);
-      })
-      .catch(() => {
-        if (active) setTally(null);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [postId]);
 
   const send = useCallback(async () => {
     const count = pending.current;
@@ -47,34 +31,20 @@ const ClapButton = ({ postId, authorId }: ClapButtonProps) => {
     }
 
     pending.current = 0;
-    inFlight.current += count;
 
     try {
-      const response = await api.post<ClapResult>(`/api/blogposts/${postId}/claps`, { count });
-
-      inFlight.current -= count;
-
-      const refused = count - response.data.applied;
-
-      setTally(current => current && {
-        ...current,
-        total: current.total - refused,
-        mine: response.data.mine + inFlight.current + pending.current
-      });
+      await clapPost({ postId, count }).unwrap();
     } catch (err) {
-      inFlight.current -= count;
-
-      setTally(current => current && { ...current, total: current.total - count, mine: current.mine - count });
       setError(apiError(err, 'Your claps could not be sent.'));
     }
-  }, [postId]);
+  }, [postId, clapPost]);
 
   useEffect(() => () => {
     window.clearTimeout(timer.current);
     void send();
   }, [send]);
 
-  if (!tally) {
+  if (!tally || isError) {
     return null;
   }
 
@@ -89,7 +59,11 @@ const ClapButton = ({ postId, authorId }: ClapButtonProps) => {
 
     setError(null);
     pending.current += 1;
-    setTally(current => current && { ...current, total: current.total + 1, mine: current.mine + 1 });
+
+    dispatch(postsApi.util.updateQueryData('getClaps', postId, current => {
+      current.total += 1;
+      current.mine += 1;
+    }));
 
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => void send(), SEND_AFTER_MS);

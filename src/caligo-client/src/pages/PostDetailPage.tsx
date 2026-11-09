@@ -1,68 +1,38 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
-import api from '../api/axios';
-import { apiError, isEditConflict } from '../api/errors';
-import { etagOf } from '../api/etag';
+import { useGetPostStatsQuery } from '../api/analyticsApi';
+import { apiError, isEditConflict, statusOf } from '../api/errors';
+import { useDeletePostMutation, useGetPostQuery } from '../api/postsApi';
 import ClapButton from '../components/ClapButton';
 import Markdown from '../components/Markdown';
-import { useAuth } from '../contexts/AuthContext';
 import { formatDate, formatDateTime, parseServerDate } from '../dates';
+import { useAuth } from '../store/hooks';
 import { titlePath } from '../thesaurarium';
-import type { PostDetail, PostStats } from '../types';
 
 const PostDetailPage = () => {
-  const { id } = useParams<{ id: string }>();
-  const [post, setPost] = useState<PostDetail | null>(null);
-  const [etag, setEtag] = useState<string | null>(null);
-  const [stats, setStats] = useState<PostStats | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { id = '' } = useParams<{ id: string }>();
+  const { data: loaded, error } = useGetPostQuery(id);
+  const { data: statsResponse } = useGetPostStatsQuery(id);
+  const [deletePost] = useDeletePostMutation();
   const [actionError, setActionError] = useState<string | null>(null);
   const { user, hasRole } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchPost = async () => {
-      try {
-        const response = await api.get<PostDetail>(`/api/blogposts/${id}`);
-        setPost(response.data);
-        setEtag(etagOf(response));
-      } catch (err) {
-        if (axios.isAxiosError(err) && err.response?.status === 404) {
-          setError('This post does not exist.');
-        } else {
-          setError('Could not load the post.');
-        }
-      }
-    };
-    fetchPost();
-  }, [id]);
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await api.get<PostStats & { enabled: boolean }>(`/api/analytics/posts/${id}`);
-        setStats(response.data.enabled ? response.data : null);
-      } catch {
-        setStats(null);
-      }
-    };
-    fetchStats();
-  }, [id]);
-
   if (error) {
     return (
       <div>
-        <p className="form-error">{error}</p>
+        <p className="form-error">{statusOf(error) === 404 ? 'This post does not exist.' : 'Could not load the post.'}</p>
         <Link to="/">← Back to all posts</Link>
       </div>
     );
   }
 
-  if (!post) {
+  if (!loaded) {
     return <p className="status-line">Loading…</p>;
   }
 
+  const { post, etag } = loaded;
+  const stats = statsResponse?.enabled ? statsResponse : null;
   const canEdit = user && (hasRole('Admin') || user.id === post.authorId);
   const isScheduled = post.status === 'scheduled';
 
@@ -70,7 +40,7 @@ const PostDetailPage = () => {
     if (!window.confirm('Delete this post permanently?')) return;
     setActionError(null);
     try {
-      await api.delete(`/api/blogposts/${post.id}`, { headers: etag ? { 'If-Match': etag } : {} });
+      await deletePost({ id: post.id, etag }).unwrap();
       navigate('/');
     } catch (err) {
       setActionError(isEditConflict(err)

@@ -1,38 +1,16 @@
-import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import api from '../api/axios';
+import { useGetSeriesQuery } from '../api/catalogApi';
 import { catalogError, formatDay, formatDuration, statusOf } from '../catalog';
 import DetailHeader from '../components/DetailHeader';
 import { SERIES, titlePath } from '../thesaurarium';
-import type { SeriesDetail } from '../types';
 
 const SeriesDetailPage = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id = '' } = useParams<{ id: string }>();
 
-  const [series, setSeries] = useState<SeriesDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    setSeries(null);
-    setError(null);
-
-    api
-      .get<SeriesDetail>(`/api/series/${id}`)
-      .then(response => {
-        if (!cancelled) setSeries(response.data);
-      })
-      .catch(err => {
-        if (!cancelled) {
-          setError(statusOf(err) === 404 ? 'This series is not in the Thesaurarium.' : catalogError(err, 'Could not load the series.'));
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+  const { currentData: series, error: loadError } = useGetSeriesQuery(id);
+  const error = loadError
+    ? statusOf(loadError) === 404 ? 'This series is not in the Thesaurarium.' : catalogError(loadError, 'Could not load the series.')
+    : null;
 
   if (error) {
     return (

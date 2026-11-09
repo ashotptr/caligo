@@ -1,37 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
-import type { TopWindowResponse, WindowPost } from '../types';
+import { useGetTopWindowQuery } from '../api/analyticsApi';
+import type { WindowPost } from '../types';
 
 const WINDOW_MINUTES = 60;
 const REFRESH_MS = 30_000;
 
 const TopNowPanel = () => {
   const [by, setBy] = useState<'views' | 'claps'>('views');
-  const [top, setTop] = useState<TopWindowResponse | null>(null);
+  const { data, isError } = useGetTopWindowQuery(
+    { minutes: WINDOW_MINUTES, by, limit: 5 },
+    { pollingInterval: REFRESH_MS }
+  );
 
-  useEffect(() => {
-    let active = true;
-
-    const load = async () => {
-      try {
-        const response = await api.get<TopWindowResponse>('/api/analytics/top/window', {
-          params: { minutes: WINDOW_MINUTES, by, limit: 5 }
-        });
-        if (active) setTop(response.data);
-      } catch {
-        if (active) setTop(null);
-      }
-    };
-
-    load();
-    const timer = window.setInterval(load, REFRESH_MS);
-
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [by]);
+  const top = isError ? null : data;
 
   if (!top?.enabled) {
     return null;

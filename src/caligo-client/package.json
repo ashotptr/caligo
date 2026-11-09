@@ -7,11 +7,13 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@moq/net": "0.4.3",
     "@react-oauth/google": "^0.13.5",
+    "@reduxjs/toolkit": "^2.14.0",
     "axios": "^1.18.1",
     "dashjs": "^5.2.1",
     "hls.js": "^1.7.3",
@@ -20,19 +22,26 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
+    "react-redux": "^9.3.1",
     "react-router-dom": "^7.18.1",
     "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^6.0.3",
+    "jsdom": "^26.1.0",
+    "msw": "^2.15.0",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vitest": "^5.1.0"
   },
   "overrides": {
     "@moq/signals": {

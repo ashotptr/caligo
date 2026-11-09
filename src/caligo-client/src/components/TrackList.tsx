@@ -1,14 +1,13 @@
 import { Link } from 'react-router-dom';
 import { formatDuration, kindLabel } from '../catalog';
-import { useAuth } from '../contexts/AuthContext';
-import { useCollections } from '../contexts/CollectionsContext';
+import { useAuth, useCollections, useToast } from '../store/hooks';
 import { usePlayer } from '../contexts/PlayerContext';
 import type { PlayerTrack } from '../contexts/PlayerContext';
-import { useToast } from '../contexts/ToastContext';
 import { downloadAll, downloadTrack } from '../downloads';
 import { titlePath } from '../thesaurarium';
-import type { ContentKind, Track } from '../types';
+import type { ContentKind, SongAnalysis, Track } from '../types';
 import RadioQueueButton from './RadioQueueButton';
+import SongSound from './SongSound';
 
 export type TrackRow = Track & { kind?: ContentKind; coverUri?: string | null };
 
@@ -21,6 +20,7 @@ interface TrackListProps {
   download?: string;
   inCollection?: boolean;
   onRemove?: (track: TrackRow) => void;
+  sounds?: Record<string, SongAnalysis>;
 }
 
 export const DownloadIcon = () => (
@@ -31,7 +31,7 @@ export const DownloadIcon = () => (
   </svg>
 );
 
-const TrackList = ({ tracks, numbered = true, album, albums, cover, download, inCollection = false, onRemove }: TrackListProps) => {
+const TrackList = ({ tracks, numbered = true, album, albums, cover, download, inCollection = false, onRemove, sounds }: TrackListProps) => {
   const { isAuthenticated } = useAuth();
   const { addToCollection } = useCollections();
   const { mode, current, playTracks } = usePlayer();
@@ -93,6 +93,7 @@ const TrackList = ({ tracks, numbered = true, album, albums, cover, download, in
                 <Link to={titlePath(track.contentId)}>{track.title}</Link>
                 {kind !== 'song' && <span className="post-meta"> · {kindLabel(kind)}</span>}
                 {track.artists.length > 0 && <span className="post-meta"> · {track.artists.join(', ')}</span>}
+                {track.audioUri && sounds?.[track.audioUri] && <SongSound song={sounds[track.audioUri]} />}
               </span>
               <span className="track-actions">
                 {isAuthenticated && !inCollection && (

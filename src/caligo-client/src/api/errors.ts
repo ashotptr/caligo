@@ -1,17 +1,46 @@
 import axios from 'axios';
 
+export interface ApiFailure {
+  status: number | undefined;
+  data: unknown;
+}
+
+export const failureOf = (err: unknown): ApiFailure | undefined => {
+  if (axios.isAxiosError(err)) {
+    return err.response ? { status: err.response.status, data: err.response.data } : undefined;
+  }
+
+  if (err !== null && typeof err === 'object' && 'status' in err) {
+    const { status, data } = err as { status: unknown; data?: unknown };
+
+    return { status: typeof status === 'number' ? status : undefined, data };
+  }
+
+  return undefined;
+};
+
+export const statusOf = (err: unknown): number | undefined => failureOf(err)?.status;
+
+export const textOf = (err: unknown): string | undefined => {
+  const data = failureOf(err)?.data;
+
+  return typeof data === 'string' && data.trim().length > 0 ? data : undefined;
+};
+
 export const apiError = (err: unknown, fallback: string): string => {
-  if (!axios.isAxiosError(err) || !err.response) {
+  const failure = failureOf(err);
+
+  if (!failure || failure.status === undefined) {
     return fallback;
   }
 
-  const { status, data } = err.response;
+  const text = textOf(err);
 
-  if (typeof data === 'string' && data.trim().length > 0) {
-    return data;
+  if (text) {
+    return text;
   }
 
-  switch (status) {
+  switch (failure.status) {
     case 401:
       return 'Please sign in again.';
     case 403:
@@ -26,5 +55,8 @@ export const apiError = (err: unknown, fallback: string): string => {
   }
 };
 
-export const isEditConflict = (err: unknown): boolean =>
-  axios.isAxiosError(err) && (err.response?.status === 409 || err.response?.status === 412);
+export const isEditConflict = (err: unknown): boolean => {
+  const status = statusOf(err);
+
+  return status === 409 || status === 412;
+};

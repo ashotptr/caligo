@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../store/hooks';
 import { ARTISTS, COLLECTIONS, SERIES, THESAURARIUM, TITLES } from '../thesaurarium';
 
 const ThesaurariumNav = ({ title = 'Thesaurarium' }: { title?: string }) => {

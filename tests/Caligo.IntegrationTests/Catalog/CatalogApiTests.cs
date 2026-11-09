@@ -330,6 +330,26 @@ public class CatalogApiTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/content/{contentId}/interaction")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/content/{contentId}/interaction")).StatusCode);
+
+        await using var after = Db();
+
+        var stored = await after.Contents.AsNoTracking()
+            .Where(c => c.ContentId == contentId)
+            .Select(c => c.AverageRating)
+            .SingleAsync();
+        var remaining = await after.Interactions.AsNoTracking()
+            .Where(i => i.ContentId == contentId && i.Rating != null)
+            .Select(i => i.Rating!.Value)
+            .ToListAsync();
+
+        if (remaining.Count == 0)
+        {
+            Assert.Null(stored);
+        }
+        else
+        {
+            Assert.Equal(remaining.Average(), stored!.Value, 3);
+        }
     }
 
     [Fact]

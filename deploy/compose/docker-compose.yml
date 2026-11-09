@@ -150,6 +150,8 @@ services:
       ForwardedHeaders__KnownNetworks__1: "192.168.0.0/16"
       ForwardedHeaders__KnownNetworks__2: "10.0.0.0/8"
       Catalog__CaligoPublicRoot: "/caligo/public_html"
+      MachineLearning__BaseUrl: "http://caligo-ml:8080"
+      Demo__PlanPath: /demo/plan.json
       Catalog__CaligoEngineUrl: "http://caligo:8080"
       Catalog__CaligoDataRoot: "/caligo/data"
       Media__Enabled: "true"
@@ -159,6 +161,7 @@ services:
       - ../../src/caligo/public_html:/caligo/public_html:ro
       - ../../src/caligo/data:/caligo/data:ro
       - ../../media/incoming:/media/incoming:ro
+      - ../../data/dev/demo:/demo
     networks:
       - default
       - caligo
@@ -267,6 +270,69 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+
+  caligo-ml:
+    build:
+      context: ../../src/caligo-ml
+    init: true
+    mem_limit: 1g
+    cpus: 1
+    environment:
+      ML_ROOT: /data/ml
+      ML_DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/caligoml"
+      ML_CATALOG_DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/caligodb"
+      ML_MUSIC_ROOT: /music
+      ML_SCHEDULE: ${ML_SCHEDULE:-on}
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://aspire-dashboard:18890"
+      OTEL_SERVICE_NAME: caligo-ml
+    volumes:
+      - ../../data/dev/ml:/data/ml:ro
+      - ../../src/caligo/public_html:/music:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  prefect:
+    build:
+      context: ../../src/caligo-ml
+    profiles: ["prefect"]
+    init: true
+    command: ["prefect", "server", "start", "--host", "0.0.0.0"]
+    environment:
+      PREFECT_HOME: /data/prefect
+    volumes:
+      - ../../data/dev/prefect:/data/prefect
+    ports:
+      - "127.0.0.1:14200:4200"
+
+  caligo-ml-flows:
+    build:
+      context: ../../src/caligo-ml
+    profiles: ["prefect"]
+    init: true
+    mem_limit: 1g
+    cpus: 1
+    command: ["python", "-m", "caligo_ml.flows"]
+    environment:
+      ML_ROOT: /data/ml
+      ML_DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/caligoml"
+      ML_CATALOG_DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/caligodb"
+      ML_MUSIC_ROOT: /music
+      PREFECT_API_URL: http://prefect:4200/api
+    volumes:
+      - ../../data/dev/ml:/data/ml:ro
+      - ../../src/caligo/public_html:/music:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      prefect:
+        condition: service_started
 
   caligo-client:
     build:

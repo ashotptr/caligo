@@ -1,50 +1,13 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
-import { useAuth } from '../contexts/AuthContext';
+import { useGetPostsInfiniteQuery } from '../api/postsApi';
 import { formatDate } from '../dates';
-import type { PagedResult, PostSummary } from '../types';
+import { useAuth } from '../store/hooks';
 
 const ReviewsSection = ({ contentId }: { contentId: number }) => {
   const { hasRole } = useAuth();
+  const { data, hasNextPage, fetchNextPage, isFetchNextPageError } = useGetPostsInfiniteQuery({ contentId });
 
-  const [reviews, setReviews] = useState<PostSummary[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    setReviews([]);
-    setCursor(null);
-
-    api
-      .get<PagedResult<PostSummary>>('/api/blogposts', { params: { contentId } })
-      .then(response => {
-        if (cancelled) return;
-        setReviews(response.data.items);
-        setCursor(response.data.nextCursor);
-      })
-      .catch(() => undefined);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [contentId]);
-
-  const loadMore = async () => {
-    if (!cursor) {
-      return;
-    }
-
-    try {
-      const response = await api.get<PagedResult<PostSummary>>('/api/blogposts', { params: { contentId, cursor } });
-      setReviews(previous => [...previous, ...response.data.items]);
-      setCursor(response.data.nextCursor);
-    } catch {
-      setCursor(null);
-    }
-  };
-
+  const reviews = data?.pages.flatMap(page => page.items) ?? [];
   const canWrite = hasRole('Admin', 'Writer');
 
   return (
@@ -66,9 +29,9 @@ const ReviewsSection = ({ contentId }: { contentId: number }) => {
         ))}
       </ul>
 
-      {cursor && (
+      {hasNextPage && !isFetchNextPageError && (
         <div className="load-more">
-          <button type="button" onClick={loadMore}>More reviews</button>
+          <button type="button" onClick={() => void fetchNextPage()}>More reviews</button>
         </div>
       )}
     </section>

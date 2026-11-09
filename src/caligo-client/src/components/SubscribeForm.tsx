@@ -1,34 +1,27 @@
 import { useState } from 'react';
-import axios from 'axios';
-import api from '../api/axios';
-
-type Status = 'idle' | 'sending' | 'done' | 'error';
+import { useSubscribeMutation } from '../api/accountApi';
+import { failureOf } from '../api/errors';
 
 const SubscribeForm = () => {
   const [email, setEmail] = useState('');
-  const [status, setStatus] = useState<Status>('idle');
+  const [subscribe, { isLoading: sending, isSuccess: done }] = useSubscribeMutation();
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatus('sending');
     setError(null);
 
     try {
-      await api.post('/api/subscriptions', { email });
-      setStatus('done');
+      await subscribe(email).unwrap();
       setEmail('');
     } catch (err) {
-      setStatus('error');
-      setError(
-        axios.isAxiosError(err) && Array.isArray(err.response?.data)
-          ? String(err.response?.data[0])
-          : 'Could not subscribe. Try again later.'
-      );
+      const data = failureOf(err)?.data;
+
+      setError(Array.isArray(data) ? String(data[0]) : 'Could not subscribe. Try again later.');
     }
   };
 
-  if (status === 'done') {
+  if (done) {
     return <p className="subscribe-done">Subscribed. You will get an email when a new post goes up.</p>;
   }
 
@@ -44,8 +37,8 @@ const SubscribeForm = () => {
           value={email}
           onChange={e => setEmail(e.target.value)}
         />
-        <button type="submit" disabled={status === 'sending'}>
-          {status === 'sending' ? 'Subscribing…' : 'Subscribe'}
+        <button type="submit" disabled={sending}>
+          {sending ? 'Subscribing…' : 'Subscribe'}
         </button>
       </div>
       {error && <p className="form-error">{error}</p>}

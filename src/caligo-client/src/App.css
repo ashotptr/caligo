@@ -3241,3 +3241,57 @@ a.tag:hover {
     padding: 10px 8px 10px 12px;
   }
 }
+
+.sound-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.catalog-section > .sound-tags {
+  margin-left: 0;
+}
+
+.album-accented .release-cover img {
+  box-shadow: 0 0 48px -12px var(--album-accent);
+}
+
+.album-accented .track-list li.playing {
+  box-shadow: inset 4px 0 0 var(--album-accent);
+}
+
+.genre-fix {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.similar-songs li button {
+  padding: 2px 10px;
+}
+
+.moderation-queue {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.moderation-queue li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.moderation-text {
+  margin: 0;
+  color: var(--text-main);
+}
+
+.ml-panels h3 {
+  margin: 20px 0 8px;
+  font-size: 15px;
+}

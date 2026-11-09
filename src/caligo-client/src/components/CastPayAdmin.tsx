@@ -1,26 +1,22 @@
 import { useState } from 'react';
-import api from '../api/axios';
+import { useSetCastPaymentMutation } from '../api/catalogApi';
 import { catalogError } from '../catalog';
 import type { CastMember } from '../types';
 
-const CastPayAdmin = ({ contentId, cast, onChanged }: { contentId: number; cast: CastMember[]; onChanged: () => void }) => {
+const CastPayAdmin = ({ contentId, cast }: { contentId: number; cast: CastMember[] }) => {
   const [amounts, setAmounts] = useState<Record<number, string>>(() =>
     Object.fromEntries(cast.map(actor => [actor.actorId, actor.payment == null ? '' : String(actor.payment)])));
-  const [saving, setSaving] = useState(false);
+  const [setCastPayment, { isLoading: saving }] = useSetCastPaymentMutation();
   const [note, setNote] = useState<string | null>(null);
 
   const save = async (actorId: number) => {
     const amount = (amounts[actorId] ?? '').trim();
 
-    setSaving(true);
     setNote(null);
     try {
-      await api.put(`/api/content/${contentId}/cast/${actorId}`, { payment: amount === '' ? null : Number(amount) });
-      onChanged();
+      await setCastPayment({ contentId, actorId, payment: amount === '' ? null : Number(amount) }).unwrap();
     } catch (err) {
       setNote(catalogError(err, 'Could not save the payment.'));
-    } finally {
-      setSaving(false);
     }
   };
 

@@ -1,27 +1,37 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
+import {
+  useGetInteractionQuery,
+  useLogWatchMutation,
+  useRemoveInteractionMutation,
+  useSaveInteractionMutation
+} from '../api/socialApi';
 import { PROFILE, catalogError, statusOf, watchVerb } from '../catalog';
-import { useAuth } from '../contexts/AuthContext';
-import type { ContentDetail, Interaction } from '../types';
+import { useAuth } from '../store/hooks';
+import type { ContentDetail } from '../types';
 
 interface YourActivityProps {
   content: ContentDetail;
-  onChanged: () => void;
   position?: () => number | null;
 }
 
-const YourActivity = ({ content, onChanged, position }: YourActivityProps) => {
+const YourActivity = ({ content, position }: YourActivityProps) => {
   const { isAuthenticated } = useAuth();
   const contentId = content.contentId;
+
+  const { currentData: interaction, error: loadError } = useGetInteractionQuery(contentId, { skip: !isAuthenticated });
+  const [saveInteraction, { isLoading: saving }] = useSaveInteractionMutation();
+  const [removeInteraction, { isLoading: removing }] = useRemoveInteractionMutation();
+  const [logWatchCall, { isLoading: logging }] = useLogWatchMutation();
 
   const [rating, setRating] = useState('');
   const [liked, setLiked] = useState<boolean | null>(null);
   const [saved, setSaved] = useState(false);
   const [needsProfile, setNeedsProfile] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const busy = saving || removing || logging;
 
   useEffect(() => {
     setRating('');
@@ -30,31 +40,21 @@ const YourActivity = ({ content, onChanged, position }: YourActivityProps) => {
     setNeedsProfile(false);
     setMessage(null);
     setError(null);
-
-    if (!isAuthenticated) {
-      return;
-    }
-
-    let cancelled = false;
-
-    api
-      .get<Interaction>(`/api/content/${contentId}/interaction`)
-      .then(response => {
-        if (cancelled) return;
-        setRating(response.data.rating == null ? '' : String(response.data.rating));
-        setLiked(response.data.liked);
-        setSaved(true);
-      })
-      .catch(err => {
-        if (!cancelled && statusOf(err) === 409) {
-          setNeedsProfile(true);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
   }, [contentId, isAuthenticated]);
+
+  useEffect(() => {
+    if (interaction) {
+      setRating(interaction.rating == null ? '' : String(interaction.rating));
+      setLiked(interaction.liked);
+      setSaved(true);
+    }
+  }, [interaction]);
+
+  useEffect(() => {
+    if (statusOf(loadError) === 409) {
+      setNeedsProfile(true);
+    }
+  }, [loadError]);
 
   if (!isAuthenticated) {
     return (
@@ -90,54 +90,39 @@ const YourActivity = ({ content, onChanged, position }: YourActivityProps) => {
       return;
     }
 
-    setBusy(true);
     try {
-      await api.put<Interaction>(`/api/content/${contentId}/interaction`, {
-        liked,
-        rating: rating === '' ? null : Number(rating)
-      });
+      await saveInteraction({ contentId, liked, rating: rating === '' ? null : Number(rating) }).unwrap();
       setSaved(true);
       setMessage('Saved.');
-      onChanged();
     } catch (err) {
       fail(err, 'Could not save your rating.');
-    } finally {
-      setBusy(false);
     }
   };
 
   const remove = async () => {
     setError(null);
     setMessage(null);
-    setBusy(true);
     try {
-      await api.delete(`/api/content/${contentId}/interaction`);
+      await removeInteraction(contentId).unwrap();
       setRating('');
       setLiked(null);
       setSaved(false);
       setMessage('Removed.');
-      onChanged();
     } catch (err) {
       fail(err, 'Could not remove your rating.');
-    } finally {
-      setBusy(false);
     }
   };
 
   const logWatch = async () => {
     setError(null);
     setMessage(null);
-    setBusy(true);
     try {
       const seconds = position?.() ?? null;
 
-      await api.post(`/api/content/${contentId}/watch`, { timestamp: seconds && seconds > 0 ? seconds : null });
+      await logWatchCall({ contentId, timestamp: seconds && seconds > 0 ? seconds : null }).unwrap();
       setMessage(`Added to your history. Your recommendations now follow this ${watchVerb(content.kind)}.`);
-      onChanged();
     } catch (err) {
       fail(err, 'Could not add it to your history.');
-    } finally {
-      setBusy(false);
     }
   };
 

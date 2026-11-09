@@ -70,10 +70,28 @@ namespace Caligo.Catalog.Infrastructure.Persistence
             return new InteractionDto(contentId, liked, rating, await AverageAsync(contentId, cancellationToken));
         }
 
-        public async Task<bool> RemoveInteractionAsync(int contentId, int userId, CancellationToken cancellationToken = default) =>
-            await _db.Interactions
+        public async Task<bool> RemoveInteractionAsync(int contentId, int userId, CancellationToken cancellationToken = default)
+        {
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+            var removed = await _db.Interactions
                 .Where(i => i.ContentId == contentId && i.UserId == userId)
                 .ExecuteDeleteAsync(cancellationToken) > 0;
+
+            if (removed)
+            {
+                await _db.Contents
+                    .Where(c => c.ContentId == contentId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(
+                        c => c.AverageRating,
+                        c => _db.Interactions.Where(i => i.ContentId == c.ContentId).Average(i => i.Rating)),
+                        cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+
+            return removed;
+        }
 
         public async Task<CommentDto> AddCommentAsync(
             int contentId, int userId, string text, CancellationToken cancellationToken = default)

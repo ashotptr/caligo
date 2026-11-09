@@ -1,42 +1,18 @@
-import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import api from '../api/axios';
+import { useGetArtistsQuery } from '../api/catalogApi';
 import { catalogError } from '../catalog';
 import CoverCard from '../components/CoverCard';
 import ThesaurariumNav from '../components/ThesaurariumNav';
 import { artistPath } from '../thesaurarium';
-import type { ArtistSummary } from '../types';
 
 const ArtistsPage = () => {
   const [params] = useSearchParams();
   const activeQuery = params.get('query') ?? '';
 
-  const [artists, setArtists] = useState<ArtistSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    setLoading(true);
-    setError(null);
-
-    api
-      .get<ArtistSummary[]>('/api/artists', { params: { query: activeQuery || undefined } })
-      .then(response => {
-        if (!cancelled) setArtists(response.data);
-      })
-      .catch(err => {
-        if (!cancelled) setError(catalogError(err, 'Could not load the artists.'));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeQuery]);
+  const { currentData: found, error: loadError, isFetching } = useGetArtistsQuery(activeQuery);
+  const artists = found ?? [];
+  const loading = isFetching && !found;
+  const error = loadError ? catalogError(loadError, 'Could not load the artists.') : null;
 
   return (
     <div>

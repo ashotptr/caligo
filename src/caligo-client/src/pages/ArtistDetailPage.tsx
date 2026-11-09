@@ -1,40 +1,18 @@
-import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import api from '../api/axios';
+import { useGetArtistQuery } from '../api/catalogApi';
 import { catalogError, formatDay, statusOf } from '../catalog';
 import AlbumGrid from '../components/AlbumGrid';
 import DetailHeader from '../components/DetailHeader';
 import TrackList from '../components/TrackList';
 import { ARTISTS, singlePath } from '../thesaurarium';
-import type { ArtistDetail } from '../types';
 
 const ArtistDetailPage = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id = '' } = useParams<{ id: string }>();
 
-  const [artist, setArtist] = useState<ArtistDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    setArtist(null);
-    setError(null);
-
-    api
-      .get<ArtistDetail>(`/api/artists/${id}`)
-      .then(response => {
-        if (!cancelled) setArtist(response.data);
-      })
-      .catch(err => {
-        if (!cancelled) {
-          setError(statusOf(err) === 404 ? 'This artist is not in the Thesaurarium.' : catalogError(err, 'Could not load the artist.'));
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+  const { currentData: artist, error: loadError } = useGetArtistQuery(id);
+  const error = loadError
+    ? statusOf(loadError) === 404 ? 'This artist is not in the Thesaurarium.' : catalogError(loadError, 'Could not load the artist.')
+    : null;
 
   if (error) {
     return (

@@ -1,53 +1,7 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import api from '../api/axios';
-import type { AskAnswer, AskSong } from '../types';
-
-type Entry =
-  | { id: number; from: 'you'; text: string }
-  | { id: number; from: 'ai'; state: 'thinking' }
-  | { id: number; from: 'ai'; state: 'failed' }
-  | { id: number; from: 'ai'; state: 'answered'; text: string | null; songs: AskSong[] | null };
-
-const SESSION_KEY = 'music_agent_session';
-
-const sessionId = (): string => {
-  try {
-    const stored = sessionStorage.getItem(SESSION_KEY);
-
-    if (stored) {
-      return stored;
-    }
-  } catch {
-    return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-  }
-
-  const created = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-
-  try {
-    sessionStorage.setItem(SESSION_KEY, created);
-  } catch {
-    return created;
-  }
-
-  return created;
-};
-
-let history: Entry[] = [];
-let nextId = 1;
-const listeners = new Set<() => void>();
-
-const publish = (next: Entry[]): void => {
-  history = next;
-  listeners.forEach(listener => listener());
-};
-
-const subscribe = (listener: () => void): (() => void) => {
-  listeners.add(listener);
-
-  return () => {
-    listeners.delete(listener);
-  };
-};
+import { useEffect, useRef, useState } from 'react';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { askOmniscient } from '../store/omniscientSlice';
+import type { OmniscientEntry } from '../store/omniscientSlice';
 
 const safeUrl = (url: string | null): string | null => {
   if (!url) {
@@ -63,26 +17,7 @@ const safeUrl = (url: string | null): string | null => {
   }
 };
 
-const ask = async (query: string): Promise<void> => {
-  const pending = nextId + 1;
-
-  publish([...history, { id: nextId, from: 'you', text: query }, { id: pending, from: 'ai', state: 'thinking' }]);
-  nextId += 2;
-
-  let answer: Entry;
-
-  try {
-    const { data } = await api.post<AskAnswer>('/api/caligo/ask', { query, sessionId: sessionId() });
-
-    answer = { id: pending, from: 'ai', state: 'answered', text: data.text, songs: data.songs };
-  } catch {
-    answer = { id: pending, from: 'ai', state: 'failed' };
-  }
-
-  publish(history.map(entry => (entry.id === pending ? answer : entry)));
-};
-
-const Answer = ({ entry }: { entry: Extract<Entry, { from: 'ai' }> }) => {
+const Answer = ({ entry }: { entry: Extract<OmniscientEntry, { from: 'ai' }> }) => {
   if (entry.state === 'thinking') {
     return <div className="ai-thinking">Thinking...</div>;
   }
@@ -120,7 +55,8 @@ const Answer = ({ entry }: { entry: Extract<Entry, { from: 'ai' }> }) => {
 };
 
 const OmniscientPage = () => {
-  const entries = useSyncExternalStore(subscribe, () => history, () => history);
+  const entries = useAppSelector(state => state.omniscient.entries);
+  const dispatch = useAppDispatch();
   const [query, setQuery] = useState('');
   const box = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -145,7 +81,7 @@ const OmniscientPage = () => {
     }
 
     setQuery('');
-    ask(cleaned);
+    void dispatch(askOmniscient(cleaned));
   };
 
   return (

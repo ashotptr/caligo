@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import api from '../api/axios';
+import { useFindContentQuery } from '../api/catalogApi';
 import { kindLabel, statusOf, yearOf } from '../catalog';
-import type { ContentSummary, PagedResult } from '../types';
+import type { ContentSummary } from '../types';
 
 export interface PickedContent {
   contentId: number;
@@ -15,45 +15,25 @@ interface ContentPickerProps {
 
 const ContentPicker = ({ value, onChange }: ContentPickerProps) => {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<ContentSummary[]>([]);
-  const [searched, setSearched] = useState(false);
-  const [unavailable, setUnavailable] = useState(false);
+  const [term, setTerm] = useState('');
 
   useEffect(() => {
-    const term = query.trim();
+    const timer = window.setTimeout(() => setTerm(query.trim()), 250);
 
-    setSearched(false);
-
-    if (term.length < 2) {
-      setResults([]);
-      return;
-    }
-
-    let cancelled = false;
-
-    const timer = window.setTimeout(() => {
-      api
-        .get<PagedResult<ContentSummary>>('/api/content', { params: { query: term, limit: 8 } })
-        .then(response => {
-          if (cancelled) return;
-          setResults(response.data.items);
-          setSearched(true);
-        })
-        .catch(err => {
-          if (!cancelled && statusOf(err) === 503) setUnavailable(true);
-        });
-    }, 250);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
+    return () => window.clearTimeout(timer);
   }, [query]);
+
+  const searching = term.length >= 2 && term === query.trim();
+  const { currentData, error } = useFindContentQuery({ query: term, limit: 8 }, { skip: !searching });
+
+  const results = searching ? currentData?.items ?? [] : [];
+  const searched = searching && currentData !== undefined;
+  const unavailable = statusOf(error) === 503;
 
   const pick = (item: ContentSummary) => {
     onChange({ contentId: item.contentId, title: item.title });
     setQuery('');
-    setResults([]);
+    setTerm('');
   };
 
   return (

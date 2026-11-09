@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using Caligo.Posts.Infrastructure.Identity;
@@ -126,10 +127,16 @@ public class AccountController : ControllerBase
     }
 
     [HttpPost("logout")]
-    [Authorize]
-    public async Task<IActionResult> Logout(CancellationToken cancellationToken)
+    [AllowAnonymous]
+    public async Task<IActionResult> Logout(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] LogoutDto? logoutDto, CancellationToken cancellationToken)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (userId is null && !string.IsNullOrWhiteSpace(logoutDto?.RefreshToken))
+        {
+            userId = await _sessions.OwnerOfAsync(logoutDto.RefreshToken, cancellationToken);
+        }
 
         if (userId is not null)
         {
