@@ -38,8 +38,27 @@ python_bin() {
 }
 
 counts() {
-    compose exec -T postgres sh -c 'psql -U "${POSTGRES_USER:-postgres}" -d caligodb -At -F " | "' \
-        < "$here/counts.sql" | grep -v '^SET$'
+    compose exec -T postgres sh -c 'psql -U "${POSTGRES_USER:-postgres}" -d caligodb -At -F " | "' <<'SQL' | grep -v '^SET$'
+SET search_path TO streamingservice, public;
+SELECT 'identity users', count(*) FROM public."AspNetUsers"
+UNION ALL SELECT 'identity roles', count(*) FROM public."AspNetUserRoles"
+UNION ALL SELECT 'demo identity users', count(*) FROM public."AspNetUsers" WHERE "NormalizedEmail" LIKE '%@DEMO.INVALID'
+UNION ALL SELECT 'profiles', count(*) FROM "user"
+UNION ALL SELECT 'bloguser', count(*) FROM bloguser
+UNION ALL SELECT 'payments', count(*) FROM payments
+UNION ALL SELECT 'watchhistory', count(*) FROM watchhistory
+UNION ALL SELECT 'interactions', count(*) FROM usercontentinteraction
+UNION ALL SELECT 'comments', count(*) FROM comment
+UNION ALL SELECT 'collections', count(*) FROM collection
+UNION ALL SELECT 'collection titles', count(*) FROM collectiontitle
+UNION ALL SELECT 'notifications', count(*) FROM notifications
+UNION ALL SELECT 'recommendations', count(*) FROM currentcontentrecommendations
+UNION ALL SELECT 'playback sessions', count(*) FROM playbacksession
+UNION ALL SELECT 'playback positions', count(*) FROM playbackposition;
+SELECT 'averages md5', md5(string_agg(content_id || ':' || coalesce(average_rating::text, 'null'), ',' ORDER BY content_id)) FROM content;
+SELECT 'watch md5', md5(string_agg("watched-content_id" || ':' || content_id || ':' || user_id || ':' || date, ',' ORDER BY "watched-content_id")) FROM watchhistory;
+SELECT 'comment md5', md5(string_agg(comment_id || ':' || user_id || ':' || content_id || ':' || comment, ',' ORDER BY comment_id)) FROM comment;
+SQL
 }
 
 compare() {
