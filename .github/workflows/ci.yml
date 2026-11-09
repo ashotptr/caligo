@@ -438,14 +438,18 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
-          format: table
+          format: sarif
+          output: trivy-${{ matrix.service }}.sarif
+          limit-severities-for-sarif: true
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '1'
 
       - name: Upload scan results
-        if: steps.should.outputs.run == 'true' && github.event.repository.private == false
-        uses: github/codeql-action/upload-sarif@v3
+        if: >-
+          always() && steps.should.outputs.run == 'true' && github.event.repository.private == false
+          && hashFiles(format('trivy-{0}.sarif', matrix.service)) != ''
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-${{ matrix.service }}.sarif
           category: trivy-${{ matrix.service }}

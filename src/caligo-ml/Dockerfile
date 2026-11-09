@@ -5,6 +5,7 @@ COPY requirements-train.txt ./
 RUN pip install --no-cache-dir -r requirements-train.txt
 COPY requirements-serve.txt ./
 RUN pip install --no-cache-dir -r requirements-serve.txt
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/* && pip uninstall -y pip
 COPY caligo_ml/ caligo_ml/
 RUN useradd --create-home --uid 10001 app
 USER app

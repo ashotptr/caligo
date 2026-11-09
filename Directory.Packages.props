@@ -32,6 +32,7 @@
     <PackageVersion Include="Confluent.Kafka" Version="2.6.1" />
     <PackageVersion Include="MailKit" Version="4.17.0" />
     <PackageVersion Include="MimeKit" Version="4.17.0" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="8.0.2" />
     <PackageVersion Include="MongoDB.Driver" Version="3.11.1" />
     <PackageVersion Include="StackExchange.Redis" Version="2.8.16" />
     <PackageVersion Include="ClickHouse.Client" Version="7.14.0" />
