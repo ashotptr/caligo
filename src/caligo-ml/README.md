@@ -10,7 +10,7 @@ The models are trained on public datasets, locally or on Kaggle, and served by a
 * **Moderation:** Comments are checked for spam and toxicity. Admins see the flagged comments and the rule that flagged them.
 
 ### `caligo_ml/algorithms`
-Algorithms written from scratch with NumPy as scikit-learn estimators: softmax regression, linear regression by gradient descent, a two-layer neural network, matrix factorisation (ALS) and RIPPER rules. They started as exercises in [MLAlgorithms](https://github.com/ashotptr/MLAlgorithms) and pass scikit-learn's own estimator checks.
+Algorithms written from scratch with NumPy as scikit-learn estimators: softmax regression, linear regression by gradient descent, a two-layer neural network, matrix factorisation (ALS) and RIPPER rules. They pass scikit-learn's own estimator checks.
 
 ### `caligo_ml/tasks.py`
 The tasks and the models each one tries. The best model on the test data:
