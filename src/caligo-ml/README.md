@@ -108,6 +108,21 @@ Sign in once with `.venv\Scripts\kaggle auth login`. Then:
 
 It pushes a private kernel that carries this package as a zip. The kernel installs the pinned `requirements-train.txt` into a Python 3.13 environment with uv, so the models load the same way where they are served. `requirements-serve.txt` builds on the same pins. A dry run of the generated kernel in a `python:3.12-slim` container trained the spam candidates with the same scores as on Windows, and the models it wrote predict the same here (largest difference 1.7e-15). It downloads the data from the official sources and trains. The runner waits for the kernel, downloads the bundle and registers it. Toxicity needs the Jigsaw competition rules accepted on kaggle.com and `--competition jigsaw-toxic-comment-classification-challenge`.
 
+To train several tasks at once, `kaggle-all` pushes every kernel first, so they run side by side on Kaggle, then registers each bundle in order as it finishes:
+
+```
+.venv\Scripts\python -m caligo_ml kaggle-all genre mood instrumental spam toxicity --root ..\..\data\dev\ml
+```
+
+## Scoring the library by hand
+
+The service scores new songs, palettes and comments on its own schedule. To run a job right away, start a one-off container from the service's image, never `docker exec` into the running service (that loads every model a second time). `job` repeats `score_songs` until nothing remains, then runs the next job:
+
+```
+docker compose -f ..\..\deploy\compose\docker-compose.yml up -d postgres
+docker compose -f ..\..\deploy\compose\docker-compose.yml run --rm --no-deps caligo-ml python -m caligo_ml job score_songs drift_report
+```
+
 ## The service
 
 `caligo_ml/service/` is a FastAPI app. On start it creates its database `caligoml` if it is missing, runs the Alembic migrations and loads each task's exported champion.
@@ -211,12 +226,15 @@ The steps (dev shown; prod uses `data/prod`):
 .venv\Scripts\python -m caligo_ml kaggle demo_stats --root ..\..\data\dev\ml --films ..\..\data\dev\demo\catalog.json
 # catalog export, inside the ML container (needs ML_DATABASE_URL and ML_CATALOG_DATABASE_URL)
 python -m caligo_ml.demo.catalog --out /out/catalog.json
-# the plan, with every comment checked by the moderation champions
-.venv\Scripts\python -m caligo_ml.demo.generate --catalog ..\..\data\dev\demo\catalog.json --stats ..\..\data\dev\demo\demo_stats.json --models ..\..\data\dev\ml --out ..\..\data\dev\demo\plan.json
-# seed and remove, with the API's own stores (writes seeded.json next to the plan)
-dotnet Caligo.Api.dll seed-demo data/dev/demo/plan.json
-dotnet Caligo.Api.dll unseed-demo data/dev/demo/seeded.json
+# from the repository root: the plan, then seeding with row counts before and after
+bash deploy/demo/demo.sh prod plan
+bash deploy/demo/demo.sh prod seed
+# by hand, the steps the trickle runs every 15-30 minutes; then removal, compared with the counts from before seeding
+bash deploy/demo/demo.sh prod advance
+bash deploy/demo/demo.sh prod unseed
 ```
+
+`demo.sh dev ...` does the same on dev, with the locally built API (`dotnet build src/posts/Caligo.Api`) against the dev database. `plan` takes the catalog export and statistics from `data/<env>/demo` (prod reuses dev's when it has none) and plans `AHEAD_DAYS` past now: 365 on prod, 0 on dev. Each `seed` and `unseed` saves the counts it compared in the same folder.
 
 `seed-demo` creates each account through Identity and `StreamingAccountService` (Free plan, dated the day the person joined), then replays every watch, rating, comment and collection in time order through the catalog stores, so the schema's triggers fill in recommendations, milestones and average ratings as they would for real members. Watches, sign-ups and collections keep their dates. Ratings and comments have no date column, so they get only the order. `unseed-demo` deletes everything those accounts own. It then puts back each rating average the seeding changed: the value from before seeding if nobody rated the title since, otherwise the average of the remaining ratings.
 

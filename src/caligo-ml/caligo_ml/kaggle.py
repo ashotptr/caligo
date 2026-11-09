@@ -106,6 +106,34 @@ def wait(kernel, poll=60, settle=600):
         time.sleep(poll)
 
 
+def run_all(tasks, work, register, user=None, say=print):
+    work = Path(work)
+    user = user or username()
+    started = time.monotonic()
+
+    def note(text):
+        say(f"{time.monotonic() - started:6.0f}s {text}")
+
+    for task in tasks:
+        cli("kernels", "push", "-p", str(build(task, user, work / task / "kernel")))
+        note(f"pushed {task}")
+    results = {}
+    for task in tasks:
+        kernel = f"{user}/{slug(task)}"
+        output = work / task / "output"
+        try:
+            wait(kernel)
+        except RuntimeError as error:
+            note(f"{task} failed on Kaggle: {error}")
+            cli("kernels", "output", kernel, "-p", str(output))
+            results[task] = "failed"
+            continue
+        cli("kernels", "output", kernel, "-p", str(output))
+        results[task] = register(output / "bundle")
+        note(f"{task}: {results[task]}")
+    return results
+
+
 def run(task, work, gpu=False, competitions=None, arguments=None, user=None):
     work = Path(work)
     user = user or username()

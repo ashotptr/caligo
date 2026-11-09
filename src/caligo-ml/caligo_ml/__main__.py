@@ -15,9 +15,32 @@ LOADERS = {
 }
 
 
+JOB_NAMES = ["score_songs", "album_palettes", "moderate_backlog", "drift_report"]
+
+
 def report(version, decision):
     outcome = "now the champion" if decision.promote else "the champion stays"
     print(f"registered version {version}: {decision.reason}, {outcome}")
+
+
+def describe(version, decision):
+    return f"version {version}, {decision.reason}, {'now the champion' if decision.promote else 'the champion stays'}"
+
+
+def run_jobs(names):
+    from caligo_ml.service import jobs
+    from caligo_ml.service.state import State
+
+    state = State.from_env()
+    try:
+        for name in names:
+            while True:
+                detail = jobs.run(state, name)
+                print(json.dumps({"job": name, **detail}), flush=True)
+                if not detail.get("remaining") or detail.get("error") or detail.get("skipped"):
+                    break
+    finally:
+        state.close()
 
 
 def main(argv=None):
@@ -51,9 +74,21 @@ def main(argv=None):
     remote.add_argument("--films", help="catalog export whose films the demo statistics look up")
     remote.add_argument("--user", help="Kaggle username, when the CLI cannot tell")
 
+    several = commands.add_parser("kaggle-all", help="push several training runs at once, then register each result")
+    several.add_argument("tasks", nargs="+", choices=sorted(LOADERS))
+    several.add_argument("--root", required=True)
+    several.add_argument("--work", default="kaggle-runs")
+    several.add_argument("--user", help="Kaggle username, when the CLI cannot tell")
+
+    batch = commands.add_parser("job", help="run service jobs in order, repeating each until nothing remains")
+    batch.add_argument("names", nargs="+", choices=JOB_NAMES)
+
     args = parser.parse_args(argv)
     if args.command == "train":
         train(TASKS[args.task], LOADERS[args.task](args), args.out)
+        return
+    if args.command == "job":
+        run_jobs(args.names)
         return
 
     from caligo_ml.registry import Registry
@@ -62,6 +97,10 @@ def main(argv=None):
         report(*Registry(args.root).register(args.bundle, args.candidate))
     elif args.command == "promote":
         print(f"exported {Registry(args.root).promote(args.task, args.version, args.reason)}")
+    elif args.command == "kaggle-all":
+        registry = Registry(args.root)
+        kaggle.run_all(args.tasks, args.work, lambda bundle: describe(*registry.register(bundle)), args.user,
+                       lambda line: print(line, flush=True))
     else:
         extra = ["--source", args.source] if args.source else []
         if args.films:

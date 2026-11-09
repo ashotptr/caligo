@@ -114,3 +114,8 @@ cd deploy/compose
 docker compose -f docker-compose.prod.yml --profile liquidsoap up -d --build
 
 ```
+
+On a machine with little free memory:
+* `bash deploy/compose/build-images.sh [service ...]` builds images one at a time (by default caligo-ml, caligo-client and caligo-api) before the `up`. It stops a build when free memory drops below 450 MiB (`BUILD_FLOOR_MIB`), and between builds it hands Docker's cache back to Windows.
+* `bash deploy/guard.sh <command>` runs a command on the host, such as `dotnet build`, and stops it below 350 MiB (`GUARD_FLOOR_MIB`).
+* `bash deploy/demo/demo.sh <dev|prod> <plan|seed|advance|unseed|counts>` manages the demo activity. See `src/caligo-ml/README.md`.

@@ -51,10 +51,13 @@ jobs:
               - 'src/notifications/**'
             client:
               - 'src/caligo-client/**'
+              - '.github/workflows/ci.yml'
             share:
               - 'src/caligo-share/**'
+              - '.github/workflows/ci.yml'
             ml:
               - 'src/caligo-ml/**'
+              - '.github/workflows/ci.yml'
             caligo:
               - 'src/caligo/**'
               - 'deploy/caligo/**'

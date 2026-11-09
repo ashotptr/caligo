@@ -67,3 +67,29 @@ def test_the_statistics_kernel_runs_without_a_gpu(tmp_path):
     assert metadata["dataset_sources"] == ["datasnaek/youtube-new"]
     assert "ARGUMENTS = ['--youtube', '/kaggle/input', '--films', '[]']" in (folder / "kernel.py").read_text()
     assert "MODULE = 'caligo_ml.demo.stats'" in (folder / "kernel.py").read_text()
+
+
+def test_training_several_tasks_queues_every_run_before_waiting(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(kaggle, "cli", lambda *arguments: calls.append(arguments[1]) or "")
+    monkeypatch.setattr(kaggle, "wait", lambda kernel: calls.append("wait"))
+
+    results = kaggle.run_all(["spam", "genre"], tmp_path, lambda bundle: f"registered {bundle.parent.parent.name}",
+                             user="someone", say=lambda line: None)
+
+    assert calls == ["push", "push", "wait", "output", "wait", "output"]
+    assert results == {"spam": "registered spam", "genre": "registered genre"}
+
+
+def test_a_failed_run_is_reported_and_the_others_still_register(monkeypatch, tmp_path):
+    def wait(kernel):
+        if kernel.endswith("spam"):
+            raise RuntimeError("error")
+
+    monkeypatch.setattr(kaggle, "cli", lambda *arguments: "")
+    monkeypatch.setattr(kaggle, "wait", wait)
+
+    results = kaggle.run_all(["spam", "genre"], tmp_path, lambda bundle: "registered", user="someone",
+                             say=lambda line: None)
+
+    assert results == {"spam": "failed", "genre": "registered"}
